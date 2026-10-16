@@ -5,26 +5,43 @@ import { OrderList } from "./features/orders/OrderList";
 import { OrderDetails } from "./features/orders/OrderDetails";
 import { SupplierPicker } from "./features/orders/SupplierPicker";
 import { mapsRouteUrlForOrders } from "./utils/orderUtils";
-import { loadOrders } from "./data/ordersSource";
+import { loadOrders, type OrdersResult } from "./data/ordersSource";
 import { AgendaPage } from "./features/agenda/AgendaPage";
 
 type View = "leveranciers" | "agenda";
 
+function todayIso(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** Today if there are deliveries today, otherwise the next delivery day, otherwise the last one. */
+function pickInitialDate(dates: string[]): string {
+  const today = todayIso();
+  return dates.find((date) => date >= today) ?? dates[dates.length - 1] ?? today;
+}
+
 function App() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [agendaOrders, setAgendaOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState<Pick<OrdersResult, "source" | "error"> | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>("2026-03-24");
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
   const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
   const [view, setView] = useState<View>("leveranciers");
 
   useEffect(() => {
     let active = true;
 
-    loadOrders().then((nextOrders) => {
+    loadOrders().then((result) => {
       if (!active) return;
-      setOrders(nextOrders);
-      setSelectedDate((current) => nextOrders[0]?.deliveryDate ?? current);
-      setSelectedOrderId(nextOrders[0]?.id ?? null);
+      const dates = Array.from(new Set(result.orders.map((order) => order.deliveryDate))).sort();
+      setOrders(result.orders);
+      setAgendaOrders(result.agendaOrders);
+      setDataSource({ source: result.source, error: result.error });
+      setSelectedDate(pickInitialDate(dates));
+      setLoading(false);
     });
 
     return () => {
@@ -47,14 +64,6 @@ function App() {
     }
   }, [selectedSupplier, supplierNames]);
 
-  useEffect(() => {
-    if (availableDates.length === 0) return;
-    if (!availableDates.includes(selectedDate)) {
-      setSelectedDate(availableDates[0]);
-      setSelectedSupplier(null);
-      setSelectedOrderId(null);
-    }
-  }, [availableDates, selectedDate]);
 
   const filteredOrders = useMemo(() => {
     return dayOrders.filter((order) => {
@@ -106,15 +115,20 @@ function App() {
           </nav>
         </header>
 
-        <OrderFilters
-          selectedDate={selectedDate}
-          onDateChange={setSelectedDate}
-        />
-
-        {view === "agenda" ? (
-          <AgendaPage orders={orders} contactEmail="planning@omacobysoliebollenbar.nl" />
+        {loading ? (
+          <section className="rounded-2xl border border-white/60 bg-white/85 p-5 text-sm text-stone-700 shadow-card backdrop-blur">
+            Bezorgingen laden...
+          </section>
+        ) : view === "agenda" ? (
+          <AgendaPage orders={agendaOrders} contactEmail="planning@omacobysoliebollenbar.nl" />
         ) : (
           <>
+            <OrderFilters
+              selectedDate={selectedDate}
+              availableDates={availableDates}
+              onDateChange={setSelectedDate}
+            />
+
             <SupplierPicker
               supplierNames={supplierNames}
               selectedSupplier={selectedSupplier}
@@ -123,8 +137,7 @@ function App() {
 
             {supplierNames.length === 0 ? (
               <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                Geen bezorgers gevonden voor deze leverdag. Kies een andere datum of controleer of je API bezorgers met
-                `Ja` bij fietskoerier/autokoerier teruggeeft.
+                Geen bezorgingen op deze leverdag. Kies hierboven een andere datum.
               </section>
             ) : null}
 
@@ -180,10 +193,16 @@ function App() {
           </>
         )}
 
-        <section className="rounded-2xl border border-dashed border-coby-400/70 bg-coby-50/70 p-4 text-sm text-coby-900">
-          <p className="font-semibold">Data bron (demo-ready):</p>
-          <p>Vul `VITE_N8N_WEBHOOK_URL` in om live data uit je n8n-flow (Google Sheet) te laden.</p>
-        </section>
+        {dataSource && dataSource.source !== "live" ? (
+          <section className="rounded-2xl border border-dashed border-coby-400/70 bg-coby-50/70 p-4 text-sm text-coby-900">
+            <p className="font-semibold">Let op: je ziet voorbeelddata.</p>
+            {dataSource.source === "demo-fallback" ? (
+              <p>De live data uit de Google Sheet kon niet geladen worden ({dataSource.error}).</p>
+            ) : (
+              <p>Er is nog geen n8n-webhook ingesteld (`VITE_N8N_WEBHOOK_URL`). Zie N8N_SETUP.md.</p>
+            )}
+          </section>
+        ) : null}
       </div>
     </main>
   );

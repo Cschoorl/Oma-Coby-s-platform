@@ -27,6 +27,8 @@ jobs:
       - run: npm run build
         env:
           VITE_BASE_PATH: /Oma-Coby-s-platform
+          # Set this as a repository secret to load live data from the n8n webhook.
+          VITE_N8N_WEBHOOK_URL: ${{ secrets.VITE_N8N_WEBHOOK_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

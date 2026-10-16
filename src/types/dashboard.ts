@@ -13,6 +13,8 @@ export interface OrderMeta {
   confirmationText: string;
   confirmationStatus: ConfirmationStatus;
   confirmationSentAt: string;
+  /** Courier assigned in the dashboard; overrides a courier column in the sheet. */
+  courier: string;
   updatedBy: string;
   updatedAt: string;
 }
@@ -129,6 +131,7 @@ export const emptyMeta: OrderMeta = {
   confirmationText: "",
   confirmationStatus: "geen",
   confirmationSentAt: "",
+  courier: "",
   updatedBy: "",
   updatedAt: ""
 };

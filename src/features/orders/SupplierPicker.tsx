@@ -7,7 +7,7 @@ interface SupplierPickerProps {
 export function SupplierPicker({ supplierNames, selectedSupplier, onSelectSupplier }: SupplierPickerProps) {
   return (
     <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
-      <h2 className="mb-3 text-base font-semibold text-stone-900">Leveranciers van deze dag</h2>
+      <h2 className="mb-3 text-base font-semibold text-stone-900">Bezorgers van deze dag</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {supplierNames.map((supplier) => {
           const initials = supplier
@@ -37,7 +37,7 @@ export function SupplierPicker({ supplierNames, selectedSupplier, onSelectSuppli
         })}
       </div>
       {supplierNames.length === 0 ? (
-        <p className="mt-3 text-sm text-stone-600">Geen leveranciers gevonden voor deze datum.</p>
+        <p className="mt-3 text-sm text-stone-600">Nog geen bezorgers ingedeeld op deze datum.</p>
       ) : null}
     </section>
   );

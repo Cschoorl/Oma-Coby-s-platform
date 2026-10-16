@@ -7,7 +7,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Badge, Card, StatTile, formatDayLabel, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
 import { effectiveNote, mapsRouteUrlForOrders, mapsUrl, stopAddress } from "../../utils/orderUtils";
 import { navigate } from "../../lib/router";
-import { courierOrders, orderedStops, routeKey } from "./routeUtils";
+import { courierOrders, couriersOn, orderedStops, routeKey } from "./routeUtils";
 
 interface CourierPageProps {
   state: DashboardState;
@@ -21,10 +21,7 @@ export function CourierPage({ state, name, date: dateParam }: CourierPageProps) 
   // The date lives in the link (#/bezorger?naam=..&datum=..), so a WhatsApp link opens the right day.
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : pickInitialDate(dates);
 
-  const couriers = useMemo(
-    () => Array.from(new Set(state.orders.filter((o) => o.deliveryDate === date).map((o) => o.supplierName))).sort(),
-    [state.orders, date]
-  );
+  const couriers = useMemo(() => couriersOn(state, date), [state, date]);
 
   function go(nextName: string | null, nextDate: string) {
     navigate(nextName ? `/bezorger?naam=${encodeURIComponent(nextName)}&datum=${nextDate}` : `/bezorger?datum=${nextDate}`);
@@ -98,6 +95,11 @@ export function CourierPage({ state, name, date: dateParam }: CourierPageProps) 
                       <p className="text-lg font-semibold tabular-nums">{order.withRaisins + order.withoutRaisins}</p>
                     </div>
                   </div>
+                  {order.deliveryMoment || order.packaging || /^ja/i.test(order.flyers ?? "") ? (
+                    <p className="text-xs text-stone-600">
+                      {[order.deliveryMoment, order.packaging, /^ja/i.test(order.flyers ?? "") ? "met flyers" : ""].filter(Boolean).join(" · ")}
+                    </p>
+                  ) : null}
                   {note ? <p className="rounded-lg bg-coby-50 px-3 py-2 text-sm text-coby-900">Opmerking: {note}</p> : null}
                   <div className="flex flex-wrap items-center gap-2">
                     {order.phone ? (

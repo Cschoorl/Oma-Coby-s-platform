@@ -5,6 +5,10 @@ import { mapSheetRowsToOrders, type GoogleSheetOrderRow } from "./googleSheetAda
 const mockSheetRows: GoogleSheetOrderRow[] = [
   {
     order_id: "ORDER-001",
+    afhalen_bezorgen: "Bezorgen",
+    flyers: "Ja, doe mij een aantal flyers",
+    aantal_dozen: 1,
+    bezorgmoment: "tussen 9:00 en 12:30 uur",
     email: "anna@example.nl",
     type_klant: "particulier",
     besteldatum: "2026-10-02",
@@ -24,6 +28,8 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-002",
+    afhalen_bezorgen: "Bezorgen",
+    aantal_dozen: 1,
     email: "inkoop@bloemenveiling.example",
     type_klant: "zakelijk",
     besteldatum: "2026-10-05",
@@ -43,6 +49,8 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-003",
+    afhalen_bezorgen: "Bezorgen",
+    aantal_zakjes: 3,
     type_klant: "zakelijk",
     besteldatum: "2026-10-09",
     leverdatum: "2026-12-30",
@@ -61,8 +69,9 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-004",
+    afhalen_bezorgen: "Bezorgen",
     email: "receptie@kloosterhof.example",
-    type_klant: "zakelijk",
+    type_klant: "Barter",
     besteldatum: "2026-10-12",
     leverdatum: "2026-12-30",
     leverancier_naam: "Bezorger Bram",
@@ -80,6 +89,8 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-005",
+    afhalen_bezorgen: "Afhalen",
+    afhaallocatie: "Oliebollenbar Aalsmeer",
     type_klant: "particulier",
     besteldatum: "2026-10-14",
     leverdatum: "2026-12-31",
@@ -98,11 +109,12 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-006",
+    afhalen_bezorgen: "Bezorgen",
     email: "chris@example.nl",
     type_klant: "particulier",
     besteldatum: "2026-10-15",
     leverdatum: "2026-12-31",
-    leverancier_naam: "Bezorger Chris",
+    leverancier_naam: "",
     locatie_naam: "Brandweerkazerne",
     contactpersoon: "Chris Bakker",
     telefoon: "+31600000006",

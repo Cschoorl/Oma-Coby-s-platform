@@ -70,6 +70,7 @@ export interface Backend {
   updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
   sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
+  assignCourier(session: Session, orderId: string, courier: string): Promise<void>;
   computeRoute(session: Session, request: RouteRequest): Promise<RouteInfo>;
   registerVolunteer(signup: VolunteerSignup): Promise<void>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
@@ -146,6 +147,9 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async sendConfirmation(session, orderId, subject, text) {
       await call("sendConfirmation", withSession(session, { orderId, subject, text }));
+    },
+    async assignCourier(session, orderId, courier) {
+      await call("assignCourier", withSession(session, { orderId, courier }));
     },
     async computeRoute(session, request) {
       return call<RouteInfo>("computeRoute", withSession(session, { ...request }));
@@ -391,6 +395,15 @@ function createDemoBackend(notice?: string): Backend {
         m.confirmationText = text;
         m.confirmationStatus = "verzonden";
         m.confirmationSentAt = nowStamp();
+        m.updatedBy = session.name;
+        m.updatedAt = nowStamp();
+      });
+    },
+    async assignCourier(session, orderId, courier) {
+      await delay(150);
+      mutate((store) => {
+        const m = metaFor(store, orderId);
+        m.courier = courier.trim();
         m.updatedBy = session.name;
         m.updatedAt = nowStamp();
       });

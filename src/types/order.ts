@@ -1,6 +1,8 @@
 export type DeliveryStatus = "open" | "onderweg" | "bezorgd";
 
-export type CustomerType = "particulier" | "zakelijk" | "onbekend";
+export type CustomerType = "particulier" | "zakelijk" | "barter" | "onbekend";
+
+export type Fulfilment = "bezorgen" | "afhalen";
 
 export interface Order {
   id: string;
@@ -24,4 +26,14 @@ export interface Order {
   amount?: number;
   /** Date the order was placed (YYYY-MM-DD); falls back to deliveryDate for the tussenstand. */
   orderDate?: string;
+  fulfilment: Fulfilment;
+  pickupLocation?: string;
+  /** "Ja, doe mij een aantal flyers" etc. */
+  flyers?: string;
+  /** E.g. "3 dozen" or "2 zakjes". */
+  packaging?: string;
+  /** E.g. "Amsterdam/Aalsmeer (€10 bezorgkosten)". */
+  deliveryArea?: string;
+  /** E.g. "tussen 9:00 en 12:30 uur". */
+  deliveryMoment?: string;
 }

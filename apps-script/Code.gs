@@ -9,31 +9,45 @@
  */
 
 const CONFIG = {
-  /** Tabblad met de bestellingen. */
-  ORDERS_SHEET: 'Bestellingen',
+  /** Tabblad met de bestellingen (zakelijk, particulier en barter samen). */
+  ORDERS_SHEET: 'Totaal_lijst bestellingen',
+  /**
+   * Seizoen voor datums zonder jaartal ("18 december"); januari telt als het jaar erna.
+   * Normaal leidt het script het seizoen af uit de tijdstempels (Unique ID) in het blad;
+   * dit jaar wordt alleen gebruikt als die er niet zijn.
+   */
+  SEASON_YEAR: 2026,
   /**
    * Kolomkoppen in het bestellingen-tabblad per veld. Meerdere namen mogen; de eerste
-   * die bestaat wordt gebruikt. Niet-hoofdlettergevoelig.
+   * die bestaat wordt gebruikt. Niet-hoofdlettergevoelig, exacte kop.
    */
   COLUMNS: {
-    order_id: ['order_id', 'ordernummer', 'bestelnummer'],
-    leverdatum: ['leverdatum', 'bezorgdatum'],
-    leverancier_naam: ['leverancier_naam', 'bezorger'],
-    locatie_naam: ['locatie_naam', 'naam', 'bedrijfsnaam'],
+    order_id: ['unique id', 'order_id', 'ordernummer', 'bestelnummer'],
+    leverdatum: ['datum', 'leverdatum', 'bezorgdatum'],
+    leverancier_naam: ['bezorger', 'leverancier_naam'],
+    locatie_naam: ['naam onderneming', 'locatie_naam', 'naam'],
     contactpersoon: ['contactpersoon'],
-    telefoon: ['telefoon', 'telefoonnummer'],
-    email: ['email', 'e-mail', 'emailadres'],
-    adres: ['adres', 'straat'],
+    telefoon: ['contactpersoon telefoonnummer', 'telefoon', 'telefoonnummer'],
+    email: ['email', 'e-mail', 'emailadres', 'info'],
+    adres: ['bezorglocatie', 'adres', 'straat'],
     postcode: ['postcode'],
     plaats: ['plaats', 'woonplaats'],
     geplande_tijd: ['geplande_tijd', 'tijd', 'bezorgtijd'],
     status: ['status'],
-    oliebollen_met_krenten: ['oliebollen_met_krenten', 'met krenten', 'met'],
-    oliebollen_zonder_krenten: ['oliebollen_zonder_krenten', 'zonder krenten', 'zonder'],
-    extra_notities: ['extra_notities', 'opmerkingen', 'opmerking'],
-    type_klant: ['type_klant', 'klanttype', 'zakelijk'],
-    bedrag: ['bedrag', 'totaalbedrag', 'prijs'],
-    besteldatum: ['besteldatum', 'tijdstempel', 'timestamp']
+    oliebollen_met_krenten: ['met krenten', 'oliebollen_met_krenten', 'met'],
+    oliebollen_zonder_krenten: ['zonder krenten', 'oliebollen_zonder_krenten', 'zonder'],
+    extra_notities: ['comments', 'extra_notities', 'opmerkingen', 'opmerking'],
+    type_klant: ['type', 'type_klant', 'klanttype'],
+    bedrag: ['bedrag', 'totaalbedrag', 'total'],
+    besteldatum: ['besteldatum', 'unique id', 'tijdstempel', 'timestamp'],
+    afhalen_bezorgen: ['afhalen/bezorgen'],
+    afhaallocatie: ['pick up locatie', 'afhaallocatie'],
+    flyers: ['flyers'],
+    dozen_of_zakjes: ['dozen of zakjes'],
+    aantal_dozen: ['dozen #'],
+    aantal_zakjes: ['zakjes #'],
+    bezorgomgeving: ['bezorgomgeving'],
+    bezorgmoment: ['bezorgmoment']
   },
   /** Startpunt (en eindpunt) van elke bezorgroute. */
   START_ADDRESS: 'Aalsmeerderweg 85, Aalsmeer',
@@ -89,7 +103,7 @@ const VOLUNTEER_DEFAULT_HEADERS = [
  */
 
 const TABS = {
-  meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bijgewerkt_door', 'bijgewerkt_op']],
+  meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op']],
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
   routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op']],
@@ -110,6 +124,7 @@ const PERMISSIONS = {
   saveConfirmation: ['beheer'],
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
+  assignCourier: ['beheer'],
   extractReceipt: ['beheer', 'inpakker', 'bezorger'],
   saveCost: ['beheer', 'inpakker', 'bezorger'],
   registerVolunteer: ['public'],
@@ -270,6 +285,16 @@ const HANDLERS = {
         bevestiging_tekst: text,
         bevestiging_status: 'verzonden',
         bevestiging_verzonden_op: now_(),
+        bijgewerkt_door: String(body.name || ''),
+        bijgewerkt_op: now_()
+      });
+      return bump_();
+    });
+  },
+  assignCourier: function (body) {
+    return withLock_(function () {
+      findOrCreate_('meta', body.orderId).set({
+        bezorger: String(body.courier || '').trim(),
         bijgewerkt_door: String(body.name || ''),
         bijgewerkt_op: now_()
       });
@@ -439,6 +464,7 @@ function buildState_(role) {
       confirmationText: String(r.bevestiging_tekst || ''),
       confirmationStatus: r.bevestiging_status || 'geen',
       confirmationSentAt: String(r.bevestiging_verzonden_op || ''),
+      courier: String(r.bezorger || ''),
       updatedBy: String(r.bijgewerkt_door || ''),
       updatedAt: String(r.bijgewerkt_op || '')
     };
@@ -506,15 +532,61 @@ function readOrders_() {
       if (at !== -1) { index[field] = at; break; }
     }
   });
+  const seen = {};
+  const tz = Session.getScriptTimeZone();
+  // Season = the most common year among the order timestamps; CONFIG.SEASON_YEAR when there are none.
+  const yearCount = {};
+  if (index.besteldatum !== undefined) {
+    values.slice(1).forEach(function (row) {
+      const v = row[index.besteldatum];
+      if (v instanceof Date) yearCount[v.getFullYear()] = (yearCount[v.getFullYear()] || 0) + 1;
+    });
+  }
+  const sheetSeason = Object.keys(yearCount).sort(function (a, b) { return yearCount[b] - yearCount[a]; })[0];
+  const defaultSeason = sheetSeason ? Number(sheetSeason) : CONFIG.SEASON_YEAR;
   return values.slice(1).map(function (row, i) {
     const out = {};
     Object.keys(index).forEach(function (field) {
       const value = row[index[field]];
       out[field] = value instanceof Date ? formatCell_(value, field) : value;
     });
-    if (!out.order_id) out.order_id = 'rij-' + (i + 2);
+    // A timestamp as Unique ID: keep it to the second, otherwise orders of one day collide.
+    const rawId = index.order_id !== undefined ? row[index.order_id] : '';
+    let id = rawId instanceof Date ? Utilities.formatDate(rawId, tz, 'yyyy-MM-dd HH:mm:ss') : String(rawId || '').trim();
+    if (!id) id = 'rij-' + (i + 2);
+    if (seen[id]) id = id + '-' + (i + 2);
+    seen[id] = true;
+    out.order_id = id;
+
+    const placed = index.besteldatum !== undefined ? row[index.besteldatum] : '';
+    out.besteldatum = placed instanceof Date ? Utilities.formatDate(placed, tz, 'yyyy-MM-dd') : dutchDate_(placed, defaultSeason);
+    // An order placed in January belongs to the season of the year before.
+    const seasonYear = placed instanceof Date ? (placed.getMonth() < 6 ? placed.getFullYear() - 1 : placed.getFullYear()) : defaultSeason;
+    if (!(row[index.leverdatum] instanceof Date)) out.leverdatum = dutchDate_(out.leverdatum, seasonYear);
     return out;
-  }).filter(function (r) { return r.leverdatum || r.locatie_naam; });
+  }).filter(function (r) { return r.leverdatum && (Number(r.oliebollen_met_krenten) || Number(r.oliebollen_zonder_krenten) || r.locatie_naam); });
+}
+
+const DUTCH_MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+
+/** "18 december", "Donderdag 18 december", "18-12-2025" or "2025-12-18" → "2025-12-18". January belongs to the next year. */
+function dutchDate_(value, seasonYear) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  let m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + '-' + pad(Number(m[2])) + '-' + pad(Number(m[3]));
+  m = raw.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) return m[3] + '-' + pad(Number(m[2])) + '-' + pad(Number(m[1]));
+  m = raw.toLowerCase().match(/(\d{1,2})\s+([a-z]+)/);
+  if (m) {
+    const month = DUTCH_MONTHS.indexOf(m[2]);
+    if (month !== -1) {
+      const year = month < 6 && seasonYear ? seasonYear + 1 : seasonYear;
+      return year + '-' + pad(month + 1) + '-' + pad(Number(m[1]));
+    }
+  }
+  return '';
 }
 
 function volunteerSheet_() {
@@ -662,6 +734,15 @@ function sheet_(tab) {
     sheet.getRange('A:A').setNumberFormat('@');
     sheet.appendRow(def[1]);
     sheet.setFrozenRows(1);
+  } else {
+    // Add columns introduced by a newer script version to an existing tab.
+    const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0].map(String);
+    def[1].forEach(function (h) {
+      if (headers.indexOf(h) === -1) {
+        headers.push(h);
+        sheet.getRange(1, headers.length).setValue(h);
+      }
+    });
   }
   return sheet;
 }

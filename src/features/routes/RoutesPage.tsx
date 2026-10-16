@@ -5,7 +5,9 @@ import { OrderFilters } from "../orders/OrderFilters";
 import { Badge, Card, Notice, SectionTitle, StatTile, formatDayLabel, formatNumber, inputClass, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
-import { courierOrders, guessMode, isRouteStale, orderedStops, routeKey, whatsappNumber } from "./routeUtils";
+import { courierCandidates, courierOrders, couriersOn, deliveryOrders, findVolunteer, guessMode, isRouteStale, orderedStops, routeKey, whatsappNumber } from "./routeUtils";
+import { effectiveCourier } from "../../utils/orderUtils";
+import type { Order } from "../../types/order";
 
 interface RoutesPageProps {
   state: DashboardState;
@@ -25,17 +27,29 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
     if (dates.length > 0 && !dates.includes(date)) setDate(pickInitialDate(dates));
   }, [dates, date]);
 
-  const couriers = useMemo(
-    () => Array.from(new Set(state.orders.filter((o) => o.deliveryDate === date).map((o) => o.supplierName))).sort(),
-    [state.orders, date]
-  );
+  const couriers = useMemo(() => couriersOn(state, date), [state, date]);
+  const dayDeliveries = useMemo(() => deliveryOrders(state, date), [state, date]);
+  const unassigned = dayDeliveries.filter((o) => !effectiveCourier(o, state.meta[o.id]));
+  const pickups = state.orders.filter((o) => o.deliveryDate === date && o.fulfilment === "afhalen").length;
+
+  async function assign(order: Order, courier: string) {
+    setBusy(`assign-${order.id}`);
+    setError(null);
+    try {
+      await run(() => backend.assignCourier(session, order.id, courier));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Indelen mislukt.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   const dayRoutes = couriers.map((c) => state.routes[routeKey(date, c)]).filter(Boolean);
   const totalKm = dayRoutes.reduce((sum, r) => sum + r.km, 0);
 
   async function compute(courier: string) {
     const orders = courierOrders(state, date, courier);
-    const mode = modes[courier] ?? state.routes[routeKey(date, courier)]?.mode ?? guessMode(orders);
+    const mode = modes[courier] ?? state.routes[routeKey(date, courier)]?.mode ?? guessMode(orders, findVolunteer(state.volunteers, courier));
     setBusy(courier);
     setError(null);
     try {
@@ -64,9 +78,11 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
       <section className="grid gap-3 sm:grid-cols-3">
         <StatTile label="Bezorgers" value={couriers.length} />
-        <StatTile label="Stops" value={state.orders.filter((o) => o.deliveryDate === date).length} />
+        <StatTile label="Bezorgingen" value={dayDeliveries.length} hint={`${unassigned.length} nog in te delen${pickups ? ` · ${pickups} afhalen` : ""}`} />
         <StatTile label="Kilometers (berekend)" value={`${formatNumber(Math.round(totalKm * 10) / 10)} km`} hint={`${dayRoutes.length} van ${couriers.length} routes berekend`} />
       </section>
+
+      <CourierAssignment state={state} date={date} orders={dayDeliveries} busy={busy} onAssign={assign} />
 
       <Card>
         <SectionTitle
@@ -94,10 +110,10 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             const orders = courierOrders(state, date, courier);
             const route = state.routes[routeKey(date, courier)];
             const stale = isRouteStale(orders, route);
-            const mode = modes[courier] ?? route?.mode ?? guessMode(orders);
+            const mode = modes[courier] ?? route?.mode ?? guessMode(orders, findVolunteer(state.volunteers, courier));
             const stops = orderedStops(orders, route);
             const mapsUrl = route?.mapsUrl || mapsRouteUrlForOrders(stops);
-            const volunteer = state.volunteers.find((v) => v.name.trim().toLowerCase() === courier.trim().toLowerCase());
+            const volunteer = findVolunteer(state.volunteers, courier);
             const link = appLink(`/bezorger?naam=${encodeURIComponent(courier)}&datum=${date}`);
             const pieces = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
             const message = [
@@ -176,9 +192,112 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
               </article>
             );
           })}
-          {couriers.length === 0 ? <p className="text-sm text-stone-600">Geen bezorgingen op deze dag.</p> : null}
+          {couriers.length === 0 ? <p className="text-sm text-stone-600">Nog geen bezorgers ingedeeld op deze dag.</p> : null}
         </div>
       </Card>
     </div>
   );
 }
+
+interface CourierAssignmentProps {
+  state: DashboardState;
+  date: string;
+  orders: Order[];
+  busy: string | null;
+  onAssign: (order: Order, courier: string) => Promise<void>;
+}
+
+/** Table to divide the day's deliveries over couriers; volunteers available that day come first. */
+function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssignmentProps) {
+  const { available, others } = courierCandidates(state.volunteers, date);
+  const assignedNames = Array.from(new Set(orders.map((o) => effectiveCourier(o, state.meta[o.id])).filter(Boolean)));
+  const known = new Set([...available, ...others].map((v) => v.name));
+  const extra = assignedNames.filter((n) => !known.has(n));
+  const sorted = [...orders].sort((a, b) => (a.city + a.address).localeCompare(b.city + b.address));
+
+  const transportLabel = (name: string) => {
+    const v = findVolunteer(state.volunteers, name);
+    if (!v) return "";
+    return [v.roles.fietskoerier.wants ? (v.cargoBike ? "bakfiets" : "fiets") : "", v.roles.autokoerier.wants ? "auto" : ""].filter(Boolean).join("/");
+  };
+
+  return (
+    <Card>
+      <SectionTitle
+        title="Bezorgers indelen"
+        subtitle={`${available.length} koeriers hebben zich voor ${formatDayLabel(date)} aangemeld. Kies per bezorging wie hem rijdt.`}
+      />
+      {orders.length === 0 ? <p className="text-sm text-stone-600">Geen bezorgingen op deze dag.</p> : null}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+              <th className="py-2 pr-3 font-semibold">Bezorging</th>
+              <th className="py-2 pr-3 font-semibold">Adres</th>
+              <th className="py-2 pr-3 text-right font-semibold">Bollen</th>
+              <th className="py-2 font-semibold">Bezorger</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((order) => {
+              const current = effectiveCourier(order, state.meta[order.id]);
+              return (
+                <tr key={order.id} className="border-t border-stone-100 align-top">
+                  <td className="py-2 pr-3">
+                    <p className="font-semibold text-stone-900">{order.locationName || order.contactPerson}</p>
+                    {order.deliveryMoment ? <p className="text-xs text-stone-500">{order.deliveryMoment}</p> : null}
+                  </td>
+                  <td className="py-2 pr-3 text-stone-700">{stopAddress(order)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{order.withRaisins + order.withoutRaisins}</td>
+                  <td className="py-2">
+                    <select
+                      className={`${inputClass} py-1 ${current ? "" : "border-amber-400 bg-amber-50"}`}
+                      value={current}
+                      disabled={busy === `assign-${order.id}`}
+                      onChange={(e) => {
+                        let value = e.target.value;
+                        if (value === "__other") {
+                          value = window.prompt("Naam van de bezorger") ?? "";
+                          if (!value.trim()) return;
+                        }
+                        void onAssign(order, value);
+                      }}
+                      aria-label={`Bezorger voor ${order.locationName}`}
+                    >
+                      <option value="">Nog niet ingedeeld</option>
+                      {available.length > 0 ? (
+                        <optgroup label="Beschikbaar deze dag">
+                          {available.map((v) => (
+                            <option key={v.id} value={v.name}>
+                              {v.name} ({transportLabel(v.name)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      ) : null}
+                      {others.length > 0 ? (
+                        <optgroup label="Andere koeriers">
+                          {others.map((v) => (
+                            <option key={v.id} value={v.name}>
+                              {v.name} ({transportLabel(v.name)})
+                            </option>
+                          ))}
+                        </optgroup>
+                      ) : null}
+                      {extra.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                      <option value="__other">Andere naam…</option>
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+

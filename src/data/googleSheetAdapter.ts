@@ -1,4 +1,4 @@
-import type { CustomerType, DeliveryStatus, Order } from "../types/order";
+import type { CustomerType, DeliveryStatus, Fulfilment, Order } from "../types/order";
 
 // Schema of the rows as they arrive from Google Sheets via n8n. Sheets often sends
 // numbers as strings and leaves cells empty, so every field is treated as loose input.
@@ -22,6 +22,14 @@ export interface GoogleSheetOrderRow {
   type_klant?: string;
   bedrag?: number | string;
   besteldatum?: string;
+  afhalen_bezorgen?: string;
+  afhaallocatie?: string;
+  flyers?: string;
+  dozen_of_zakjes?: string;
+  aantal_dozen?: number | string;
+  aantal_zakjes?: number | string;
+  bezorgomgeving?: string;
+  bezorgmoment?: string;
 }
 
 type LooseRow = Partial<Record<keyof GoogleSheetOrderRow, unknown>>;
@@ -51,8 +59,20 @@ function pad(n: number): string {
 function toCustomerType(value: unknown): CustomerType {
   const lower = text(value).toLowerCase();
   if (!lower) return "onbekend";
+  if (/barter/.test(lower)) return "barter";
   if (/zakelijk|b2b|bedrijf/.test(lower)) return "zakelijk";
   return "particulier";
+}
+
+function toFulfilment(value: unknown): Fulfilment {
+  return /afhal|ophal|pick/i.test(text(value)) ? "afhalen" : "bezorgen";
+}
+
+function toPackaging(row: LooseRow): string | undefined {
+  const boxes = toCount(row.aantal_dozen);
+  const bags = toCount(row.aantal_zakjes);
+  const parts = [boxes ? `${boxes} ${boxes === 1 ? "doos" : "dozen"}` : "", bags ? `${bags} ${bags === 1 ? "zakje" : "zakjes"}` : ""].filter(Boolean);
+  return parts.join(" + ") || text(row.dozen_of_zakjes) || undefined;
 }
 
 function toAmount(value: unknown): number | undefined {
@@ -87,7 +107,7 @@ export function mapSheetRowToOrder(row: LooseRow, index = 0): Order {
   return {
     id: text(row.order_id) || `row-${index + 1}`,
     deliveryDate: toIsoDate(row.leverdatum),
-    supplierName: text(row.leverancier_naam) || "Onbekend",
+    supplierName: text(row.leverancier_naam),
     locationName: text(row.locatie_naam),
     contactPerson: text(row.contactpersoon),
     phone: text(row.telefoon),
@@ -102,7 +122,13 @@ export function mapSheetRowToOrder(row: LooseRow, index = 0): Order {
     email: text(row.email) || undefined,
     customerType: toCustomerType(row.type_klant),
     amount: toAmount(row.bedrag),
-    orderDate: row.besteldatum ? toIsoDate(row.besteldatum) : undefined
+    orderDate: row.besteldatum ? toIsoDate(row.besteldatum) : undefined,
+    fulfilment: toFulfilment(row.afhalen_bezorgen),
+    pickupLocation: text(row.afhaallocatie) || undefined,
+    flyers: text(row.flyers) || undefined,
+    packaging: toPackaging(row),
+    deliveryArea: text(row.bezorgomgeving) || undefined,
+    deliveryMoment: text(row.bezorgmoment) || undefined
   };
 }
 

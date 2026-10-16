@@ -1,8 +1,12 @@
 # Google Sheet-koppeling (Apps Script)
 
-Het dashboard praat met de Google Sheet via één Apps Script (`Code.gs`). Dat script:
+Het dashboard praat met de Google Sheets via één Apps Script (`Code.gs`). Zet het script in het
+**bestellingenbestand** ("Aanvraagformulier zakelijke bestelling (Antwoorden)"); het vrijwilligersbestand
+koppel je met een Script-eigenschap.
 
-- leest de bestellingen uit het tabblad **Bestellingen** (dat tabblad wordt nooit aangepast);
+Het script:
+
+- leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier en barter; dat tabblad wordt nooit aangepast);
 - bewaart alles van het dashboard in eigen tabbladen, die het zelf aanmaakt:
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`;
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
@@ -14,12 +18,13 @@ Het dashboard praat met de Google Sheet via één Apps Script (`Code.gs`). Dat s
 
 ## Installeren (± 15 minuten)
 
-1. Open de Google Sheet → **Extensies → Apps Script**.
+1. Open het bestellingenbestand → **Extensies → Apps Script**.
 2. Vervang de inhoud van `Code.gs` door [`Code.gs`](./Code.gs) uit deze map.
 3. Pas bovenin `CONFIG` aan:
-   - `ORDERS_SHEET`: naam van het tabblad met bestellingen.
-   - `COLUMNS`: de kolomkoppen van jouw Sheet (meerdere namen per veld mogen).
+   - `ORDERS_SHEET`: naam van het tabblad met bestellingen (standaard `Totaal_lijst bestellingen`).
+   - `COLUMNS`: alleen aanpassen als kolomkoppen veranderen.
    - `START_ADDRESS`: de baklocatie.
+   - `SEASON_YEAR`: alleen nodig als er geen tijdstempels in het blad staan.
 4. **Projectinstellingen (tandwiel) → Script-eigenschappen**, voeg toe:
 
    | Eigenschap | Waarde |
@@ -43,20 +48,24 @@ Lokaal testen kan met `VITE_APPS_SCRIPT_URL=... npm run dev` (of zet hem in `.en
 Na elke wijziging aan `Code.gs`: **Implementeren → Implementaties beheren → bewerken → Nieuwe versie**,
 anders draait de oude versie.
 
-## Kolommen in het tabblad Bestellingen
-
-Verplicht: `order_id`, `leverdatum`, `leverancier_naam` (de bezorger), `locatie_naam`, `adres`, `postcode`, `plaats`,
-`oliebollen_met_krenten`, `oliebollen_zonder_krenten`.
-
-Optioneel, maar nodig voor sommige functies:
+## Kolommen in Totaal_lijst bestellingen
 
 | Kolom | Gebruikt voor |
 |---|---|
-| `email` | klantbevestiging versturen |
-| `type_klant` (`particulier` / `zakelijk`) | B2B-splitsing in de inpaktool |
-| `bedrag` | omzet in de tussenstand (anders: oliebollen × `prijs_per_oliebol`) |
-| `besteldatum` | tussenstand per besteldatum (anders: leverdatum) |
-| `extra_notities` | opmerkingen beoordelen |
+| `Unique ID` | ordernummer en besteldatum (tijdstempel) voor de tussenstand |
+| `Type` (Zakelijk / Particulier / Barter / …) | splitsing in de inpaktool |
+| `Info` | e-mailadres voor de klantbevestiging |
+| `Afhalen/Bezorgen`, `Pick up locatie` | afhaalorders komen niet in de routes |
+| `Datum` ("18 december") | leverdag; het jaar komt uit de tijdstempels |
+| `Bezorglocatie` | adres voor de route (mag in één cel) |
+| `Naam onderneming`, `Contactpersoon`, `Contactpersoon telefoonnummer` | inpakken, bezorgen, bevestiging |
+| `MET krenten`, `ZONDER krenten` | aantallen |
+| `Comments` | opmerkingen beoordelen |
+| `Flyers`, `Dozen #`, `Zakjes #` | getoond bij inpakken en bezorgen |
+| `Bezorgmoment` (optioneel) | getoond bij de bezorger |
+| `Bezorger` (optioneel) | wordt anders in het dashboard ingedeeld (Routes → Bezorgers indelen) |
+
+Een omzetkolom is er niet: de tussenstand rekent met `prijs_per_oliebol` uit het tabblad `Instellingen`.
 
 ## Vrijwilligers (Google Formulier)
 
@@ -85,6 +94,7 @@ opnieuw als er iets veranderd is. Wijzigingen die je direct in de Sheet typt, ko
 
 ## Privacy
 
-- Klantgegevens zijn alleen zichtbaar na inloggen met een toegangscode. Kies lange codes en wissel ze na de actie.
+- Klantgegevens zijn in het dashboard alleen zichtbaar na inloggen met een toegangscode. Kies lange codes en wissel ze na de actie.
+- Zet de Google-bestanden zelf op **Delen → Algemene toegang → Beperkt**. Het script heeft geen openbare link nodig.
 - Alleen **beheer** ziet aanmeldingen van vrijwilligers en de kostenlijst.
 - Verwijder na de actie de aanmeldingen en (zo nodig) de bonnenmap in Drive; dat staat in de toestemmingstekst.

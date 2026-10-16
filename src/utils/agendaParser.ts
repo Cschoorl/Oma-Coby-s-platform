@@ -144,6 +144,8 @@ function parseScheduleDatesOnly(scheduleText: string): Array<{ day: number; mont
     .filter(Boolean);
 
   for (const chunk of chunks) {
+    // Chunks with an explicit time or dagdeel are handled by the other parsers.
+    if (parseTimeRange(chunk) || /:\s*(ochtend|middag)/i.test(chunk)) continue;
     const date = parseDateToken(chunk);
     if (date) out.push(date);
   }
@@ -171,13 +173,13 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
       for (const t of timeRanges) {
         const monthNameLower = monthNameByIndex(t.monthIndex);
         const dateLabel = `${t.day} ${capitalizeMonth(monthNameLower)}`.trim();
-        const dedupeKey = [order.contactPerson ?? order.supplierName, role, dateLabel.toLowerCase(), t.start, t.end].join("|");
+        const dedupeKey = [order.contactPerson || order.supplierName, role, dateLabel.toLowerCase(), t.start, t.end].join("|");
         if (dedupe.has(dedupeKey)) continue;
         dedupe.add(dedupeKey);
 
         shifts.push({
           id: dedupeKey,
-          personName: order.contactPerson ?? order.supplierName,
+          personName: order.contactPerson || order.supplierName,
           role,
           dateLabel,
           startTime: t.start,
@@ -194,7 +196,7 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
         const dateLabel = `${s.day} ${capitalizeMonth(monthNameLower)}`.trim();
 
         const dedupeKey = [
-          order.contactPerson ?? order.supplierName,
+          order.contactPerson || order.supplierName,
           role,
           dateLabel.toLowerCase(),
           time.start,
@@ -206,7 +208,7 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
 
         shifts.push({
           id: dedupeKey,
-          personName: order.contactPerson ?? order.supplierName,
+          personName: order.contactPerson || order.supplierName,
           role,
           dateLabel,
           startTime: time.start,
@@ -223,7 +225,7 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
         const monthNameLower = monthNameByIndex(d.monthIndex);
         const dateLabel = `${d.day} ${capitalizeMonth(monthNameLower)}`.trim();
         const dedupeKey = [
-          order.contactPerson ?? order.supplierName,
+          order.contactPerson || order.supplierName,
           role,
           dateLabel.toLowerCase(),
           fallbackTime.start,
@@ -234,7 +236,7 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
 
         shifts.push({
           id: dedupeKey,
-          personName: order.contactPerson ?? order.supplierName,
+          personName: order.contactPerson || order.supplierName,
           role,
           dateLabel,
           startTime: fallbackTime.start,

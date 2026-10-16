@@ -1,0 +1,664 @@
+/**
+ * Oma Coby's Oliebollenbar — dashboard backend (Google Apps Script).
+ *
+ * Plak dit bestand in de Google Sheet via Extensies → Apps Script, vul CONFIG en
+ * de Script-eigenschappen in en publiceer als web-app (zie apps-script/README.md).
+ *
+ * Het dashboard schrijft nooit in het tabblad met bestellingen: alle dashboardgegevens
+ * (claims, opmerkingen, bevestigingen, aanmeldingen, kosten) staan in eigen tabbladen.
+ */
+
+const CONFIG = {
+  /** Tabblad met de bestellingen. */
+  ORDERS_SHEET: 'Bestellingen',
+  /**
+   * Kolomkoppen in het bestellingen-tabblad per veld. Meerdere namen mogen; de eerste
+   * die bestaat wordt gebruikt. Niet-hoofdlettergevoelig.
+   */
+  COLUMNS: {
+    order_id: ['order_id', 'ordernummer', 'bestelnummer'],
+    leverdatum: ['leverdatum', 'bezorgdatum'],
+    leverancier_naam: ['leverancier_naam', 'bezorger'],
+    locatie_naam: ['locatie_naam', 'naam', 'bedrijfsnaam'],
+    contactpersoon: ['contactpersoon'],
+    telefoon: ['telefoon', 'telefoonnummer'],
+    email: ['email', 'e-mail', 'emailadres'],
+    adres: ['adres', 'straat'],
+    postcode: ['postcode'],
+    plaats: ['plaats', 'woonplaats'],
+    geplande_tijd: ['geplande_tijd', 'tijd', 'bezorgtijd'],
+    status: ['status'],
+    oliebollen_met_krenten: ['oliebollen_met_krenten', 'met krenten', 'met'],
+    oliebollen_zonder_krenten: ['oliebollen_zonder_krenten', 'zonder krenten', 'zonder'],
+    extra_notities: ['extra_notities', 'opmerkingen', 'opmerking'],
+    type_klant: ['type_klant', 'klanttype', 'zakelijk'],
+    bedrag: ['bedrag', 'totaalbedrag', 'prijs'],
+    besteldatum: ['besteldatum', 'tijdstempel', 'timestamp']
+  },
+  /** Startpunt (en eindpunt) van elke bezorgroute. */
+  START_ADDRESS: 'Aalsmeerderweg 85, Aalsmeer',
+  /** Route eindigt weer bij de baklocatie. */
+  ROUND_TRIP: true,
+  /** Afzendernaam van de klantbevestiging. */
+  MAIL_SENDER_NAME: "Oma Coby's Oliebollenbar",
+  /** Map in Google Drive voor foto's van bonnen. */
+  RECEIPT_FOLDER: 'Oliebollen bonnen',
+  /** Claude-model voor het uitlezen van bonnen. */
+  CLAUDE_MODEL: 'claude-opus-5-5'
+};
+
+/*
+ * Script-eigenschappen (Projectinstellingen → Script-eigenschappen):
+ *   CODE_BEHEER, CODE_INPAKKER, CODE_BEZORGER  — toegangscodes per rol
+ *   ANTHROPIC_API_KEY                          — voor het uitlezen van bonnen
+ */
+
+const TABS = {
+  meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bijgewerkt_door', 'bijgewerkt_op']],
+  packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
+  baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
+  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op']],
+  volunteers: ['Vrijwilligers', ['id', 'aangemeld_op', 'naam', 'telefoon', 'email', 'beschikbaarheid', 'vervoer', 'opmerking']],
+  costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url']],
+  history: ['Historie', ['jaar', 'datum', 'bestellingen', 'oliebollen', 'omzet']],
+  settings: ['Instellingen', ['sleutel', 'waarde']]
+};
+
+const PERMISSIONS = {
+  state: ['beheer', 'inpakker', 'bezorger'],
+  version: ['beheer', 'inpakker', 'bezorger'],
+  claim: ['beheer', 'inpakker'],
+  release: ['beheer', 'inpakker'],
+  checkPart: ['beheer', 'inpakker'],
+  complete: ['beheer', 'inpakker'],
+  setBaked: ['beheer', 'inpakker'],
+  updateNote: ['beheer'],
+  saveConfirmation: ['beheer'],
+  sendConfirmation: ['beheer'],
+  computeRoute: ['beheer'],
+  extractReceipt: ['beheer', 'inpakker', 'bezorger'],
+  saveCost: ['beheer', 'inpakker', 'bezorger'],
+  registerVolunteer: ['public'],
+  login: ['public']
+};
+
+// ---------------------------------------------------------------------------
+// HTTP
+
+function doGet() {
+  return json_({ ok: true, message: 'Oma Coby dashboard API. Gebruik POST.' });
+}
+
+function doPost(e) {
+  try {
+    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const action = String(body.action || '');
+    const allowed = PERMISSIONS[action];
+    if (!allowed) return json_({ ok: false, error: 'Onbekende actie: ' + action });
+
+    const role = roleForCode_(body.code);
+    if (allowed.indexOf('public') === -1 && (!role || allowed.indexOf(role) === -1)) {
+      return json_({ ok: false, error: 'Geen toegang. Controleer je toegangscode.' });
+    }
+
+    const handler = HANDLERS[action];
+    return json_({ ok: true, data: handler(body, role) });
+  } catch (err) {
+    return json_({ ok: false, error: String(err && err.message ? err.message : err) });
+  }
+}
+
+function json_(value) {
+  return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function roleForCode_(code) {
+  const value = String(code || '').trim();
+  if (!value) return null;
+  const props = PropertiesService.getScriptProperties();
+  if (value === props.getProperty('CODE_BEHEER')) return 'beheer';
+  if (value === props.getProperty('CODE_INPAKKER')) return 'inpakker';
+  if (value === props.getProperty('CODE_BEZORGER')) return 'bezorger';
+  return null;
+}
+
+const HANDLERS = {
+  login: function (body) {
+    const role = roleForCode_(body.code);
+    if (!role) throw new Error('Onbekende toegangscode.');
+    return { role: role };
+  },
+  version: function () {
+    return { version: getVersion_() };
+  },
+  state: function (body, role) {
+    return buildState_(role);
+  },
+  claim: function (body) {
+    return withLock_(function () {
+      const name = requireName_(body.name);
+      const row = findOrCreate_('packing', body.orderId);
+      const current = row.values;
+      if (current.ingepakt_door) throw new Error('Deze order is al ingepakt door ' + current.ingepakt_door + '.');
+      if (current.geclaimd_door && current.geclaimd_door !== name) {
+        throw new Error('Deze order is al geclaimd door ' + current.geclaimd_door + '.');
+      }
+      row.set({ geclaimd_door: name, geclaimd_op: now_() });
+      return bump_();
+    });
+  },
+  release: function (body, role) {
+    return withLock_(function () {
+      const name = requireName_(body.name);
+      const row = findOrCreate_('packing', body.orderId);
+      if (row.values.geclaimd_door && row.values.geclaimd_door !== name && role !== 'beheer') {
+        throw new Error('Alleen ' + row.values.geclaimd_door + ' of beheer kan deze claim vrijgeven.');
+      }
+      row.set({ geclaimd_door: '', geclaimd_op: '', met_klaar: false, zonder_klaar: false, totaal_klaar: false });
+      return bump_();
+    });
+  },
+  checkPart: function (body) {
+    return withLock_(function () {
+      const name = requireName_(body.name);
+      const column = { met: 'met_klaar', zonder: 'zonder_klaar', totaal: 'totaal_klaar' }[body.part];
+      if (!column) throw new Error('Onbekend onderdeel.');
+      const row = findOrCreate_('packing', body.orderId);
+      if (row.values.geclaimd_door !== name) throw new Error('Claim de order eerst voordat je afvinkt.');
+      if (row.values.ingepakt_door) throw new Error('Deze order is al afgerond.');
+      const update = {};
+      update[column] = !!body.done;
+      row.set(update);
+      return bump_();
+    });
+  },
+  complete: function (body) {
+    return withLock_(function () {
+      const name = requireName_(body.name);
+      const row = findOrCreate_('packing', body.orderId);
+      const v = row.values;
+      if (v.geclaimd_door !== name) throw new Error('Alleen degene die de order claimde kan afronden.');
+      if (!truthy_(v.met_klaar) || !truthy_(v.zonder_klaar) || !truthy_(v.totaal_klaar)) {
+        throw new Error('Vink eerst MET, ZONDER en TOTAAL af.');
+      }
+      row.set({ ingepakt_door: name, ingepakt_op: now_() });
+      return bump_();
+    });
+  },
+  setBaked: function (body) {
+    return withLock_(function () {
+      const row = findOrCreate_('baked', body.date);
+      row.set({
+        met_krenten: Math.max(0, Number(body.withRaisins) || 0),
+        zonder_krenten: Math.max(0, Number(body.withoutRaisins) || 0),
+        bijgewerkt_op: now_()
+      });
+      return bump_();
+    });
+  },
+  updateNote: function (body) {
+    return withLock_(function () {
+      const row = findOrCreate_('meta', body.orderId);
+      row.set({
+        opmerking_aangepast: String(body.note || ''),
+        opmerking_status: body.reviewed ? 'beoordeeld' : 'nieuw',
+        bijgewerkt_door: String(body.name || ''),
+        bijgewerkt_op: now_()
+      });
+      return bump_();
+    });
+  },
+  saveConfirmation: function (body) {
+    return withLock_(function () {
+      const row = findOrCreate_('meta', body.orderId);
+      if (row.values.bevestiging_status === 'verzonden' && !body.allowResend) {
+        throw new Error('Deze bevestiging is al verzonden.');
+      }
+      row.set({
+        bevestiging_tekst: String(body.text || ''),
+        bevestiging_status: 'concept',
+        bijgewerkt_door: String(body.name || ''),
+        bijgewerkt_op: now_()
+      });
+      return bump_();
+    });
+  },
+  sendConfirmation: function (body) {
+    const order = findOrder_(body.orderId);
+    if (!order) throw new Error('Order niet gevonden.');
+    if (!order.email) throw new Error('Deze order heeft geen e-mailadres.');
+    const text = String(body.text || '').trim();
+    if (!text) throw new Error('De bevestiging is leeg.');
+    const subject = String(body.subject || ('Bevestiging van je bestelling ' + order.order_id));
+    MailApp.sendEmail({ to: order.email, subject: subject, body: text, name: CONFIG.MAIL_SENDER_NAME });
+    return withLock_(function () {
+      findOrCreate_('meta', body.orderId).set({
+        bevestiging_tekst: text,
+        bevestiging_status: 'verzonden',
+        bevestiging_verzonden_op: now_(),
+        bijgewerkt_door: String(body.name || ''),
+        bijgewerkt_op: now_()
+      });
+      return bump_();
+    });
+  },
+  computeRoute: function (body) {
+    const stops = (body.stops || []).filter(function (s) { return s && s.address; });
+    if (stops.length === 0) throw new Error('Geen adressen voor deze route.');
+    if (stops.length > 23) throw new Error('Maximaal 23 stops per route.');
+    const mode = body.mode === 'bicycling' ? 'bicycling' : 'driving';
+
+    const finder = Maps.newDirectionFinder()
+      .setOrigin(CONFIG.START_ADDRESS)
+      .setMode(mode === 'bicycling' ? Maps.DirectionFinder.Mode.BICYCLING : Maps.DirectionFinder.Mode.DRIVING)
+      .setLanguage('nl')
+      .setRegion('nl');
+
+    let waypoints = stops;
+    let destination;
+    if (CONFIG.ROUND_TRIP) {
+      destination = CONFIG.START_ADDRESS;
+    } else {
+      destination = stops[stops.length - 1].address;
+      waypoints = stops.slice(0, -1);
+    }
+    finder.setDestination(destination);
+    waypoints.forEach(function (s) { finder.addWaypoint(s.address); });
+    if (waypoints.length > 1) finder.setOptimizeWaypoints(true);
+
+    const result = finder.getDirections();
+    if (!result.routes || result.routes.length === 0) throw new Error('Google Maps vond geen route (' + result.status + ').');
+    const route = result.routes[0];
+    let meters = 0;
+    let seconds = 0;
+    route.legs.forEach(function (leg) {
+      meters += leg.distance.value;
+      seconds += leg.duration.value;
+    });
+    const order = (route.waypoint_order || waypoints.map(function (_, i) { return i; })).map(function (i) { return waypoints[i]; });
+    if (!CONFIG.ROUND_TRIP) order.push(stops[stops.length - 1]);
+
+    const travelmode = mode === 'bicycling' ? 'bicycling' : 'driving';
+    const enc = encodeURIComponent;
+    const mapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=' + enc(CONFIG.START_ADDRESS) +
+      '&destination=' + enc(destination) +
+      '&waypoints=' + order.slice(0, CONFIG.ROUND_TRIP ? order.length : -1).map(function (s) { return enc(s.address); }).join('%7C') +
+      '&travelmode=' + travelmode;
+
+    const info = {
+      key: body.date + '|' + body.courier,
+      date: String(body.date),
+      courier: String(body.courier),
+      mode: mode,
+      km: Math.round(meters / 100) / 10,
+      minutes: Math.round(seconds / 60),
+      orderIds: order.map(function (s) { return String(s.orderId); }),
+      mapsUrl: mapsUrl,
+      computedAt: now_()
+    };
+    withLock_(function () {
+      findOrCreate_('routes', info.key).set({
+        leverdatum: info.date,
+        bezorger: info.courier,
+        vervoer: info.mode,
+        km: info.km,
+        minuten: info.minutes,
+        volgorde: info.orderIds.join(','),
+        maps_url: info.mapsUrl,
+        berekend_op: info.computedAt
+      });
+      bump_();
+    });
+    return info;
+  },
+  registerVolunteer: function (body) {
+    const name = String(body.name || '').trim();
+    const phone = String(body.phone || '').trim();
+    const email = String(body.email || '').trim();
+    if (!name) throw new Error('Vul je naam in.');
+    if (!phone && !email) throw new Error('Vul een telefoonnummer of e-mailadres in.');
+    if (!body.consent) throw new Error('Geef toestemming voor het bewaren van je gegevens.');
+    return withLock_(function () {
+      sheet_('volunteers').appendRow([
+        Utilities.getUuid(), now_(), name, phone, email,
+        (body.availability || []).join(', '),
+        (body.transport || []).join(', '),
+        String(body.remark || '').slice(0, 1000)
+      ]);
+      bump_();
+      return { saved: true };
+    });
+  },
+  extractReceipt: function (body) {
+    const base64 = String(body.imageBase64 || '');
+    const mediaType = String(body.mediaType || 'image/jpeg');
+    if (!base64) throw new Error('Geen foto ontvangen.');
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/gif'].indexOf(mediaType) === -1) {
+      throw new Error('Alleen foto\'s (jpg, png, webp) worden ondersteund.');
+    }
+
+    const folder = receiptFolder_();
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64), mediaType, 'bon-' + now_().replace(/[: ]/g, '-') + '.jpg');
+    const file = folder.createFile(blob);
+
+    let fields = { date: '', amount: null, supplier: '', description: '' };
+    let warning = '';
+    try {
+      fields = readReceiptWithClaude_(base64, mediaType);
+    } catch (err) {
+      warning = 'Automatisch uitlezen lukte niet: ' + (err && err.message ? err.message : err) + ' Vul de gegevens zelf in.';
+    }
+    return { fields: fields, photoUrl: file.getUrl(), warning: warning };
+  },
+  saveCost: function (body) {
+    const amount = Number(body.amount);
+    if (!body.date) throw new Error('Vul de datum in.');
+    if (!isFinite(amount) || amount <= 0) throw new Error('Vul een geldig bedrag in.');
+    if (!String(body.supplier || '').trim()) throw new Error('Vul de leverancier in.');
+    return withLock_(function () {
+      sheet_('costs').appendRow([
+        Utilities.getUuid(), now_(), String(body.name || ''), String(body.date), amount,
+        String(body.supplier).trim(), String(body.description || '').trim(), String(body.photoUrl || '')
+      ]);
+      bump_();
+      return { saved: true };
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// State
+
+function buildState_(role) {
+  const isAdmin = role === 'beheer';
+  const state = {
+    version: getVersion_(),
+    rows: readOrders_(),
+    meta: {},
+    packing: {},
+    baked: {},
+    routes: {},
+    volunteers: [],
+    costs: [],
+    history: [],
+    pricePerPiece: null
+  };
+
+  readTab_('meta').forEach(function (r) {
+    state.meta[r.order_id] = {
+      noteStatus: r.opmerking_status === 'beoordeeld' ? 'beoordeeld' : 'nieuw',
+      noteOverride: String(r.opmerking_aangepast || ''),
+      confirmationText: String(r.bevestiging_tekst || ''),
+      confirmationStatus: r.bevestiging_status || 'geen',
+      confirmationSentAt: String(r.bevestiging_verzonden_op || ''),
+      updatedBy: String(r.bijgewerkt_door || ''),
+      updatedAt: String(r.bijgewerkt_op || '')
+    };
+  });
+  readTab_('packing').forEach(function (r) {
+    state.packing[r.order_id] = {
+      claimedBy: String(r.geclaimd_door || ''),
+      claimedAt: String(r.geclaimd_op || ''),
+      met: truthy_(r.met_klaar),
+      zonder: truthy_(r.zonder_klaar),
+      totaal: truthy_(r.totaal_klaar),
+      packedBy: String(r.ingepakt_door || ''),
+      packedAt: String(r.ingepakt_op || '')
+    };
+  });
+  readTab_('baked').forEach(function (r) {
+    state.baked[isoDate_(r.leverdatum)] = { withRaisins: Number(r.met_krenten) || 0, withoutRaisins: Number(r.zonder_krenten) || 0 };
+  });
+  readTab_('routes').forEach(function (r) {
+    state.routes[r.sleutel] = {
+      key: r.sleutel, date: isoDate_(r.leverdatum), courier: String(r.bezorger), mode: r.vervoer,
+      km: Number(r.km) || 0, minutes: Number(r.minuten) || 0,
+      orderIds: String(r.volgorde || '').split(',').filter(String), mapsUrl: String(r.maps_url || ''),
+      computedAt: String(r.berekend_op || '')
+    };
+  });
+
+  const price = Number(getSetting_('prijs_per_oliebol'));
+  state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
+
+  if (isAdmin) {
+    state.volunteers = readTab_('volunteers').map(function (r) {
+      return {
+        id: String(r.id), createdAt: String(r.aangemeld_op), name: String(r.naam), phone: String(r.telefoon || ''),
+        email: String(r.email || ''), availability: splitList_(r.beschikbaarheid), transport: splitList_(r.vervoer),
+        remark: String(r.opmerking || '')
+      };
+    });
+    state.costs = readTab_('costs').map(function (r) {
+      return {
+        id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
+        date: isoDate_(r.datum), amount: Number(r.bedrag) || 0, supplier: String(r.leverancier || ''),
+        description: String(r.omschrijving || ''), photoUrl: String(r.foto_url || '')
+      };
+    });
+    state.history = readTab_('history').map(function (r) {
+      const revenue = r.omzet === '' || r.omzet === null ? null : Number(r.omzet);
+      return { year: Number(r.jaar), date: isoDate_(r.datum), orders: Number(r.bestellingen) || 0, oliebollen: Number(r.oliebollen) || 0, revenue: isFinite(revenue) ? revenue : null };
+    }).filter(function (r) { return r.year && r.date; });
+  }
+  return state;
+}
+
+/** Reads the order tab and returns rows keyed by the dashboard field names. */
+function readOrders_() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.ORDERS_SHEET);
+  if (!sheet) throw new Error('Tabblad "' + CONFIG.ORDERS_SHEET + '" niet gevonden. Pas CONFIG.ORDERS_SHEET aan.');
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  const index = {};
+  Object.keys(CONFIG.COLUMNS).forEach(function (field) {
+    const names = CONFIG.COLUMNS[field];
+    for (let i = 0; i < names.length; i++) {
+      const at = headers.indexOf(names[i].toLowerCase());
+      if (at !== -1) { index[field] = at; break; }
+    }
+  });
+  return values.slice(1).map(function (row, i) {
+    const out = {};
+    Object.keys(index).forEach(function (field) {
+      const value = row[index[field]];
+      out[field] = value instanceof Date ? formatCell_(value, field) : value;
+    });
+    if (!out.order_id) out.order_id = 'rij-' + (i + 2);
+    return out;
+  }).filter(function (r) { return r.leverdatum || r.locatie_naam; });
+}
+
+function findOrder_(orderId) {
+  const rows = readOrders_();
+  for (let i = 0; i < rows.length; i++) if (String(rows[i].order_id) === String(orderId)) return rows[i];
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Receipt reading (Claude vision)
+
+function readReceiptWithClaude_(base64, mediaType) {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY ontbreekt in de Script-eigenschappen.');
+
+  const schema = {
+    type: 'object',
+    properties: {
+      date: { type: 'string', description: 'Datum van de bon als YYYY-MM-DD, leeg als onleesbaar' },
+      amount: { type: ['number', 'null'], description: 'Totaal te betalen bedrag in euro, inclusief btw' },
+      supplier: { type: 'string', description: 'Naam van de winkel of leverancier' },
+      description: { type: 'string', description: 'Korte omschrijving van wat er gekocht is, max 120 tekens' }
+    },
+    required: ['date', 'amount', 'supplier', 'description'],
+    additionalProperties: false
+  };
+
+  const response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    muteHttpExceptions: true,
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'server-side-fallback-2026-07-01'
+    },
+    payload: JSON.stringify({
+      model: CONFIG.CLAUDE_MODEL,
+      max_tokens: 2000,
+      fallbacks: 'default',
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: schema } },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: 'Dit is een foto van een kassabon of factuur van een uitgave voor een oliebollenactie. Lees de datum, het totaalbedrag, de leverancier en een korte omschrijving van de gekochte artikelen uit. Laat een veld leeg (of null voor het bedrag) als het niet leesbaar is; verzin niets.' }
+        ]
+      }]
+    })
+  });
+
+  const status = response.getResponseCode();
+  const result = JSON.parse(response.getContentText());
+  if (status !== 200) throw new Error((result.error && result.error.message) || ('HTTP ' + status));
+  if (result.stop_reason === 'refusal') throw new Error('Het model weigerde deze foto te verwerken.');
+  const textBlock = (result.content || []).filter(function (b) { return b.type === 'text'; })[0];
+  if (!textBlock) throw new Error('Geen antwoord ontvangen.');
+  const parsed = JSON.parse(textBlock.text);
+  return {
+    date: String(parsed.date || ''),
+    amount: typeof parsed.amount === 'number' ? parsed.amount : null,
+    supplier: String(parsed.supplier || ''),
+    description: String(parsed.description || '')
+  };
+}
+
+function receiptFolder_() {
+  const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(CONFIG.RECEIPT_FOLDER);
+}
+
+// ---------------------------------------------------------------------------
+// Sheet helpers
+
+function sheet_(tab) {
+  const def = TABS[tab];
+  const ss = SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(def[0]);
+  if (!sheet) {
+    sheet = ss.insertSheet(def[0]);
+    // Keys stay text, so "001" or "2026-12-30" are not turned into numbers or dates.
+    sheet.getRange('A:A').setNumberFormat('@');
+    sheet.appendRow(def[1]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function readTab_(tab) {
+  const sheet = sheet_(tab);
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(String);
+  return values.slice(1).map(function (row) {
+    const out = {};
+    headers.forEach(function (h, i) { out[h] = row[i] instanceof Date ? formatCell_(row[i], h) : row[i]; });
+    return out;
+  });
+}
+
+/** Returns a row handle for the first-column key, creating the row when missing. Call inside withLock_. */
+function findOrCreate_(tab, key) {
+  const id = String(key || '').trim();
+  if (!id) throw new Error('Ontbrekende sleutel.');
+  const sheet = sheet_(tab);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  let rowIndex = -1;
+  for (let i = 1; i < values.length; i++) {
+    const cell = values[i][0] instanceof Date ? isoDate_(values[i][0]) : String(values[i][0]);
+    if (cell === id) { rowIndex = i; break; }
+  }
+  if (rowIndex === -1) {
+    const blank = headers.map(function (_, i) { return i === 0 ? id : ''; });
+    sheet.appendRow(blank);
+    values.push(blank);
+    rowIndex = values.length - 1;
+  }
+  const current = {};
+  headers.forEach(function (h, i) { current[h] = values[rowIndex][i]; });
+  return {
+    values: current,
+    set: function (update) {
+      Object.keys(update).forEach(function (field) {
+        const col = headers.indexOf(field);
+        if (col !== -1) sheet.getRange(rowIndex + 1, col + 1).setValue(update[field]);
+      });
+    }
+  };
+}
+
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    return fn();
+  } finally {
+    SpreadsheetApp.flush();
+    lock.releaseLock();
+  }
+}
+
+function getSetting_(key) {
+  const rows = readTab_('settings');
+  for (let i = 0; i < rows.length; i++) if (rows[i].sleutel === key) return rows[i].waarde;
+  return '';
+}
+
+function getVersion_() {
+  return Number(PropertiesService.getScriptProperties().getProperty('DATA_VERSION')) || 1;
+}
+
+function bump_() {
+  const props = PropertiesService.getScriptProperties();
+  const next = getVersion_() + 1;
+  props.setProperty('DATA_VERSION', String(next));
+  return { version: next };
+}
+
+/** Simple trigger: handmatige wijzigingen in de Sheet zijn zo direct zichtbaar in het dashboard. */
+function onEdit() {
+  bump_();
+}
+
+function requireName_(name) {
+  const value = String(name || '').trim();
+  if (!value) throw new Error('Vul eerst je naam in.');
+  return value;
+}
+
+function truthy_(v) {
+  return v === true || String(v).toLowerCase() === 'true' || String(v).toLowerCase() === 'ja';
+}
+
+function splitList_(v) {
+  return String(v || '').split(',').map(function (s) { return s.trim(); }).filter(String);
+}
+
+function now_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+}
+
+function isoDate_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v || '');
+}
+
+function formatCell_(date, field) {
+  const tz = Session.getScriptTimeZone();
+  if (/tijd/.test(field) && date.getFullYear() < 1900) return Utilities.formatDate(date, tz, 'HH:mm');
+  if (field === 'geplande_tijd') return Utilities.formatDate(date, tz, 'HH:mm');
+  if (/_op$|tijdstempel|timestamp/.test(field)) return Utilities.formatDate(date, tz, 'yyyy-MM-dd HH:mm:ss');
+  return Utilities.formatDate(date, tz, 'yyyy-MM-dd');
+}

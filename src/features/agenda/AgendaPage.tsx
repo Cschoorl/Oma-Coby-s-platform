@@ -4,12 +4,27 @@ import type { AgendaShift } from "../../types/agenda";
 import { parseAgendaShifts } from "../../utils/agendaParser";
 
 const START_HOUR = 9;
-const END_HOUR = 15;
-const CALENDAR_HEIGHT = 720; // pixels for 9:00 - 15:00
+const END_HOUR = 17;
+const CALENDAR_HEIGHT = 960; // pixels for 9:00 - 17:00
 
 function toMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
   return h * 60 + m;
+}
+
+/** Puts overlapping shifts side by side: returns each shift's lane and the day's lane count. */
+function assignLanes(items: AgendaShift[]): { lanes: Map<string, number>; laneCount: number } {
+  const laneEnds: number[] = [];
+  const lanes = new Map<string, number>();
+  const sorted = [...items].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+  for (const shift of sorted) {
+    const start = toMinutes(shift.startTime);
+    let lane = laneEnds.findIndex((end) => end <= start);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = toMinutes(shift.endTime);
+    lanes.set(shift.id, lane);
+  }
+  return { lanes, laneCount: Math.max(1, laneEnds.length) };
 }
 
 function formatHour(hour: number): string {
@@ -123,7 +138,9 @@ export function AgendaPage({ orders, contactEmail }: { orders: Order[]; contactE
                     })}
                   </div>
 
-                  {columns.map(([dateLabel, items]) => (
+                  {columns.map(([dateLabel, items]) => {
+                    const { lanes, laneCount } = assignLanes(items);
+                    return (
                     <div key={dateLabel} className="relative border-l border-stone-200 bg-white/60" style={{ height: `${CALENDAR_HEIGHT}px` }}>
                       {hourLines.map((hour) => {
                         const top = ((hour - START_HOUR) / (END_HOUR - START_HOUR)) * CALENDAR_HEIGHT;
@@ -133,8 +150,13 @@ export function AgendaPage({ orders, contactEmail }: { orders: Order[]; contactE
                       {items.map((shift) => (
                         <article
                           key={shift.id}
-                          className="absolute left-1 right-1 rounded-lg border border-coby-300 bg-coby-100/95 p-2 shadow-sm"
-                          style={{ top: `${eventTopPx(shift)}px`, height: `${eventHeightPx(shift)}px` }}
+                          className="absolute overflow-hidden rounded-lg border border-coby-300 bg-coby-100/95 p-2 shadow-sm"
+                          style={{
+                            top: `${eventTopPx(shift)}px`,
+                            height: `${eventHeightPx(shift)}px`,
+                            left: `calc(${((lanes.get(shift.id) ?? 0) / laneCount) * 100}% + 2px)`,
+                            width: `calc(${100 / laneCount}% - 4px)`
+                          }}
                         >
                           <p className="truncate text-xs font-semibold text-coby-900">{shift.personName}</p>
                           <p className="text-[11px] text-coby-800">
@@ -144,7 +166,8 @@ export function AgendaPage({ orders, contactEmail }: { orders: Order[]; contactE
                         </article>
                       ))}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

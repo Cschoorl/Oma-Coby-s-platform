@@ -1,5 +1,7 @@
 import type { AgendaShift, DeliveryRole } from "../types/agenda";
 import type { Order } from "../types/order";
+import type { Volunteer } from "../types/dashboard";
+import { VOLUNTEER_ROLES, volunteerRoleLabel } from "../types/dashboard";
 
 const MONTHS_NL: Record<string, number> = {
   januari: 0,
@@ -250,7 +252,7 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
   }
 
   shifts.sort((a, b) => {
-    if (a.monthIndex !== b.monthIndex) return a.monthIndex - b.monthIndex;
+    if (a.monthIndex !== b.monthIndex) return seasonMonth(a.monthIndex) - seasonMonth(b.monthIndex);
     if (a.dayOfMonth !== b.dayOfMonth) return a.dayOfMonth - b.dayOfMonth;
     if (a.startTime !== b.startTime) return a.startTime.localeCompare(b.startTime);
     return a.role.localeCompare(b.role);
@@ -259,3 +261,24 @@ export function parseAgendaShifts(orders: Order[]): AgendaShift[] {
   return shifts;
 }
 
+
+/** The season runs from November into January, so January sorts after December. */
+export function seasonMonth(monthIndex: number): number {
+  return monthIndex < 6 ? monthIndex + 12 : monthIndex;
+}
+
+/**
+ * Turns form answers into the "Rol: Ja | dagen || Rol: Ja | dagen" text the parser reads,
+ * so the agenda shows everyone who signed up.
+ */
+export function parseVolunteerShifts(volunteers: Volunteer[]): AgendaShift[] {
+  const rows = volunteers.map((v) => ({
+    contactPerson: v.name,
+    supplierName: v.name,
+    locationName: v.city,
+    extras: VOLUNTEER_ROLES.filter((r) => v.roles[r].wants && v.roles[r].days.length > 0)
+      .map((r) => `${volunteerRoleLabel[r]}: Ja | ${v.roles[r].days.join(", ")}`)
+      .join(" || ")
+  }));
+  return parseAgendaShifts(rows as Order[]);
+}

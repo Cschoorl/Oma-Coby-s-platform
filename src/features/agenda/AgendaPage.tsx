@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import type { Order } from "../../types/order";
 import type { AgendaShift } from "../../types/agenda";
-import { parseAgendaShifts } from "../../utils/agendaParser";
+import { parseAgendaShifts, parseVolunteerShifts, seasonMonth } from "../../utils/agendaParser";
+import type { Volunteer } from "../../types/dashboard";
 
 const START_HOUR = 9;
 const END_HOUR = 17;
@@ -31,10 +32,14 @@ function formatHour(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00`;
 }
 
-export function AgendaPage({ orders, contactEmail }: { orders: Order[]; contactEmail: string }) {
+export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order[]; volunteers: Volunteer[]; contactEmail: string }) {
   const [query, setQuery] = useState<string>("");
 
-  const shifts = useMemo<AgendaShift[]>(() => parseAgendaShifts(orders), [orders]);
+  // Signups from the volunteer form are leading; older order rows with schedules are the fallback.
+  const shifts = useMemo<AgendaShift[]>(
+    () => (volunteers.length > 0 ? parseVolunteerShifts(volunteers) : parseAgendaShifts(orders)),
+    [orders, volunteers]
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -55,7 +60,7 @@ export function AgendaPage({ orders, contactEmail }: { orders: Order[]; contactE
       const one = a[1][0];
       const two = b[1][0];
       if (!one || !two) return 0;
-      if (one.monthIndex !== two.monthIndex) return one.monthIndex - two.monthIndex;
+      if (one.monthIndex !== two.monthIndex) return seasonMonth(one.monthIndex) - seasonMonth(two.monthIndex);
       return one.dayOfMonth - two.dayOfMonth;
     });
   }, [filtered]);
@@ -105,7 +110,7 @@ export function AgendaPage({ orders, contactEmail }: { orders: Order[]; contactE
 
       {shifts.length === 0 ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Geen agenda-items gevonden op basis van je sheet data (vermoedelijk missen `extra_notities` met “Fietskoerier: Ja | ...” of “Autokoerier: Ja | ...”).
+          Nog geen aanmeldingen met dagen. Zodra vrijwilligers zich aanmelden (formulier of aanmeldpagina) verschijnen ze hier.
         </section>
       ) : (
         <section className="rounded-2xl border border-white/60 bg-white/90 p-3 shadow-card backdrop-blur sm:p-4">

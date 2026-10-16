@@ -34,17 +34,36 @@ export interface BakedCount {
   withoutRaisins: number;
 }
 
-export type Transport = "fiets" | "auto";
+/** The four roles from the volunteer form, in form order. */
+export type VolunteerRole = "inpakken" | "fietskoerier" | "autokoerier" | "oliebollenbar";
 
+export const VOLUNTEER_ROLES: VolunteerRole[] = ["inpakken", "fietskoerier", "autokoerier", "oliebollenbar"];
+
+export const volunteerRoleLabel: Record<VolunteerRole, string> = {
+  inpakken: "Inpakken",
+  fietskoerier: "Fietskoerier",
+  autokoerier: "Autokoerier",
+  oliebollenbar: "Oliebollenbar"
+};
+
+export interface RoleAvailability {
+  wants: boolean;
+  /** Options exactly as in the form, e.g. "Vrijdag 19 december: middag". */
+  days: string[];
+}
+
+/** One row of the volunteer form (tab "Formulierreacties 1"). */
 export interface Volunteer {
   id: string;
   createdAt: string;
   name: string;
+  city: string;
+  /** Contact details are only sent to beheer. */
   phone: string;
   email: string;
-  /** Free list like "30 december ochtend, 31 december middag". */
-  availability: string[];
-  transport: Transport[];
+  roles: Record<VolunteerRole, RoleAvailability>;
+  /** Answer to "Kan je een bakfiets lenen van iemand?". */
+  cargoBike: boolean;
   remark: string;
 }
 
@@ -97,7 +116,7 @@ export interface DashboardState {
   /** Per leverdag (YYYY-MM-DD). */
   baked: Record<string, BakedCount>;
   routes: Record<string, RouteInfo>;
-  /** Only returned for the beheer role. */
+  /** Everyone gets names and availability; phone, e-mail and remarks only for beheer. */
   volunteers: Volunteer[];
   costs: CostEntry[];
   history: HistoryRow[];

@@ -44,8 +44,43 @@ const CONFIG = {
   /** Map in Google Drive voor foto's van bonnen. */
   RECEIPT_FOLDER: 'Oliebollen bonnen',
   /** Claude-model voor het uitlezen van bonnen. */
-  CLAUDE_MODEL: 'claude-opus-5-5'
+  CLAUDE_MODEL: 'claude-opus-5-5',
+  /**
+   * Aanmeldingen van vrijwilligers: het antwoordenblad van het Google Formulier.
+   * Staat het in een ander bestand, zet dan de Script-eigenschap VOLUNTEERS_SPREADSHEET_ID
+   * (het lange ID uit de URL). Zonder die eigenschap wordt dit bestand gebruikt.
+   */
+  VOLUNTEERS_SHEET: 'Formulierreacties 1',
+  /** Kolomkoppen van het formulier. Een kop telt als hij precies zo is of zo begint. */
+  VOLUNTEER_COLUMNS: {
+    timestamp: ['tijdstempel'],
+    name: ['naam + achternaam', 'naam'],
+    city: ['woonplaats'],
+    phone: ['telefoonnummer', 'telefoon'],
+    email: ['emailadres', 'e-mailadres'],
+    inpakken: ['wil je helpen inpakken'],
+    inpakkenDays: ['op welke dag(en) wil je helpen inpakken'],
+    fietskoerier: ['wil je helpen als fietskoerier'],
+    cargoBike: ['kan je een bakfiets lenen'],
+    fietskoerierDays: ['op welke dag(en) kan je helpen als fietskoerier', 'op welke dag(en) wil je helpen als fietskoerier'],
+    autokoerier: ['wil je helpen als autokoerier'],
+    autokoerierDays: ['op welke dag(en) wil je helpen als autokoerier', 'op welke dag(en) kan je helpen als autokoerier'],
+    oliebollenbar: ['wil je helpen in de oliebollenbar'],
+    oliebollenbarDays: ['op welke dag(en) wil je helpen in de oliebollenbar'],
+    remark: ['wil je nog iets kwijt']
+  }
 };
+
+const VOLUNTEER_ROLES = ['inpakken', 'fietskoerier', 'autokoerier', 'oliebollenbar'];
+
+/** Headers used when the form tab does not exist yet (same as the 2025 form). */
+const VOLUNTEER_DEFAULT_HEADERS = [
+  'Tijdstempel', 'Wil je helpen inpakken?', 'Op welke dag(en) wil je helpen inpakken?',
+  'Wil je helpen als fietskoerier?', 'Kan je een bakfiets lenen van iemand?', 'Op welke dag(en) kan je helpen als fietskoerier?',
+  'Wil je helpen als autokoerier?', 'Op welke dag(en) wil je helpen als autokoerier?',
+  'Wil je helpen in de Oliebollenbar?', 'Op welke dag(en) wil je helpen in de Oliebollenbar?',
+  'Naam + achternaam', 'Woonplaats', 'Telefoonnummer', 'Emailadres', 'Wil je nog iets kwijt? Opmerkingen, vragen, ideeën, suggesties ?'
+];
 
 /*
  * Script-eigenschappen (Projectinstellingen → Script-eigenschappen):
@@ -58,7 +93,6 @@ const TABS = {
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
   routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op']],
-  volunteers: ['Vrijwilligers', ['id', 'aangemeld_op', 'naam', 'telefoon', 'email', 'beschikbaarheid', 'vervoer', 'opmerking']],
   costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url']],
   history: ['Historie', ['jaar', 'datum', 'bestellingen', 'oliebollen', 'omzet']],
   settings: ['Instellingen', ['sleutel', 'waarde']]
@@ -318,13 +352,27 @@ const HANDLERS = {
     if (!name) throw new Error('Vul je naam in.');
     if (!phone && !email) throw new Error('Vul een telefoonnummer of e-mailadres in.');
     if (!body.consent) throw new Error('Geef toestemming voor het bewaren van je gegevens.');
+    const roles = body.roles || {};
+    const wantsSomething = VOLUNTEER_ROLES.some(function (r) { return roles[r] && roles[r].wants; });
+    if (!wantsSomething) throw new Error('Kies minstens één taak waarmee je wilt helpen.');
+
+    const values = { timestamp: new Date(), name: name, city: String(body.city || '').trim(), phone: phone, email: email, remark: String(body.remark || '').slice(0, 1000) };
+    VOLUNTEER_ROLES.forEach(function (role) {
+      const r = roles[role] || {};
+      values[role] = r.wants ? 'Ja' : 'Nee';
+      values[role + 'Days'] = r.wants ? (r.days || []).map(String).join(', ') : '';
+    });
+    values.cargoBike = roles.fietskoerier && roles.fietskoerier.wants ? (body.cargoBike ? 'Ja' : 'Nee') : '';
+
     return withLock_(function () {
-      sheet_('volunteers').appendRow([
-        Utilities.getUuid(), now_(), name, phone, email,
-        (body.availability || []).join(', '),
-        (body.transport || []).join(', '),
-        String(body.remark || '').slice(0, 1000)
-      ]);
+      const sheet = volunteerSheet_();
+      const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      const index = volunteerIndex_(headers);
+      const row = headers.map(function () { return ''; });
+      Object.keys(index).forEach(function (field) {
+        if (values[field] !== undefined) row[index[field]] = values[field];
+      });
+      sheet.appendRow(row);
       bump_();
       return { saved: true };
     });
@@ -418,17 +466,16 @@ function buildState_(role) {
     };
   });
 
+  // Everyone sees who is available when (agenda); contact details only for beheer.
+  state.volunteers = readVolunteers_().map(function (v) {
+    if (isAdmin) return v;
+    return Object.assign({}, v, { phone: '', email: '', remark: '' });
+  });
+
   const price = Number(getSetting_('prijs_per_oliebol'));
   state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
 
   if (isAdmin) {
-    state.volunteers = readTab_('volunteers').map(function (r) {
-      return {
-        id: String(r.id), createdAt: String(r.aangemeld_op), name: String(r.naam), phone: String(r.telefoon || ''),
-        email: String(r.email || ''), availability: splitList_(r.beschikbaarheid), transport: splitList_(r.vervoer),
-        remark: String(r.opmerking || '')
-      };
-    });
     state.costs = readTab_('costs').map(function (r) {
       return {
         id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
@@ -468,6 +515,69 @@ function readOrders_() {
     if (!out.order_id) out.order_id = 'rij-' + (i + 2);
     return out;
   }).filter(function (r) { return r.leverdatum || r.locatie_naam; });
+}
+
+function volunteerSheet_() {
+  const id = PropertiesService.getScriptProperties().getProperty('VOLUNTEERS_SPREADSHEET_ID');
+  const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(CONFIG.VOLUNTEERS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.VOLUNTEERS_SHEET);
+    sheet.appendRow(VOLUNTEER_DEFAULT_HEADERS);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/** Column index per field, matching headers exactly first and then by prefix. */
+function volunteerIndex_(headers) {
+  const norm = headers.map(function (h) { return String(h).replace(/\s+/g, ' ').trim().toLowerCase(); });
+  const index = {};
+  const used = {};
+  Object.keys(CONFIG.VOLUNTEER_COLUMNS).forEach(function (field) {
+    const names = CONFIG.VOLUNTEER_COLUMNS[field];
+    let at = -1;
+    names.some(function (n) { at = norm.indexOf(n); return at !== -1 && !used[at]; });
+    if (at === -1 || used[at]) {
+      at = -1;
+      names.some(function (n) {
+        for (let i = 0; i < norm.length; i++) if (!used[i] && norm[i].indexOf(n) === 0) { at = i; return true; }
+        return false;
+      });
+    }
+    if (at !== -1) { index[field] = at; used[at] = true; }
+  });
+  return index;
+}
+
+function readVolunteers_() {
+  const values = volunteerSheet_().getDataRange().getValues();
+  if (values.length < 2) return [];
+  const index = volunteerIndex_(values[0]);
+  const cell = function (row, field) {
+    if (index[field] === undefined) return '';
+    const v = row[index[field]];
+    if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    return String(v === null || v === undefined ? '' : v).trim();
+  };
+  return values.slice(1).map(function (row, i) {
+    const roles = {};
+    VOLUNTEER_ROLES.forEach(function (role) {
+      const days = splitList_(cell(row, role + 'Days'));
+      roles[role] = { wants: truthy_(cell(row, role)) || days.length > 0, days: days };
+    });
+    return {
+      id: 'rij-' + (i + 2),
+      createdAt: cell(row, 'timestamp'),
+      name: cell(row, 'name'),
+      city: cell(row, 'city'),
+      phone: cell(row, 'phone'),
+      email: cell(row, 'email'),
+      roles: roles,
+      cargoBike: truthy_(cell(row, 'cargoBike')),
+      remark: cell(row, 'remark')
+    };
+  }).filter(function (v) { return v.name; });
 }
 
 function findOrder_(orderId) {

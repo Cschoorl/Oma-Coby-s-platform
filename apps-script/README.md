@@ -4,7 +4,9 @@ Het dashboard praat met de Google Sheet via één Apps Script (`Code.gs`). Dat s
 
 - leest de bestellingen uit het tabblad **Bestellingen** (dat tabblad wordt nooit aangepast);
 - bewaart alles van het dashboard in eigen tabbladen, die het zelf aanmaakt:
-  `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Vrijwilligers`, `Kosten`, `Historie`, `Instellingen`;
+  `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`;
+- leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
+  zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
 - berekent routes en kilometers met de ingebouwde Google Maps-dienst (geen API-sleutel nodig);
 - verstuurt klantbevestigingen vanuit het Google-account van de Sheet (`MailApp`);
@@ -26,6 +28,7 @@ Het dashboard praat met de Google Sheet via één Apps Script (`Code.gs`). Dat s
    | `CODE_INPAKKER` | code voor inpakkers |
    | `CODE_BEZORGER` | code voor bezorgers |
    | `ANTHROPIC_API_KEY` | API-sleutel van console.anthropic.com (alleen nodig voor het uitlezen van bonnen) |
+   | `VOLUNTEERS_SPREADSHEET_ID` | ID van het bestand met de formulierantwoorden, als dat een ander bestand is dan waar het script in staat. Het ID is het lange stuk in de URL tussen `/d/` en `/edit`. Zet het hier en niet in de code: de repo is openbaar. |
 
 5. **Implementeren → Nieuwe implementatie → Web-app**
    - Uitvoeren als: **Ik**
@@ -55,6 +58,20 @@ Optioneel, maar nodig voor sommige functies:
 | `besteldatum` | tussenstand per besteldatum (anders: leverdatum) |
 | `extra_notities` | opmerkingen beoordelen |
 
+## Vrijwilligers (Google Formulier)
+
+Het script leest het tabblad `Formulierreacties 1` (instelbaar via `CONFIG.VOLUNTEERS_SHEET`) en herkent de kolommen
+aan het begin van de vraag, bijv. "Op welke dag(en) kan je helpen als fietskoerier?". Extra kolommen achteraan
+mogen blijven staan. Aanmeldingen via de aanmeldpagina (`#/aanmelden`) worden in hetzelfde tabblad toegevoegd,
+in dezelfde kolommen en hetzelfde formaat als het formulier ("Vrijdag 18 december: middag").
+
+- De agenda in het dashboard wordt gevuld uit deze aanmeldingen (beschikbaarheid, niet het definitieve rooster).
+- Inpakkers en bezorgers zien alleen namen en dagen; telefoon, e-mail en opmerkingen ziet alleen beheer.
+- De dagen op de aanmeldpagina staan in `src/config.ts` (`SIGNUP_OPTIONS`).
+
+Het Google Formulier blijft gewoon werken; je kunt het naast de aanmeldpagina gebruiken of de aanmeldpagina
+in de plaats ervan delen.
+
 ## Tabbladen die je zelf vult
 
 - **Historie**: één regel per dag van eerdere jaren: `jaar`, `datum` (JJJJ-MM-DD), `bestellingen`, `oliebollen`, `omzet`.
@@ -70,4 +87,4 @@ opnieuw als er iets veranderd is. Wijzigingen die je direct in de Sheet typt, ko
 
 - Klantgegevens zijn alleen zichtbaar na inloggen met een toegangscode. Kies lange codes en wissel ze na de actie.
 - Alleen **beheer** ziet aanmeldingen van vrijwilligers en de kostenlijst.
-- Verwijder na de actie de tabbladen `Vrijwilligers` en (zo nodig) de bonnenmap in Drive; dat staat in de toestemmingstekst.
+- Verwijder na de actie de aanmeldingen en (zo nodig) de bonnenmap in Drive; dat staat in de toestemmingstekst.

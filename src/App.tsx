@@ -141,7 +141,7 @@ function App() {
         page = <VolunteersPage state={state} />;
         break;
       case "/agenda":
-        page = <AgendaPage orders={state.orders} contactEmail={CONTACT_EMAIL} />;
+        page = <AgendaPage orders={state.orders} volunteers={state.volunteers} contactEmail={CONTACT_EMAIL} />;
         break;
     }
   }

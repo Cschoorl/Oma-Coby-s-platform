@@ -1,4 +1,4 @@
-import type { DeliveryStatus, Order } from "../types/order";
+import type { CustomerType, DeliveryStatus, Order } from "../types/order";
 
 // Schema of the rows as they arrive from Google Sheets via n8n. Sheets often sends
 // numbers as strings and leaves cells empty, so every field is treated as loose input.
@@ -17,6 +17,11 @@ export interface GoogleSheetOrderRow {
   oliebollen_met_krenten: number;
   oliebollen_zonder_krenten: number;
   extra_notities?: string;
+  // Optional columns used by the newer dashboard pages.
+  email?: string;
+  type_klant?: string;
+  bedrag?: number | string;
+  besteldatum?: string;
 }
 
 type LooseRow = Partial<Record<keyof GoogleSheetOrderRow, unknown>>;
@@ -41,6 +46,22 @@ function toStatus(value: unknown): DeliveryStatus {
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
+}
+
+function toCustomerType(value: unknown): CustomerType {
+  const lower = text(value).toLowerCase();
+  if (!lower) return "onbekend";
+  if (/zakelijk|b2b|bedrijf/.test(lower)) return "zakelijk";
+  return "particulier";
+}
+
+function toAmount(value: unknown): number | undefined {
+  const raw = text(value).replace(/[€\s]/g, "");
+  if (!raw) return undefined;
+  // "1.234,50" (Dutch) and "1234.50" both become 1234.5.
+  const normalised = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const parsed = Number(normalised);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 /** Accepts YYYY-MM-DD, ISO timestamps and Dutch D-M-YYYY / D/M/YYYY; returns YYYY-MM-DD. */
@@ -77,7 +98,11 @@ export function mapSheetRowToOrder(row: LooseRow, index = 0): Order {
     status: toStatus(row.status),
     withRaisins: toCount(row.oliebollen_met_krenten),
     withoutRaisins: toCount(row.oliebollen_zonder_krenten),
-    extras: extras || undefined
+    extras: extras || undefined,
+    email: text(row.email) || undefined,
+    customerType: toCustomerType(row.type_klant),
+    amount: toAmount(row.bedrag),
+    orderDate: row.besteldatum ? toIsoDate(row.besteldatum) : undefined
   };
 }
 

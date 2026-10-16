@@ -1,3 +1,4 @@
+import type { OrderMeta } from "../types/dashboard";
 import type { DeliveryStatus, Order } from "../types/order";
 
 const KITCHEN_START_ADDRESS = "Aalsmeerderweg 85, Aalsmeer";
@@ -38,10 +39,11 @@ function orderAddressForMapsQuery(order: Order): string {
   return orderAddress(order);
 }
 
+/** Google Maps route from the bakery past the stops, in the order given. */
 export function mapsRouteUrlForOrders(orders: Order[]): string | null {
   if (orders.length < 1) return null;
 
-  const sorted = [...orders].sort((a, b) => a.plannedTime.localeCompare(b.plannedTime));
+  const sorted = orders;
   const origin = encodeURIComponent(KITCHEN_START_ADDRESS);
   const destination = encodeURIComponent(orderAddress(sorted[sorted.length - 1]));
   const waypoints = sorted
@@ -51,4 +53,13 @@ export function mapsRouteUrlForOrders(orders: Order[]): string | null {
 
   const waypointPart = waypoints.length > 0 ? `&waypoints=${waypoints}` : "";
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypointPart}&travelmode=driving`;
+}
+
+/** The reviewed remark when beheer edited it, otherwise the remark from the sheet. */
+export function effectiveNote(order: Order, meta?: OrderMeta): string {
+  return (meta?.noteOverride || order.extras || "").trim();
+}
+
+export function stopAddress(order: Order): string {
+  return orderAddress(order);
 }

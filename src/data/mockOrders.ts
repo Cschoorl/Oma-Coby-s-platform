@@ -5,6 +5,9 @@ import { mapSheetRowsToOrders, type GoogleSheetOrderRow } from "./googleSheetAda
 const mockSheetRows: GoogleSheetOrderRow[] = [
   {
     order_id: "ORDER-001",
+    email: "anna@example.nl",
+    type_klant: "particulier",
+    besteldatum: "2026-10-02",
     leverdatum: "2026-12-30",
     leverancier_naam: "Bezorger Anna",
     locatie_naam: "Sportschool De Kracht",
@@ -21,6 +24,9 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-002",
+    email: "inkoop@bloemenveiling.example",
+    type_klant: "zakelijk",
+    besteldatum: "2026-10-05",
     leverdatum: "2026-12-30",
     leverancier_naam: "Bezorger Bram",
     locatie_naam: "Kantoor Bloemenveiling",
@@ -37,6 +43,8 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-003",
+    type_klant: "zakelijk",
+    besteldatum: "2026-10-09",
     leverdatum: "2026-12-30",
     leverancier_naam: "Bezorger Anna",
     locatie_naam: "Basisschool De Wegwijzer",
@@ -53,6 +61,9 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-004",
+    email: "receptie@kloosterhof.example",
+    type_klant: "zakelijk",
+    besteldatum: "2026-10-12",
     leverdatum: "2026-12-30",
     leverancier_naam: "Bezorger Bram",
     locatie_naam: "Zorgcentrum Kloosterhof",
@@ -69,6 +80,8 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-005",
+    type_klant: "particulier",
+    besteldatum: "2026-10-14",
     leverdatum: "2026-12-31",
     leverancier_naam: "Bezorger Anna",
     locatie_naam: "Gemeentehuis",
@@ -85,6 +98,9 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
   },
   {
     order_id: "ORDER-006",
+    email: "chris@example.nl",
+    type_klant: "particulier",
+    besteldatum: "2026-10-15",
     leverdatum: "2026-12-31",
     leverancier_naam: "Bezorger Chris",
     locatie_naam: "Brandweerkazerne",

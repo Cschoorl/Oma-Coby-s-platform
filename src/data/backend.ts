@@ -1,0 +1,426 @@
+import type {
+  BakedCount,
+  CostEntry,
+  DashboardState,
+  OrderMeta,
+  PackingPart,
+  PackingState,
+  ReceiptFields,
+  Role,
+  RouteInfo,
+  Transport,
+  Volunteer
+} from "../types/dashboard";
+import { emptyMeta, emptyPacking } from "../types/dashboard";
+import type { Order } from "../types/order";
+import { mapSheetRowsToOrders } from "./googleSheetAdapter";
+import { loadOrders } from "./ordersSource";
+
+export interface Session {
+  code: string;
+  role: Role;
+  name: string;
+}
+
+export interface RouteRequest {
+  date: string;
+  courier: string;
+  mode: "driving" | "bicycling";
+  stops: Array<{ orderId: string; address: string }>;
+}
+
+export interface VolunteerSignup {
+  name: string;
+  phone: string;
+  email: string;
+  availability: string[];
+  transport: Transport[];
+  remark: string;
+  consent: boolean;
+}
+
+export interface ReceiptResult {
+  fields: ReceiptFields;
+  photoUrl: string;
+  warning: string;
+}
+
+export interface CostInput {
+  date: string;
+  amount: number;
+  supplier: string;
+  description: string;
+  photoUrl: string;
+}
+
+export interface Backend {
+  kind: "apps-script" | "demo";
+  /** Why demo data is shown, when relevant. */
+  notice?: string;
+  login(code: string): Promise<Role>;
+  getVersion(session: Session): Promise<number>;
+  getState(session: Session): Promise<DashboardState>;
+  claim(session: Session, orderId: string): Promise<void>;
+  release(session: Session, orderId: string): Promise<void>;
+  checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<void>;
+  complete(session: Session, orderId: string): Promise<void>;
+  setBaked(session: Session, date: string, counts: BakedCount): Promise<void>;
+  updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
+  saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
+  sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
+  computeRoute(session: Session, request: RouteRequest): Promise<RouteInfo>;
+  registerVolunteer(signup: VolunteerSignup): Promise<void>;
+  extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
+  saveCost(session: Session, cost: CostInput): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// Apps Script backend
+
+interface RawState extends Omit<DashboardState, "orders"> {
+  rows: Record<string, unknown>[];
+}
+
+function createAppsScriptBackend(url: string): Backend {
+  async function call<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+    let response: Response;
+    try {
+      // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action, ...payload })
+      });
+    } catch {
+      throw new Error("Geen verbinding met de Google Sheet. Controleer je internet.");
+    }
+    if (!response.ok) throw new Error(`De Google Sheet gaf een fout (${response.status}).`);
+    const body = (await response.json()) as { ok: boolean; data?: T; error?: string };
+    if (!body.ok) throw new Error(body.error ?? "Onbekende fout.");
+    return body.data as T;
+  }
+
+  const withSession = (session: Session, extra: Record<string, unknown> = {}) => ({
+    code: session.code,
+    name: session.name,
+    ...extra
+  });
+
+  return {
+    kind: "apps-script",
+    async login(code) {
+      const data = await call<{ role: Role }>("login", { code });
+      return data.role;
+    },
+    async getVersion(session) {
+      const data = await call<{ version: number }>("version", withSession(session));
+      return data.version;
+    },
+    async getState(session) {
+      const raw = await call<RawState>("state", withSession(session));
+      const { rows, ...rest } = raw;
+      return { ...rest, orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate) };
+    },
+    async claim(session, orderId) {
+      await call("claim", withSession(session, { orderId }));
+    },
+    async release(session, orderId) {
+      await call("release", withSession(session, { orderId }));
+    },
+    async checkPart(session, orderId, part, done) {
+      await call("checkPart", withSession(session, { orderId, part, done }));
+    },
+    async complete(session, orderId) {
+      await call("complete", withSession(session, { orderId }));
+    },
+    async setBaked(session, date, counts) {
+      await call("setBaked", withSession(session, { date, ...counts }));
+    },
+    async updateNote(session, orderId, note, reviewed) {
+      await call("updateNote", withSession(session, { orderId, note, reviewed }));
+    },
+    async saveConfirmation(session, orderId, text) {
+      await call("saveConfirmation", withSession(session, { orderId, text }));
+    },
+    async sendConfirmation(session, orderId, subject, text) {
+      await call("sendConfirmation", withSession(session, { orderId, subject, text }));
+    },
+    async computeRoute(session, request) {
+      return call<RouteInfo>("computeRoute", withSession(session, { ...request }));
+    },
+    async registerVolunteer(signup) {
+      await call("registerVolunteer", { ...signup });
+    },
+    async extractReceipt(session, imageBase64, mediaType) {
+      return call<ReceiptResult>("extractReceipt", withSession(session, { imageBase64, mediaType }));
+    },
+    async saveCost(session, cost) {
+      await call("saveCost", withSession(session, { ...cost }));
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Demo backend: same rules as the Apps Script, stored in this browser only.
+
+export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
+
+const DEMO_KEY = "omacoby-demo-v1";
+
+interface DemoStore {
+  version: number;
+  meta: Record<string, OrderMeta>;
+  packing: Record<string, PackingState>;
+  baked: Record<string, BakedCount>;
+  routes: Record<string, RouteInfo>;
+  volunteers: Volunteer[];
+  costs: CostEntry[];
+}
+
+function emptyStore(): DemoStore {
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: [], costs: [] };
+}
+
+function readStore(): DemoStore {
+  try {
+    const raw = localStorage.getItem(DEMO_KEY);
+    return raw ? { ...emptyStore(), ...(JSON.parse(raw) as DemoStore) } : emptyStore();
+  } catch {
+    return emptyStore();
+  }
+}
+
+function writeStore(store: DemoStore) {
+  try {
+    localStorage.setItem(DEMO_KEY, JSON.stringify(store));
+  } catch {
+    // Private mode: changes only live until reload.
+  }
+}
+
+function nowStamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function demoHistory() {
+  // Two fictitious earlier seasons (orders from 1 October to 31 December) so the tussenstand has something to compare.
+  const rows: DashboardState["history"] = [];
+  [2024, 2025].forEach((year, yi) => {
+    for (let day = new Date(year, 9, 1, 12); day <= new Date(year, 11, 31, 12); day.setDate(day.getDate() + 1)) {
+      const progress = (day.getTime() - new Date(year, 9, 1, 12).getTime()) / (92 * 86400000);
+      // Few orders early on, a steep rise in the last weeks of December.
+      const orders = Math.round((0.05 + progress ** 3 * 0.9) * (yi === 0 ? 0.9 : 1.1) + (day.getDate() % 3 === 0 ? 0.4 : 0));
+      if (orders === 0) continue;
+      const iso = `${year}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      rows.push({ year, date: iso, orders, oliebollen: orders * 45, revenue: Math.round(orders * 45 * 0.95 * 100) / 100 });
+    }
+  });
+  return rows;
+}
+
+function createDemoBackend(notice?: string): Backend {
+  let ordersPromise: Promise<Order[]> | null = null;
+  const getOrders = () => {
+    ordersPromise ??= loadOrders().then((result) => result.agendaOrders);
+    return ordersPromise;
+  };
+
+  function mutate(fn: (store: DemoStore) => void) {
+    const store = readStore();
+    fn(store);
+    store.version += 1;
+    writeStore(store);
+  }
+
+  function packingFor(store: DemoStore, orderId: string): PackingState {
+    store.packing[orderId] ??= { ...emptyPacking };
+    return store.packing[orderId];
+  }
+
+  function metaFor(store: DemoStore, orderId: string): OrderMeta {
+    store.meta[orderId] ??= { ...emptyMeta };
+    return store.meta[orderId];
+  }
+
+  return {
+    kind: "demo",
+    notice,
+    async login(code) {
+      await delay(150);
+      const role = (Object.keys(DEMO_CODES) as Role[]).find((r) => DEMO_CODES[r] === code.trim());
+      if (!role) throw new Error("Onbekende toegangscode.");
+      return role;
+    },
+    async getVersion() {
+      return readStore().version;
+    },
+    async getState(session) {
+      const orders = await getOrders();
+      const store = readStore();
+      const admin = session.role === "beheer";
+      return {
+        version: store.version,
+        orders,
+        meta: store.meta,
+        packing: store.packing,
+        baked: store.baked,
+        routes: store.routes,
+        volunteers: admin ? store.volunteers : [],
+        costs: admin ? store.costs : [],
+        history: admin ? demoHistory() : [],
+        pricePerPiece: 0.95
+      };
+    },
+    async claim(session, orderId) {
+      await delay(200);
+      mutate((store) => {
+        const p = packingFor(store, orderId);
+        if (p.packedBy) throw new Error(`Deze order is al ingepakt door ${p.packedBy}.`);
+        if (p.claimedBy && p.claimedBy !== session.name) throw new Error(`Deze order is al geclaimd door ${p.claimedBy}.`);
+        p.claimedBy = session.name;
+        p.claimedAt = nowStamp();
+      });
+    },
+    async release(session, orderId) {
+      await delay(150);
+      mutate((store) => {
+        const p = packingFor(store, orderId);
+        if (p.claimedBy && p.claimedBy !== session.name && session.role !== "beheer") {
+          throw new Error(`Alleen ${p.claimedBy} of beheer kan deze claim vrijgeven.`);
+        }
+        store.packing[orderId] = { ...emptyPacking };
+      });
+    },
+    async checkPart(session, orderId, part, done) {
+      await delay(120);
+      mutate((store) => {
+        const p = packingFor(store, orderId);
+        if (p.claimedBy !== session.name) throw new Error("Claim de order eerst voordat je afvinkt.");
+        if (p.packedBy) throw new Error("Deze order is al afgerond.");
+        p[part] = done;
+      });
+    },
+    async complete(session, orderId) {
+      await delay(150);
+      mutate((store) => {
+        const p = packingFor(store, orderId);
+        if (p.claimedBy !== session.name) throw new Error("Alleen degene die de order claimde kan afronden.");
+        if (!p.met || !p.zonder || !p.totaal) throw new Error("Vink eerst MET, ZONDER en TOTAAL af.");
+        p.packedBy = session.name;
+        p.packedAt = nowStamp();
+      });
+    },
+    async setBaked(_session, date, counts) {
+      mutate((store) => {
+        store.baked[date] = {
+          withRaisins: Math.max(0, Math.round(counts.withRaisins)),
+          withoutRaisins: Math.max(0, Math.round(counts.withoutRaisins))
+        };
+      });
+    },
+    async updateNote(session, orderId, note, reviewed) {
+      await delay(150);
+      mutate((store) => {
+        const m = metaFor(store, orderId);
+        m.noteOverride = note;
+        m.noteStatus = reviewed ? "beoordeeld" : "nieuw";
+        m.updatedBy = session.name;
+        m.updatedAt = nowStamp();
+      });
+    },
+    async saveConfirmation(session, orderId, text) {
+      await delay(150);
+      mutate((store) => {
+        const m = metaFor(store, orderId);
+        if (m.confirmationStatus === "verzonden") throw new Error("Deze bevestiging is al verzonden.");
+        m.confirmationText = text;
+        m.confirmationStatus = "concept";
+        m.updatedBy = session.name;
+        m.updatedAt = nowStamp();
+      });
+    },
+    async sendConfirmation(session, orderId, _subject, text) {
+      await delay(400);
+      const order = (await getOrders()).find((o) => o.id === orderId);
+      if (!order?.email) throw new Error("Deze order heeft geen e-mailadres.");
+      mutate((store) => {
+        const m = metaFor(store, orderId);
+        m.confirmationText = text;
+        m.confirmationStatus = "verzonden";
+        m.confirmationSentAt = nowStamp();
+        m.updatedBy = session.name;
+        m.updatedAt = nowStamp();
+      });
+    },
+    async computeRoute(_session, request) {
+      await delay(500);
+      // No Maps in demo mode: rough estimate of 3.5 km per stop by car, 2.5 km by bike.
+      const perStop = request.mode === "bicycling" ? 2.5 : 3.5;
+      const km = Math.round(request.stops.length * perStop * 10 + 25) / 10;
+      const info: RouteInfo = {
+        key: `${request.date}|${request.courier}`,
+        date: request.date,
+        courier: request.courier,
+        mode: request.mode,
+        km,
+        minutes: Math.round(km * (request.mode === "bicycling" ? 4 : 2.2) + request.stops.length * 5),
+        orderIds: request.stops.map((s) => s.orderId),
+        mapsUrl: "",
+        computedAt: nowStamp()
+      };
+      mutate((store) => {
+        store.routes[info.key] = info;
+      });
+      return info;
+    },
+    async registerVolunteer(signup) {
+      await delay(300);
+      if (!signup.name.trim()) throw new Error("Vul je naam in.");
+      if (!signup.phone.trim() && !signup.email.trim()) throw new Error("Vul een telefoonnummer of e-mailadres in.");
+      if (!signup.consent) throw new Error("Geef toestemming voor het bewaren van je gegevens.");
+      mutate((store) => {
+        store.volunteers.push({
+          id: `demo-${Date.now()}`,
+          createdAt: nowStamp(),
+          name: signup.name.trim(),
+          phone: signup.phone.trim(),
+          email: signup.email.trim(),
+          availability: signup.availability,
+          transport: signup.transport,
+          remark: signup.remark.trim()
+        });
+      });
+    },
+    async extractReceipt() {
+      await delay(900);
+      return {
+        fields: { date: nowStamp().slice(0, 10), amount: 23.45, supplier: "Voorbeeld Groothandel", description: "Bloem, gist en suiker (demo)" },
+        photoUrl: "",
+        warning: "Demo-modus: dit zijn voorbeeldwaarden, de foto is niet echt uitgelezen."
+      };
+    },
+    async saveCost(session, cost) {
+      await delay(200);
+      if (!cost.date) throw new Error("Vul de datum in.");
+      if (!(cost.amount > 0)) throw new Error("Vul een geldig bedrag in.");
+      if (!cost.supplier.trim()) throw new Error("Vul de leverancier in.");
+      mutate((store) => {
+        store.costs.push({ id: `demo-${Date.now()}`, createdAt: nowStamp(), createdBy: session.name, ...cost });
+      });
+    }
+  };
+}
+
+export const DEMO_STORAGE_KEY = DEMO_KEY;
+
+const appsScriptUrl = (import.meta.env.VITE_APPS_SCRIPT_URL as string | undefined)?.trim();
+
+export const backend: Backend = appsScriptUrl
+  ? createAppsScriptBackend(appsScriptUrl)
+  : createDemoBackend("Er is nog geen Google Sheet-koppeling ingesteld (VITE_APPS_SCRIPT_URL). Wijzigingen worden alleen in deze browser bewaard.");

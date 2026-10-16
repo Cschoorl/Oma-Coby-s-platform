@@ -1,0 +1,357 @@
+import { useMemo, useRef, useState } from "react";
+import type { DashboardState } from "../../types/dashboard";
+import { Card, Notice, SectionTitle, StatTile, formatEuro, formatNumber, todayIso } from "../../components/ui";
+
+type Metric = "oliebollen" | "orders" | "revenue";
+
+interface DayPoint {
+  /** Days before 31 december (0 = oudjaarsdag, 10 = 21 december). */
+  daysBefore: number;
+  orders: number;
+  oliebollen: number;
+  revenue: number | null;
+}
+
+interface Season {
+  year: number;
+  days: DayPoint[];
+  current: boolean;
+}
+
+/** Validated categorical palette (light surface): this year, last year, two years ago. */
+const SERIES_COLORS = ["#cc6717", "#2a6fb5", "#6b8e23"];
+
+const metricLabel: Record<Metric, string> = { oliebollen: "Oliebollen", orders: "Bestellingen", revenue: "Omzet" };
+
+function daysBeforeNewYearsEve(isoDate: string): { year: number; daysBefore: number } | null {
+  const date = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  // Orders placed in early January still count for the season that just ended.
+  const seasonYear = date.getMonth() === 0 ? date.getFullYear() - 1 : date.getFullYear();
+  const eve = new Date(seasonYear, 11, 31, 12);
+  return { year: seasonYear, daysBefore: Math.round((eve.getTime() - date.getTime()) / 86400000) };
+}
+
+function metricValue(point: DayPoint, metric: Metric): number {
+  if (metric === "revenue") return point.revenue ?? 0;
+  return point[metric];
+}
+
+function cumulativeUpTo(season: Season, cutoff: number, metric: Metric): number {
+  return season.days.filter((d) => d.daysBefore >= cutoff).reduce((sum, d) => sum + metricValue(d, metric), 0);
+}
+
+export function StatsPage({ state }: { state: DashboardState }) {
+  const [metric, setMetric] = useState<Metric>("oliebollen");
+
+  const { seasons, revenueSource, currentYear, cutoff } = useMemo(() => {
+    const byYear = new Map<number, Map<number, DayPoint>>();
+    const add = (year: number, daysBefore: number, orders: number, oliebollen: number, revenue: number | null) => {
+      if (!byYear.has(year)) byYear.set(year, new Map());
+      const days = byYear.get(year)!;
+      const point = days.get(daysBefore) ?? { daysBefore, orders: 0, oliebollen: 0, revenue: null };
+      point.orders += orders;
+      point.oliebollen += oliebollen;
+      if (revenue !== null) point.revenue = (point.revenue ?? 0) + revenue;
+      days.set(daysBefore, point);
+    };
+
+    const hasAmounts = state.orders.some((o) => o.amount !== undefined);
+    const source: "amount" | "estimate" | "none" = hasAmounts ? "amount" : state.pricePerPiece ? "estimate" : "none";
+
+    const placed = state.orders
+      .map((order) => ({ order, at: daysBeforeNewYearsEve(order.orderDate || order.deliveryDate) }))
+      .filter((x): x is { order: (typeof state.orders)[number]; at: { year: number; daysBefore: number } } => x.at !== null);
+    const current = placed.length > 0 ? Math.max(...placed.map((x) => x.at.year)) : new Date().getFullYear();
+    const todayAt = daysBeforeNewYearsEve(todayIso());
+    const seasonCutoff = todayAt && todayAt.year === current ? Math.max(0, todayAt.daysBefore) : 0;
+
+    for (const { order, at } of placed) {
+      const pieces = order.withRaisins + order.withoutRaisins;
+      const revenue = source === "amount" ? order.amount ?? 0 : source === "estimate" ? pieces * (state.pricePerPiece ?? 0) : null;
+      // An order dated in the future (only a leverdatum known) is already sold, so it counts as today.
+      const daysBefore = at.year === current ? Math.max(at.daysBefore, seasonCutoff) : at.daysBefore;
+      add(at.year, daysBefore, 1, pieces, revenue);
+    }
+
+    for (const row of state.history) {
+      if (row.year === current) continue; // the live orders are leading for this season
+      const at = daysBeforeNewYearsEve(row.date);
+      if (!at) continue;
+      add(row.year, at.daysBefore, row.orders, row.oliebollen, row.revenue);
+    }
+
+    const list: Season[] = Array.from(byYear.entries())
+      .map(([year, days]) => ({ year, current: year === current, days: Array.from(days.values()).sort((a, b) => b.daysBefore - a.daysBefore) }))
+      .sort((a, b) => b.year - a.year);
+    return { seasons: list, revenueSource: source, currentYear: current, cutoff: seasonCutoff };
+  }, [state.orders, state.history, state.pricePerPiece]);
+
+  const thisSeason = seasons.find((s) => s.current);
+  const pastSeasons = seasons.filter((s) => !s.current);
+
+  // "Dezelfde periode": up to today's distance from oudjaarsdag; after the season, the whole season.
+
+  const totals = (season: Season | undefined) => ({
+    orders: season ? cumulativeUpTo(season, cutoff, "orders") : 0,
+    oliebollen: season ? cumulativeUpTo(season, cutoff, "oliebollen") : 0,
+    revenue: season ? cumulativeUpTo(season, cutoff, "revenue") : 0,
+    hasRevenue: season ? season.days.some((d) => d.revenue !== null) : false
+  });
+  const now = totals(thisSeason);
+  const last = totals(pastSeasons[0]);
+
+  const delta = (current: number, previous: number) => {
+    if (!pastSeasons[0] || previous === 0) return undefined;
+    const pct = Math.round(((current - previous) / previous) * 100);
+    return `${pct >= 0 ? "+" : ""}${pct}% t.o.v. ${pastSeasons[0].year} (zelfde periode)`;
+  };
+
+  const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <SectionTitle title={`Tussenstand ${currentYear}`} subtitle={`Vergelijking per seizoen, ${periodLabel}. Telt op besteldatum (of leverdatum als die ontbreekt).`} />
+        {pastSeasons.length === 0 ? (
+          <Notice tone="warning">
+            Er zijn nog geen cijfers van voorgaande jaren. Vul het tabblad <code>Historie</code> in de Sheet (jaar, datum, bestellingen, oliebollen, omzet) om te vergelijken.
+          </Notice>
+        ) : null}
+      </Card>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <StatTile label="Bestellingen" value={formatNumber(now.orders)} hint={delta(now.orders, last.orders)} />
+        <StatTile label="Oliebollen verkocht" value={formatNumber(now.oliebollen)} hint={delta(now.oliebollen, last.oliebollen)} />
+        <StatTile
+          label={revenueSource === "estimate" ? "Omzet (schatting)" : "Omzet"}
+          value={revenueSource === "none" ? "n.v.t." : formatEuro(now.revenue)}
+          hint={
+            revenueSource === "none"
+              ? "Geen bedragen of prijs in de Sheet"
+              : revenueSource === "estimate"
+                ? [`Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}`, last.hasRevenue ? delta(now.revenue, last.revenue) : undefined].filter(Boolean).join(" · ")
+                : last.hasRevenue
+                  ? delta(now.revenue, last.revenue)
+                  : undefined
+          }
+        />
+      </section>
+
+      <Card>
+        <SectionTitle
+          title={`${metricLabel[metric]} opgeteld per dag`}
+          subtitle="Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
+          action={
+            <div className="flex gap-1">
+              {(Object.keys(metricLabel) as Metric[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={m === "revenue" && revenueSource === "none"}
+                  onClick={() => setMetric(m)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
+                    metric === m ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700 hover:border-coby-300"
+                  }`}
+                >
+                  {metricLabel[m]}
+                </button>
+              ))}
+            </div>
+          }
+        />
+        <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />
+      </Card>
+
+      <Card>
+        <SectionTitle title="Per seizoen" subtitle={`Zelfde periode (${periodLabel}) en het hele seizoen.`} />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+                <th className="py-2 pr-3 font-semibold">Seizoen</th>
+                <th className="py-2 pr-3 text-right font-semibold">Bestellingen</th>
+                <th className="py-2 pr-3 text-right font-semibold">Oliebollen</th>
+                <th className="py-2 pr-3 text-right font-semibold">Omzet</th>
+                <th className="py-2 pr-3 text-right font-semibold">Oliebollen hele seizoen</th>
+              </tr>
+            </thead>
+            <tbody className="tabular-nums">
+              {seasons.map((season) => {
+                const t = totals(season);
+                return (
+                  <tr key={season.year} className="border-t border-stone-100">
+                    <td className="py-2 pr-3 font-semibold text-stone-900">{season.year}{season.current ? " (nu)" : ""}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(t.orders)}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(t.oliebollen)}</td>
+                    <td className="py-2 pr-3 text-right">{t.hasRevenue ? formatEuro(t.revenue) : "–"}</td>
+                    <td className="py-2 pr-3 text-right">{formatNumber(cumulativeUpTo(season, 0, "oliebollen"))}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+const WIDTH = 960;
+const HEIGHT = 340;
+const PAD = { top: 16, right: 64, bottom: 32, left: 56 };
+
+function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metric: Metric; cutoff: number }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hover, setHover] = useState<number | null>(null);
+
+  const series = useMemo(
+    () =>
+      seasons.map((season, i) => {
+        let running = 0;
+        const points = season.days.map((d) => {
+          running += metricValue(d, metric);
+          return { x: d.daysBefore, y: running };
+        });
+        // The current season stops at today; earlier seasons run to the end.
+        return { season, color: SERIES_COLORS[i], points: season.current ? points.filter((p) => p.x >= cutoff) : points };
+      }),
+    [seasons, metric, cutoff]
+  );
+
+  const allPoints = series.flatMap((s) => s.points);
+  if (allPoints.length === 0) return <p className="text-sm text-stone-600">Nog geen gegevens om te tonen.</p>;
+
+  const maxX = Math.max(7, ...allPoints.map((p) => p.x));
+  const maxY = Math.max(1, ...allPoints.map((p) => p.y));
+  const niceMax = niceCeil(maxY);
+  const sx = (x: number) => PAD.left + ((maxX - x) / maxX) * (WIDTH - PAD.left - PAD.right);
+  const sy = (y: number) => HEIGHT - PAD.bottom - (y / niceMax) * (HEIGHT - PAD.top - PAD.bottom);
+  const format = (v: number) => (metric === "revenue" ? formatEuro(v) : formatNumber(Math.round(v)));
+
+  const valueAt = (points: Array<{ x: number; y: number }>, x: number) => {
+    const before = points.filter((p) => p.x >= x);
+    return before.length ? before[before.length - 1].y : 0;
+  };
+
+  const ticksY = [0, 0.25, 0.5, 0.75, 1].map((f) => f * niceMax);
+  const ticksX = xTicks(maxX);
+
+  function onMove(event: React.PointerEvent<SVGSVGElement>) {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const px = ((event.clientX - rect.left) / rect.width) * WIDTH;
+    const x = Math.round(maxX - ((px - PAD.left) / (WIDTH - PAD.left - PAD.right)) * maxX);
+    setHover(Math.min(maxX, Math.max(0, x)));
+  }
+
+  return (
+    <div className="relative">
+      <div className="mb-2 flex flex-wrap gap-4 text-xs text-stone-700" aria-hidden="true">
+        {series.map((s) => (
+          <span key={s.season.year} className="inline-flex items-center gap-2">
+            <svg width="22" height="8">
+              <line x1="0" x2="22" y1="4" y2="4" stroke={s.color} strokeWidth="2" strokeDasharray={s.season.current ? undefined : "5 3"} />
+            </svg>
+            {s.season.year}
+          </span>
+        ))}
+      </div>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="h-auto w-full touch-none"
+        role="img"
+        aria-label={`Opgetelde ${metricLabel[metric].toLowerCase()} per seizoen`}
+        onPointerMove={onMove}
+        onPointerLeave={() => setHover(null)}
+      >
+        {ticksY.map((t) => (
+          <g key={t}>
+            <line x1={PAD.left} x2={WIDTH - PAD.right} y1={sy(t)} y2={sy(t)} stroke="#e7e5e4" strokeWidth="1" />
+            <text x={PAD.left - 8} y={sy(t)} textAnchor="end" dominantBaseline="middle" fontSize="11" fill="#78716c">
+              {metric === "revenue" ? `€${formatNumber(Math.round(t))}` : formatNumber(Math.round(t))}
+            </text>
+          </g>
+        ))}
+        {ticksX.map((t) => (
+          <text key={t} x={sx(t)} y={HEIGHT - 10} textAnchor="middle" fontSize="11" fill="#78716c">
+            {t === 0 ? "31 dec" : `-${t} d`}
+          </text>
+        ))}
+        {series.map((s) => (
+          <polyline
+            key={s.season.year}
+            fill="none"
+            stroke={s.color}
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            strokeDasharray={s.season.current ? undefined : "6 4"}
+            points={stepPoints(s.points, maxX).map((p) => `${sx(p.x)},${sy(p.y)}`).join(" ")}
+          />
+        ))}
+        {series.map((s) => {
+          const lastPoint = s.points[s.points.length - 1];
+          if (!lastPoint) return null;
+          return (
+            <g key={`end-${s.season.year}`}>
+              <circle cx={sx(lastPoint.x)} cy={sy(lastPoint.y)} r="4" fill={s.color} stroke="#fff" strokeWidth="2" />
+              <text x={sx(lastPoint.x) + 8} y={sy(lastPoint.y)} dominantBaseline="middle" fontSize="11" fontWeight="600" fill="#44403c">
+                {s.season.year}
+              </text>
+            </g>
+          );
+        })}
+        {hover !== null ? (
+          <g>
+            <line x1={sx(hover)} x2={sx(hover)} y1={PAD.top} y2={HEIGHT - PAD.bottom} stroke="#a8a29e" strokeWidth="1" />
+            {series.map((s) =>
+              s.season.current && hover < cutoff ? null : (
+                <circle key={s.season.year} cx={sx(hover)} cy={sy(valueAt(s.points, hover))} r="4" fill={s.color} stroke="#fff" strokeWidth="2" />
+              )
+            )}
+          </g>
+        ) : null}
+      </svg>
+      {hover !== null ? (
+        <div
+          className="pointer-events-none absolute top-8 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs shadow-card"
+          style={{ left: `${Math.min(70, (sx(hover) / WIDTH) * 100)}%` }}
+        >
+          <p className="mb-1 font-semibold text-stone-900">{hover === 0 ? "31 december" : `${hover} dagen voor 31 december`}</p>
+          {series.map((s) => (
+            <p key={s.season.year} className="flex items-center gap-2 text-stone-700">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />
+              {s.season.year}: <span className="font-semibold tabular-nums text-stone-900">{s.season.current && hover < cutoff ? "–" : format(valueAt(s.points, hover))}</span>
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Cumulative totals change per day, so draw them as steps from the left edge. */
+function stepPoints(points: Array<{ x: number; y: number }>, maxX: number) {
+  if (points.length === 0) return [];
+  const out = [{ x: maxX, y: 0 }, { x: points[0].x, y: 0 }];
+  points.forEach((p, i) => {
+    if (i > 0) out.push({ x: p.x, y: points[i - 1].y });
+    out.push(p);
+  });
+  return out;
+}
+
+function niceCeil(value: number): number {
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const step = [1, 2, 2.5, 5, 10].find((s) => s * magnitude >= value) ?? 10;
+  return step * magnitude;
+}
+
+function xTicks(maxX: number): number[] {
+  const step = maxX > 40 ? 10 : maxX > 14 ? 5 : maxX > 7 ? 2 : 1;
+  const ticks: number[] = [];
+  for (let t = 0; t <= maxX; t += step) ticks.push(t);
+  return ticks;
+}

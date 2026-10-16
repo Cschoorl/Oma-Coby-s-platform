@@ -1,5 +1,7 @@
 export type DeliveryStatus = "open" | "onderweg" | "bezorgd";
 
+export type CustomerType = "particulier" | "zakelijk" | "onbekend";
+
 export interface Order {
   id: string;
   deliveryDate: string;
@@ -15,4 +17,11 @@ export interface Order {
   withRaisins: number;
   withoutRaisins: number;
   extras?: string;
+  /** Optional columns; empty when the sheet does not have them. */
+  email?: string;
+  customerType: CustomerType;
+  /** Order amount in euros, when the sheet has it. */
+  amount?: number;
+  /** Date the order was placed (YYYY-MM-DD); falls back to deliveryDate for the tussenstand. */
+  orderDate?: string;
 }

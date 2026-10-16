@@ -12,9 +12,9 @@ via een Apps Script.
 | Bezorgers (`#/bezorger`) | bezorger, beheer | mobiele pagina met stops, aantallen, opmerkingen en Maps-route |
 | Tussenstand | beheer | bestellingen, oliebollen en omzet vergeleken met eerdere jaren |
 | Kosten | iedereen met code | foto van bon → automatisch uitgelezen → controleren → opslaan in de Sheet |
-| Vrijwilligers | beheer | overzicht van aanmeldingen |
-| Aanmelden (`#/aanmelden`) | openbaar | aanmeldformulier voor vrijwilligers |
-| Agenda | iedereen met code | diensten per dag |
+| Vrijwilligers | beheer | overzicht van aanmeldingen uit het Google Formulier en de aanmeldpagina |
+| Aanmelden (`#/aanmelden`) | openbaar | zelfde vragen als het Google Formulier, komt in hetzelfde tabblad |
+| Agenda | iedereen met code | wie wanneer beschikbaar is, uit de aanmeldingen |
 
 ## Starten
 

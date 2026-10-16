@@ -5,7 +5,7 @@ import { emptyPacking } from "../../types/dashboard";
 import type { CustomerType, Order } from "../../types/order";
 import { OrderFilters } from "../orders/OrderFilters";
 import { Badge, Card, Notice, SectionTitle, formatNumber, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
-import { effectiveNote } from "../../utils/orderUtils";
+import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 
 interface PackingPageProps {
   state: DashboardState;
@@ -15,7 +15,7 @@ interface PackingPageProps {
 
 type Filter = "open" | "mine" | "done" | "all";
 
-const customerLabel: Record<CustomerType, string> = { particulier: "Particulier", zakelijk: "Zakelijk (B2B)", onbekend: "Onbekend" };
+const customerLabel: Record<CustomerType, string> = { particulier: "Particulier", zakelijk: "Zakelijk (B2B)", barter: "Barter", onbekend: "Onbekend" };
 
 function packingOf(state: DashboardState, orderId: string): PackingState {
   return state.packing[orderId] ?? emptyPacking;
@@ -41,6 +41,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     const byType: Record<CustomerType, { met: number; zonder: number }> = {
       particulier: { met: 0, zonder: 0 },
       zakelijk: { met: 0, zonder: 0 },
+      barter: { met: 0, zonder: 0 },
       onbekend: { met: 0, zonder: 0 }
     };
     let packedMet = 0;
@@ -55,8 +56,9 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
         packedOrders += 1;
       }
     }
-    const met = byType.particulier.met + byType.zakelijk.met + byType.onbekend.met;
-    const zonder = byType.particulier.zonder + byType.zakelijk.zonder + byType.onbekend.zonder;
+    const types = Object.values(byType);
+    const met = types.reduce((sum, t) => sum + t.met, 0);
+    const zonder = types.reduce((sum, t) => sum + t.zonder, 0);
     return { byType, met, zonder, packedMet, packedZonder, packedOrders };
   }, [dayOrders, state]);
 
@@ -89,7 +91,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     void act(`baked-${field}`, () => backend.setBaked(session, date, next));
   }
 
-  const hasTypes = totals.byType.particulier.met + totals.byType.particulier.zonder + totals.byType.zakelijk.met + totals.byType.zakelijk.zonder > 0;
+  const hasTypes = totals.byType.onbekend.met + totals.byType.onbekend.zonder < totals.met + totals.zonder || totals.met + totals.zonder === 0;
 
   return (
     <div className="grid gap-4">
@@ -150,7 +152,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
             </thead>
             <tbody className="tabular-nums">
               {(Object.keys(totals.byType) as CustomerType[])
-                .filter((type) => type !== "onbekend" || totals.byType.onbekend.met + totals.byType.onbekend.zonder > 0)
+                .filter((type) => type === "particulier" || type === "zakelijk" || totals.byType[type].met + totals.byType[type].zonder > 0)
                 .map((type) => {
                   const row = totals.byType[type];
                   return (
@@ -206,6 +208,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
               key={order.id}
               order={order}
               note={effectiveNote(order, state.meta[order.id])}
+              courier={effectiveCourier(order, state.meta[order.id])}
               packing={packingOf(state, order.id)}
               session={session}
               busy={busy}
@@ -246,13 +249,14 @@ function TotalTile({ label, ordered, baked, toBake, packed, footer }: { label: s
 interface PackingCardProps {
   order: Order;
   note: string;
+  courier: string;
   packing: PackingState;
   session: Session;
   busy: string | null;
   onAct: (key: string, change: () => Promise<unknown>) => Promise<void>;
 }
 
-function PackingCard({ order, note, packing, session, busy, onAct }: PackingCardProps) {
+function PackingCard({ order, note, courier, packing, session, busy, onAct }: PackingCardProps) {
   // Ticks show immediately; the server answer (or an error) settles them afterwards.
   const [optimistic, setOptimistic] = useState<Partial<Record<PackingPart, boolean>>>({});
   const view = { ...packing, ...optimistic };
@@ -277,16 +281,27 @@ function PackingCard({ order, note, packing, session, busy, onAct }: PackingCard
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-stone-900">{order.locationName || order.contactPerson}</p>
+          <p className="text-xs text-stone-500">{order.id}</p>
           <p className="text-xs text-stone-600">
-            {order.id} · {order.plannedTime || "geen tijd"} · bezorger {order.supplierName}
+            {order.fulfilment === "afhalen"
+              ? `Afhalen${order.pickupLocation ? `: ${order.pickupLocation}` : ""}`
+              : `Bezorgen${courier ? ` door ${courier}` : " · bezorger nog niet ingedeeld"}`}
+            {order.plannedTime ? ` · ${order.plannedTime}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-1">
           {order.customerType === "zakelijk" ? <Badge tone="blue">B2B</Badge> : null}
+          {order.customerType === "barter" ? <Badge tone="blue">Barter</Badge> : null}
+          {order.fulfilment === "afhalen" ? <Badge>Afhalen</Badge> : null}
           {done ? <Badge tone="green">Ingepakt</Badge> : mine ? <Badge tone="coby">Jij bent bezig</Badge> : claimedByOther ? <Badge tone="amber">Bezig: {packing.claimedBy}</Badge> : <Badge>Vrij</Badge>}
         </div>
       </div>
 
+      {order.packaging || /^ja/i.test(order.flyers ?? "") ? (
+        <p className="text-xs font-semibold text-stone-700">
+          {[order.packaging ? `Verpakking: ${order.packaging}` : "", /^ja/i.test(order.flyers ?? "") ? "Flyers erbij" : ""].filter(Boolean).join(" · ")}
+        </p>
+      ) : null}
       {note ? <p className="rounded-lg bg-white/80 px-2 py-1.5 text-xs text-stone-700">Opmerking: {note}</p> : null}
 
       <div className="grid grid-cols-3 gap-2">

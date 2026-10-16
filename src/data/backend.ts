@@ -7,9 +7,10 @@ import type {
   PackingState,
   ReceiptFields,
   Role,
+  RoleAvailability,
   RouteInfo,
-  Transport,
-  Volunteer
+  Volunteer,
+  VolunteerRole
 } from "../types/dashboard";
 import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
@@ -31,10 +32,11 @@ export interface RouteRequest {
 
 export interface VolunteerSignup {
   name: string;
+  city: string;
   phone: string;
   email: string;
-  availability: string[];
-  transport: Transport[];
+  roles: Record<VolunteerRole, RoleAvailability>;
+  cargoBike: boolean;
   remark: string;
   consent: boolean;
 }
@@ -68,6 +70,7 @@ export interface Backend {
   updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
   sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
+  assignCourier(session: Session, orderId: string, courier: string): Promise<void>;
   computeRoute(session: Session, request: RouteRequest): Promise<RouteInfo>;
   registerVolunteer(signup: VolunteerSignup): Promise<void>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
@@ -145,6 +148,9 @@ function createAppsScriptBackend(url: string): Backend {
     async sendConfirmation(session, orderId, subject, text) {
       await call("sendConfirmation", withSession(session, { orderId, subject, text }));
     },
+    async assignCourier(session, orderId, courier) {
+      await call("assignCourier", withSession(session, { orderId, courier }));
+    },
     async computeRoute(session, request) {
       return call<RouteInfo>("computeRoute", withSession(session, { ...request }));
     },
@@ -165,7 +171,7 @@ function createAppsScriptBackend(url: string): Backend {
 
 export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
 
-const DEMO_KEY = "omacoby-demo-v1";
+const DEMO_KEY = "omacoby-demo-v2";
 
 interface DemoStore {
   version: number;
@@ -177,8 +183,43 @@ interface DemoStore {
   costs: CostEntry[];
 }
 
+const none: RoleAvailability = { wants: false, days: [] };
+
+/** Fictitious volunteers so the agenda and routes have something to show in demo mode. */
+function demoVolunteers(): Volunteer[] {
+  const base = { city: "Aalsmeer", cargoBike: false, remark: "", createdAt: "2026-10-01 10:00:00" };
+  return [
+    {
+      ...base,
+      id: "demo-1",
+      name: "Bezorger Anna",
+      phone: "0600000001",
+      email: "anna@example.nl",
+      cargoBike: true,
+      roles: { inpakken: none, fietskoerier: { wants: true, days: ["Woensdag 30 december: ochtend", "Donderdag 31 december: ochtend"] }, autokoerier: none, oliebollenbar: none }
+    },
+    {
+      ...base,
+      id: "demo-2",
+      name: "Bezorger Bram",
+      phone: "0600000002",
+      email: "",
+      roles: { inpakken: { wants: true, days: ["Dinsdag 29 december"] }, fietskoerier: none, autokoerier: { wants: true, days: ["Woensdag 30 december: middag"] }, oliebollenbar: none }
+    },
+    {
+      ...base,
+      id: "demo-3",
+      name: "Bezorger Chris",
+      phone: "0600000003",
+      email: "chris@example.nl",
+      remark: "Liefst samen met Bram",
+      roles: { inpakken: none, fietskoerier: none, autokoerier: { wants: true, days: ["Donderdag 31 december: middag"] }, oliebollenbar: { wants: true, days: ["Woensdag 30 december"] } }
+    }
+  ];
+}
+
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: [], costs: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [] };
 }
 
 function readStore(): DemoStore {
@@ -271,7 +312,7 @@ function createDemoBackend(notice?: string): Backend {
         packing: store.packing,
         baked: store.baked,
         routes: store.routes,
-        volunteers: admin ? store.volunteers : [],
+        volunteers: admin ? store.volunteers : store.volunteers.map((v) => ({ ...v, phone: "", email: "", remark: "" })),
         costs: admin ? store.costs : [],
         history: admin ? demoHistory() : [],
         pricePerPiece: 0.95
@@ -358,6 +399,15 @@ function createDemoBackend(notice?: string): Backend {
         m.updatedAt = nowStamp();
       });
     },
+    async assignCourier(session, orderId, courier) {
+      await delay(150);
+      mutate((store) => {
+        const m = metaFor(store, orderId);
+        m.courier = courier.trim();
+        m.updatedBy = session.name;
+        m.updatedAt = nowStamp();
+      });
+    },
     async computeRoute(_session, request) {
       await delay(500);
       // No Maps in demo mode: rough estimate of 3.5 km per stop by car, 2.5 km by bike.
@@ -384,15 +434,17 @@ function createDemoBackend(notice?: string): Backend {
       if (!signup.name.trim()) throw new Error("Vul je naam in.");
       if (!signup.phone.trim() && !signup.email.trim()) throw new Error("Vul een telefoonnummer of e-mailadres in.");
       if (!signup.consent) throw new Error("Geef toestemming voor het bewaren van je gegevens.");
+      if (!Object.values(signup.roles).some((r) => r.wants)) throw new Error("Kies minstens één taak waarmee je wilt helpen.");
       mutate((store) => {
         store.volunteers.push({
           id: `demo-${Date.now()}`,
           createdAt: nowStamp(),
           name: signup.name.trim(),
+          city: signup.city.trim(),
           phone: signup.phone.trim(),
           email: signup.email.trim(),
-          availability: signup.availability,
-          transport: signup.transport,
+          roles: signup.roles,
+          cargoBike: signup.roles.fietskoerier.wants && signup.cargoBike,
           remark: signup.remark.trim()
         });
       });

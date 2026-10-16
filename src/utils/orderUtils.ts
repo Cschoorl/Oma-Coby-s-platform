@@ -27,12 +27,9 @@ export function mapsUrl(order: Order): string {
 }
 
 function orderAddress(order: Order): string {
-  // When address/postcode are not filled yet, fall back to something geographisch bruikbaars.
-  const fallback = `${order.locationName}, ${order.city}`.trim();
-  const full = `${order.address}, ${order.postalCode} ${order.city}`.replace(/\s+/g, " ").trim();
-  return full.length > 0 && !/^,? ?$/.test(full) && full !== ","
-    ? full
-    : fallback;
+  // The sheet may hold the full address in one cell ("KommaGo, Savannahweg 25, 3542 AW, Utrecht").
+  const full = [order.address, `${order.postalCode} ${order.city}`.trim()].map((p) => p.trim()).filter(Boolean).join(", ");
+  return full || [order.locationName, order.city].filter(Boolean).join(", ");
 }
 
 function orderAddressForMapsQuery(order: Order): string {
@@ -62,4 +59,9 @@ export function effectiveNote(order: Order, meta?: OrderMeta): string {
 
 export function stopAddress(order: Order): string {
   return orderAddress(order);
+}
+
+/** Courier assigned in the dashboard, else the courier column of the sheet; "" when not assigned yet. */
+export function effectiveCourier(order: Order, meta?: OrderMeta): string {
+  return (meta?.courier || order.supplierName || "").trim();
 }

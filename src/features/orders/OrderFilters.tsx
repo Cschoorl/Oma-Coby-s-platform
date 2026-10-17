@@ -10,36 +10,31 @@ function formatDateLabel(isoDate: string): string {
   return date.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" });
 }
 
+/** Compact day picker: the delivery days as buttons, with a date field for any other day. */
 export function OrderFilters({ selectedDate, availableDates, onDateChange }: OrderFiltersProps) {
   return (
-    <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
-      <label className="grid gap-2 text-sm">
-        <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Leverdag</span>
-        <input
-          type="date"
-          className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm focus:border-coby-500 focus:outline-none"
-          value={selectedDate}
-          onChange={(event) => onDateChange(event.target.value)}
-        />
-      </label>
-      {availableDates.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {availableDates.map((date) => (
-            <button
-              key={date}
-              type="button"
-              onClick={() => onDateChange(date)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                date === selectedDate
-                  ? "border-coby-500 bg-coby-100 text-coby-900"
-                  : "border-stone-200 bg-white text-stone-700 hover:border-coby-300"
-              }`}
-            >
-              {formatDateLabel(date)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </section>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="mr-1 text-sm font-medium text-stone-600">Leverdag</span>
+      {availableDates.map((date) => (
+        <button
+          key={date}
+          type="button"
+          onClick={() => onDateChange(date)}
+          aria-pressed={date === selectedDate}
+          className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+            date === selectedDate ? "border-coby-600 bg-coby-600 text-white" : "border-stone-300 bg-white text-stone-700 hover:border-stone-400"
+          }`}
+        >
+          {formatDateLabel(date)}
+        </button>
+      ))}
+      <input
+        type="date"
+        aria-label="Andere datum"
+        className="rounded-full border border-stone-300 bg-white px-3 py-1 text-sm text-stone-700 focus:border-coby-500 focus:outline-none"
+        value={selectedDate}
+        onChange={(event) => onDateChange(event.target.value)}
+      />
+    </div>
   );
 }

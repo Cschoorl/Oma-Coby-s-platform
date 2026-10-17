@@ -4,7 +4,7 @@ import type { DashboardState, PackingPart, PackingState } from "../../types/dash
 import { emptyPacking } from "../../types/dashboard";
 import type { CustomerType, Order } from "../../types/order";
 import { OrderFilters } from "../orders/OrderFilters";
-import { Badge, Card, Notice, SectionTitle, formatNumber, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
+import { Badge, Notice, Segmented, cardClass, formatNumber, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
 import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 
 interface PackingPageProps {
@@ -98,133 +98,132 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 
   const hasTypes = totals.byType.onbekend.met + totals.byType.onbekend.zonder < totals.met + totals.zonder || totals.met + totals.zonder === 0;
 
+  const orderedTotal = totals.met + totals.zonder;
+  const packedTotal = totals.packedMet + totals.packedZonder;
+  const packedPct = orderedTotal ? Math.round((packedTotal / orderedTotal) * 100) : 0;
+  const counts = {
+    open: dayOrders.filter((o) => !packingOf(state, o.id).packedBy).length,
+    mine: dayOrders.filter((o) => packingOf(state, o.id).claimedBy === session.name && !packingOf(state, o.id).packedBy).length,
+    done: totals.packedOrders
+  };
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-5">
       <OrderFilters selectedDate={date} availableDates={dates} onDateChange={setDate} />
 
-      <section className="grid gap-3 md:grid-cols-3">
-        <TotalTile label="MET krenten" ordered={totals.met} baked={baked.withRaisins} toBake={toBakeMet} packed={totals.packedMet} />
-        <TotalTile label="ZONDER krenten" ordered={totals.zonder} baked={baked.withoutRaisins} toBake={toBakeZonder} packed={totals.packedZonder} />
-        <TotalTile
-          label="TOTAAL"
-          ordered={totals.met + totals.zonder}
-          baked={baked.withRaisins + baked.withoutRaisins}
-          toBake={toBakeMet + toBakeZonder}
-          packed={totals.packedMet + totals.packedZonder}
-          footer={`${totals.packedOrders} van ${dayOrders.length} orders ingepakt`}
-        />
+      {/* One summary: what is ordered, still to bake and already packed. */}
+      <section className={cardClass}>
+        <div className="grid grid-cols-3 gap-3 sm:gap-4">
+          <Summary label="Met krenten" ordered={totals.met} toBake={toBakeMet} packed={totals.packedMet} />
+          <Summary label="Zonder krenten" ordered={totals.zonder} toBake={toBakeZonder} packed={totals.packedZonder} />
+          <Summary label="Totaal" ordered={orderedTotal} toBake={toBakeMet + toBakeZonder} packed={packedTotal} strong />
+        </div>
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-xs text-stone-500">
+            <span>
+              {totals.packedOrders} van {dayOrders.length} orders ingepakt
+            </span>
+            <span className="tabular-nums">{packedPct}%</span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-valuenow={packedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Ingepakt">
+            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${packedPct}%` }} />
+          </div>
+        </div>
+
+        <details className="group mt-4 border-t border-stone-100 pt-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium text-stone-700 hover:text-stone-900">
+            <span>Bakken en verdeling particulier / zakelijk</span>
+            <span className="text-stone-400 transition group-open:rotate-180">▾</span>
+          </summary>
+          <div className="mt-4 grid gap-5 lg:grid-cols-2">
+            <div>
+              <p className="mb-2 text-xs font-medium text-stone-500">Gebakken (bijhouden door de bakkers)</p>
+              <div className="grid gap-2">
+                {(["withRaisins", "withoutRaisins"] as const).map((field) => (
+                  <div key={field} className="flex flex-wrap items-center gap-2">
+                    <span className="w-16 text-sm text-stone-700">{field === "withRaisins" ? "Met" : "Zonder"}</span>
+                    <span className="w-14 text-right text-lg font-semibold tabular-nums text-stone-900">{formatNumber(baked[field])}</span>
+                    <div className="flex gap-1">
+                      {[-10, 10, 50, 100].map((delta) => (
+                        <button
+                          key={delta}
+                          type="button"
+                          disabled={busy !== null}
+                          onClick={() => adjustBaked(field, delta)}
+                          className="rounded-md border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+                        >
+                          {delta > 0 ? `+${delta}` : delta}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-stone-500">Besteld per klanttype</p>
+              {!hasTypes ? (
+                <p className="text-sm text-amber-800">
+                  Nog geen klanttype in de Sheet (kolom <code>Type</code>).
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-stone-500">
+                      <th className="pb-1 font-medium">Type</th>
+                      <th className="pb-1 text-right font-medium">Met</th>
+                      <th className="pb-1 text-right font-medium">Zonder</th>
+                      <th className="pb-1 text-right font-medium">Totaal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="tabular-nums">
+                    {(Object.keys(totals.byType) as CustomerType[])
+                      .filter((type) => type === "particulier" || type === "zakelijk" || totals.byType[type].met + totals.byType[type].zonder > 0)
+                      .map((type) => {
+                        const row = totals.byType[type];
+                        return (
+                          <tr key={type} className="border-t border-stone-100">
+                            <td className="py-1.5 text-stone-700">{customerLabel[type]}</td>
+                            <td className="py-1.5 text-right">{formatNumber(row.met)}</td>
+                            <td className="py-1.5 text-right">{formatNumber(row.zonder)}</td>
+                            <td className="py-1.5 text-right font-semibold">{formatNumber(row.met + row.zonder)}</td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </details>
       </section>
 
-      <Card>
-        <SectionTitle title="Gebakken" subtitle="Bakkers houden hier bij hoeveel er klaar is. Nog te bakken = besteld − gebakken." />
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(["withRaisins", "withoutRaisins"] as const).map((field) => (
-            <div key={field} className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-white p-3">
-              <span className="w-28 text-sm font-semibold text-stone-800">{field === "withRaisins" ? "MET" : "ZONDER"}</span>
-              <span className="w-16 text-lg font-semibold tabular-nums text-stone-900">{formatNumber(baked[field])}</span>
-              {[-10, 10, 50, 100].map((delta) => (
-                <button
-                  key={delta}
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => adjustBaked(field, delta)}
-                  className="rounded-lg border border-stone-200 px-2.5 py-1 text-xs font-semibold text-stone-700 hover:border-coby-300 hover:bg-coby-50 disabled:opacity-50"
-                >
-                  {delta > 0 ? `+${delta}` : delta}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Particulier en zakelijk" subtitle="Bestelde aantallen voor deze leverdag." />
-        {!hasTypes ? (
-          <Notice tone="warning">
-            Er staat nog geen klanttype in de Sheet. Voeg een kolom <code>type_klant</code> toe (particulier / zakelijk) om de B2B-splitsing te zien.
-          </Notice>
-        ) : null}
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[420px] text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-                <th className="py-2 pr-3 font-semibold">Type</th>
-                <th className="py-2 pr-3 text-right font-semibold">MET</th>
-                <th className="py-2 pr-3 text-right font-semibold">ZONDER</th>
-                <th className="py-2 text-right font-semibold">TOTAAL</th>
-              </tr>
-            </thead>
-            <tbody className="tabular-nums">
-              {(Object.keys(totals.byType) as CustomerType[])
-                .filter((type) => type === "particulier" || type === "zakelijk" || totals.byType[type].met + totals.byType[type].zonder > 0)
-                .map((type) => {
-                  const row = totals.byType[type];
-                  return (
-                    <tr key={type} className="border-t border-stone-100">
-                      <td className="py-2 pr-3 text-stone-800">{customerLabel[type]}</td>
-                      <td className="py-2 pr-3 text-right">{formatNumber(row.met)}</td>
-                      <td className="py-2 pr-3 text-right">{formatNumber(row.zonder)}</td>
-                      <td className="py-2 text-right font-semibold">{formatNumber(row.met + row.zonder)}</td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle
-          title="Orders inpakken"
-          subtitle={`Ingelogd als ${session.name}. Claim een order, vink MET en ZONDER af, dan GEHEEL, en rond af. Afgeronde orders worden grijs en kun je heropenen.`}
-        />
-        <div className="mb-3 flex flex-wrap gap-2">
-          {(
-            [
-              ["open", "Nog in te pakken"],
-              ["mine", "Mijn orders"],
-              ["done", "Ingepakt"],
+      <section className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Segmented
+            label="Status"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              ["open", `Te doen (${counts.open})`],
+              ["mine", `Mijn orders (${counts.mine})`],
+              ["done", `Klaar (${counts.done})`],
               ["all", "Alles"]
-            ] as Array<[Filter, string]>
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setFilter(value)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                filter === value ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700 hover:border-coby-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <span className="mx-1 hidden w-px self-stretch bg-stone-200 sm:block" />
-          {(
-            [
-              ["alle", "Particulier + zakelijk"],
-              ["particulier", "Alleen particulier"],
-              ["zakelijk", "Alleen zakelijk"]
-            ] as Array<[TypeFilter, string]>
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setTypeFilter(value)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                typeFilter === value ? "border-sky-500 bg-sky-100 text-sky-900" : "border-stone-200 bg-white text-stone-700 hover:border-sky-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+            ]}
+          />
+          <Segmented
+            label="Klanttype"
+            value={typeFilter}
+            onChange={setTypeFilter}
+            options={[
+              ["alle", "Alle klanten"],
+              ["particulier", "Particulier"],
+              ["zakelijk", "Zakelijk"]
+            ]}
+          />
         </div>
 
-        {error ? (
-          <div className="mb-3">
-            <Notice tone="error">{error}</Notice>
-          </div>
-        ) : null}
+        {error ? <Notice tone="error">{error}</Notice> : null}
 
         <div className="grid gap-3 lg:grid-cols-2">
           {visibleOrders.map((order) => (
@@ -240,33 +239,24 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
             />
           ))}
         </div>
-        {visibleOrders.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-stone-600">Geen orders in deze selectie.</p> : null}
-      </Card>
+        {visibleOrders.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500">Geen orders in deze selectie.</p> : null}
+      </section>
     </div>
   );
 }
 
-function TotalTile({ label, ordered, baked, toBake, packed, footer }: { label: string; ordered: number; baked: number; toBake: number; packed: number; footer?: string }) {
+function Summary({ label, ordered, toBake, packed, strong }: { label: string; ordered: number; toBake: number; packed: number; strong?: boolean }) {
   return (
-    <article className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-card backdrop-blur">
-      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums text-stone-900">{formatNumber(ordered)}</p>
-      <dl className="mt-2 grid grid-cols-3 gap-2 text-xs text-stone-600">
-        <div>
-          <dt>Gebakken</dt>
-          <dd className="text-sm font-semibold tabular-nums text-stone-900">{formatNumber(baked)}</dd>
-        </div>
-        <div>
-          <dt>Nog bakken</dt>
-          <dd className={`text-sm font-semibold tabular-nums ${toBake > 0 ? "text-coby-700" : "text-emerald-700"}`}>{formatNumber(toBake)}</dd>
-        </div>
-        <div>
-          <dt>Ingepakt</dt>
-          <dd className="text-sm font-semibold tabular-nums text-stone-900">{formatNumber(packed)}</dd>
-        </div>
-      </dl>
-      {footer ? <p className="mt-2 text-xs text-stone-600">{footer}</p> : null}
-    </article>
+    <div className={strong ? "border-l border-stone-100 pl-3 sm:pl-4" : ""}>
+      <p className="text-xs font-medium text-stone-500">{label}</p>
+      <p className={`mt-0.5 font-semibold tabular-nums text-stone-900 ${strong ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"}`}>{formatNumber(ordered)}</p>
+      <p className="mt-1 text-[11px] leading-snug text-stone-500 sm:text-xs">
+        <span className={toBake > 0 ? "font-semibold text-coby-700" : "text-emerald-700"}>{toBake > 0 ? `${formatNumber(toBake)} nog bakken` : "alles gebakken"}</span>
+        <span className="hidden sm:inline"> · </span>
+        <br className="sm:hidden" />
+        {formatNumber(packed)} ingepakt
+      </p>
+    </div>
   );
 }
 
@@ -289,92 +279,101 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
   const done = Boolean(packing.packedBy);
   const allChecked = view.met && view.zonder && view.totaal;
   const isBusy = busy?.startsWith(order.id) ?? false;
+  const flyers = /^ja/i.test(order.flyers ?? "");
 
   const parts: Array<{ part: PackingPart; label: string; count: number }> = [
-    { part: "met", label: "MET", count: order.withRaisins },
-    { part: "zonder", label: "ZONDER", count: order.withoutRaisins },
-    { part: "totaal", label: "GEHEEL", count: order.withRaisins + order.withoutRaisins }
+    { part: "met", label: "Met", count: order.withRaisins },
+    { part: "zonder", label: "Zonder", count: order.withoutRaisins },
+    { part: "totaal", label: "Geheel", count: order.withRaisins + order.withoutRaisins }
   ];
+
+  function toggle(part: PackingPart, value: boolean) {
+    setOptimistic((o) => ({ ...o, [part]: value, ...(part !== "totaal" && !value ? { totaal: false } : {}) }));
+    void onAct(`${order.id}-${part}`, () => backend.checkPart(session, order.id, part, value)).finally(() =>
+      setOptimistic((o) => {
+        const next = { ...o };
+        delete next[part];
+        if (part !== "totaal") delete next.totaal;
+        return next;
+      })
+    );
+  }
+
+  const meta = [
+    order.fulfilment === "afhalen" ? `Afhalen${order.pickupLocation ? ` · ${order.pickupLocation}` : ""}` : courier ? `Bezorger: ${courier}` : "Bezorger nog niet ingedeeld",
+    order.plannedTime,
+    order.packaging,
+    flyers ? "met flyers" : ""
+  ].filter(Boolean);
 
   return (
     <article
-      className={`grid gap-3 rounded-xl border p-3 ${
-        done ? "border-stone-300 bg-stone-100 text-stone-500" : mine ? "border-coby-400 bg-coby-50" : claimedByOther ? "border-stone-200 bg-stone-50" : "border-stone-200 bg-white"
+      className={`grid gap-3 rounded-xl border p-4 transition ${
+        done ? "border-stone-200 bg-stone-100/70" : mine ? "border-coby-400 bg-white ring-2 ring-coby-100" : "border-stone-200 bg-white"
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-semibold text-stone-900">{order.locationName || order.contactPerson}</p>
-          <p className="text-xs text-stone-500">{order.id}</p>
-          <p className="text-xs text-stone-600">
-            {order.fulfilment === "afhalen"
-              ? `Afhalen${order.pickupLocation ? `: ${order.pickupLocation}` : ""}`
-              : `Bezorgen${courier ? ` door ${courier}` : " · bezorger nog niet ingedeeld"}`}
-            {order.plannedTime ? ` · ${order.plannedTime}` : ""}
-          </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`truncate font-semibold ${done ? "text-stone-500" : "text-stone-900"}`}>{order.locationName || order.contactPerson}</p>
+          <p className="mt-0.5 text-xs text-stone-500">{meta.join(" · ")}</p>
         </div>
-        <div className="flex flex-wrap gap-1">
-          {order.customerType === "zakelijk" ? <Badge tone="blue">B2B</Badge> : null}
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {order.customerType === "zakelijk" ? <Badge tone="blue">Zakelijk</Badge> : null}
           {order.customerType === "barter" ? <Badge tone="blue">Barter</Badge> : null}
-          {order.fulfilment === "afhalen" ? <Badge>Afhalen</Badge> : null}
-          {done ? <Badge>✓ Ingepakt</Badge> : mine ? <Badge tone="coby">Jij bent bezig</Badge> : claimedByOther ? <Badge tone="amber">Bezig: {packing.claimedBy}</Badge> : <Badge>Vrij</Badge>}
+          {done ? <Badge>✓ Klaar</Badge> : mine ? <Badge tone="coby">Jij</Badge> : claimedByOther ? <Badge tone="amber">{packing.claimedBy}</Badge> : null}
         </div>
       </div>
 
-      {order.packaging || /^ja/i.test(order.flyers ?? "") ? (
-        <p className="text-xs font-semibold text-stone-700">
-          {[order.packaging ? `Verpakking: ${order.packaging}` : "", /^ja/i.test(order.flyers ?? "") ? "Flyers erbij" : ""].filter(Boolean).join(" · ")}
+      {note ? (
+        <p className="line-clamp-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900" title={note}>
+          {note}
         </p>
       ) : null}
-      {note ? <p className="rounded-lg bg-white/80 px-2 py-1.5 text-xs text-stone-700">Opmerking: {note}</p> : null}
 
       <div className="grid grid-cols-3 gap-2">
         {parts.map(({ part, label, count }) => {
           const checked = view[part];
           // GEHEEL stays locked until MET and ZONDER are both ticked.
           const locked = part === "totaal" && !(view.met && view.zonder);
+          const disabled = !mine || done || isBusy || (locked && !checked);
           return (
-            <label
+            <button
               key={part}
-              className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border p-2 text-center ${
-                checked ? "border-emerald-400 bg-emerald-100" : "border-stone-200 bg-white"
-              } ${!mine || done || locked ? "cursor-not-allowed opacity-70" : ""}`}
+              type="button"
+              role="checkbox"
+              aria-checked={checked}
+              aria-label={`${label.toUpperCase()} afgevinkt`}
+              disabled={disabled}
+              onClick={() => toggle(part, !checked)}
+              className={`flex flex-col items-center rounded-lg border px-2 py-2.5 transition ${
+                checked
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                  : !mine || done
+                    ? "border-stone-200 bg-stone-50 text-stone-700"
+                    : locked
+                      ? "border-dashed border-stone-300 bg-white text-stone-400"
+                      : "border-stone-300 bg-white text-stone-900 hover:border-emerald-400 hover:bg-emerald-50/40"
+              } ${disabled ? "cursor-not-allowed" : ""}`}
             >
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-600">{label}</span>
-              <span className="text-xl font-semibold tabular-nums text-stone-900">{count}</span>
-              <input
-                type="checkbox"
-                className="h-5 w-5 accent-emerald-600"
-                checked={checked}
-                disabled={!mine || done || isBusy || (locked && !checked)}
-                onChange={(e) => {
-                  const value = e.target.checked;
-                  setOptimistic((o) => ({ ...o, [part]: value, ...(part !== "totaal" && !value ? { totaal: false } : {}) }));
-                  void onAct(`${order.id}-${part}`, () => backend.checkPart(session, order.id, part, value)).finally(() =>
-                    setOptimistic((o) => {
-                      const next = { ...o };
-                      delete next[part];
-                      if (part !== "totaal") delete next.totaal;
-                      return next;
-                    })
-                  );
-                }}
-                aria-label={`${label} afgevinkt`}
-              />
-              {locked && mine && !done ? <span className="text-[10px] text-stone-500">eerst MET en ZONDER</span> : null}
-            </label>
+              <span className="text-[11px] font-semibold uppercase tracking-wide">
+                {checked ? "✓ " : ""}
+                {label}
+              </span>
+              <span className="text-xl font-semibold tabular-nums">{count}</span>
+              {locked && mine && !done ? <span className="text-[10px] text-stone-400">na met + zonder</span> : null}
+            </button>
           );
         })}
       </div>
 
       {done ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-stone-600">
-            Ingepakt door <span className="font-semibold text-stone-800">{packing.packedBy}</span> op {packing.packedAt}
+          <p className="text-xs text-stone-500">
+            Ingepakt door <span className="font-semibold text-stone-700">{packing.packedBy}</span> · {packing.packedAt.slice(11, 16) || packing.packedAt}
           </p>
           <button
             type="button"
-            className={secondaryButton}
+            className="text-xs font-semibold text-stone-600 underline-offset-2 hover:text-stone-900 hover:underline disabled:opacity-40"
             disabled={isBusy}
             onClick={() => {
               if (window.confirm("Deze order heropenen om iets aan te passen? Hij komt dan op jouw naam te staan.")) {
@@ -386,20 +385,15 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
           </button>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {!packing.claimedBy ? (
-            <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-claim`, () => backend.claim(session, order.id))}>
-              Claim deze order
+            <button type="button" className={`${primaryButton} w-full sm:w-auto`} disabled={isBusy} onClick={() => void onAct(`${order.id}-claim`, () => backend.claim(session, order.id))}>
+              Ik pak deze order
             </button>
           ) : null}
           {mine ? (
             <>
-              <button
-                type="button"
-                className={primaryButton}
-                disabled={!allChecked || isBusy}
-                onClick={() => void onAct(`${order.id}-complete`, () => backend.complete(session, order.id))}
-              >
+              <button type="button" className={primaryButton} disabled={!allChecked || isBusy} onClick={() => void onAct(`${order.id}-complete`, () => backend.complete(session, order.id))}>
                 Afronden
               </button>
               <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
@@ -407,9 +401,10 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
               </button>
             </>
           ) : null}
+          {claimedByOther ? <p className="text-xs text-stone-500">{packing.claimedBy} is hiermee bezig.</p> : null}
           {claimedByOther && session.role === "beheer" ? (
-            <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
-              Claim vrijgeven (beheer)
+            <button type="button" className="text-xs font-semibold text-stone-600 hover:text-stone-900 hover:underline" disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
+              Vrijgeven (beheer)
             </button>
           ) : null}
         </div>

@@ -3,7 +3,7 @@ import { backend, type Session } from "../../data/backend";
 import type { DashboardState, OrderMeta } from "../../types/dashboard";
 import { emptyMeta } from "../../types/dashboard";
 import type { Order } from "../../types/order";
-import { Badge, Card, Notice, SectionTitle, formatDayLabel, inputClass, primaryButton, secondaryButton } from "../../components/ui";
+import { Badge, Card, Notice, SectionTitle, Segmented, formatDayLabel, ghostButton, inputClass, primaryButton, secondaryButton } from "../../components/ui";
 import { confirmationSubject, defaultConfirmation } from "../../utils/confirmation";
 import { effectiveNote } from "../../utils/orderUtils";
 
@@ -54,31 +54,19 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
 
   return (
     <div className="grid gap-4">
-      <Card>
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["review", `Opmerkingen beoordelen (${counts.review})`],
-                ["confirm", `Bevestiging nog niet verzonden (${counts.confirm})`],
-                ["all", `Alle orders (${state.orders.length})`]
-              ] as Array<[Filter, string]>
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setFilter(value)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                  filter === value ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700 hover:border-coby-300"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <input className={`${inputClass} max-w-xs`} type="search" placeholder="Zoek op naam, plaats of order" value={query} onChange={(e) => setQuery(e.target.value)} />
-        </div>
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented
+          label="Filter"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            ["review", `Opmerking beoordelen (${counts.review})`],
+            ["confirm", `Nog bevestigen (${counts.confirm})`],
+            ["all", `Alle (${state.orders.length})`]
+          ]}
+        />
+        <input className={`${inputClass} sm:max-w-xs`} type="search" placeholder="Zoek op naam, plaats of order" value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <Card className="p-3">
@@ -91,7 +79,7 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
                   type="button"
                   onClick={() => setSelectedId(order.id)}
                   className={`grid gap-1 rounded-xl border p-3 text-left transition ${
-                    selected?.id === order.id ? "border-coby-500 bg-coby-50" : "border-stone-200 bg-white hover:border-coby-300"
+                    selected?.id === order.id ? "border-coby-500 bg-white ring-2 ring-coby-100" : "border-stone-200 bg-white hover:border-stone-300"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -250,7 +238,7 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
             </button>
             <button
               type="button"
-              className={secondaryButton}
+              className={ghostButton}
               disabled={busy !== null}
               onClick={() => {
                 setText(defaultConfirmation(order, effectiveNote(order, meta)));
@@ -259,7 +247,7 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
             >
               Standaardtekst herstellen
             </button>
-            <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(text)}>
+            <button type="button" className={ghostButton} onClick={() => void navigator.clipboard?.writeText(text)}>
               Kopiëren
             </button>
             <button type="button" className={primaryButton} disabled={busy !== null || !order.email} onClick={() => void sendConfirmation()}>

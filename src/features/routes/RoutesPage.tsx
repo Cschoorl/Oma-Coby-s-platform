@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { backend, type Session } from "../../data/backend";
 import type { DashboardState } from "../../types/dashboard";
 import { OrderFilters } from "../orders/OrderFilters";
-import { Badge, Card, Notice, SectionTitle, StatTile, formatDayLabel, formatNumber, inputClass, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
+import { Badge, Card, Notice, SectionTitle, StatStrip, formatDayLabel, formatNumber, ghostButton, inputClass, pickInitialDate, primaryButton } from "../../components/ui";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
 import { courierCandidates, courierOrders, couriersOn, deliveryOrders, findVolunteer, guessMode, isRouteStale, orderedStops, routeKey, whatsappNumber } from "./routeUtils";
@@ -76,11 +76,13 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
     <div className="grid gap-4">
       <OrderFilters selectedDate={date} availableDates={dates} onDateChange={setDate} />
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <StatTile label="Bezorgers" value={couriers.length} />
-        <StatTile label="Bezorgingen" value={dayDeliveries.length} hint={`${unassigned.length} nog in te delen${pickups ? ` · ${pickups} afhalen` : ""}`} />
-        <StatTile label="Kilometers (berekend)" value={`${formatNumber(Math.round(totalKm * 10) / 10)} km`} hint={`${dayRoutes.length} van ${couriers.length} routes berekend`} />
-      </section>
+      <StatStrip
+        items={[
+          { label: "Bezorgers", value: couriers.length },
+          { label: "Bezorgingen", value: dayDeliveries.length, hint: `${unassigned.length} nog in te delen${pickups ? ` · ${pickups} afhalen` : ""}` },
+          { label: "Kilometers", value: `${formatNumber(Math.round(totalKm * 10) / 10)} km`, hint: `${dayRoutes.length} van ${couriers.length} routes berekend` }
+        ]}
+      />
 
       <CourierAssignment state={state} date={date} orders={dayDeliveries} busy={busy} onAssign={assign} />
 
@@ -94,11 +96,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             </button>
           }
         />
-        {isDemo ? (
-          <div className="mb-3">
-            <Notice tone="warning">Demo-modus: kilometers zijn een schatting. Met de Google Sheet-koppeling rekent Google Maps de echte route uit.</Notice>
-          </div>
-        ) : null}
+        {isDemo ? <p className="-mt-2 mb-3 text-xs text-amber-800">Demo: kilometers zijn een schatting. Met de Sheet-koppeling rekent Google Maps de echte route.</p> : null}
         {error ? (
           <div className="mb-3">
             <Notice tone="error">{error}</Notice>
@@ -170,19 +168,19 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                   ))}
                 </ol>
 
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => void compute(courier)}>
+                <div className="flex flex-wrap items-center gap-1">
+                  <a className={`${primaryButton} mr-1`} href={waUrl} target="_blank" rel="noreferrer">
+                    Stuur via WhatsApp
+                  </a>
+                  <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void compute(courier)}>
                     {busy === courier ? "Berekenen…" : route ? "Opnieuw berekenen" : "Route berekenen"}
                   </button>
                   {mapsUrl ? (
-                    <a className={secondaryButton} href={mapsUrl} target="_blank" rel="noreferrer">
-                      Open in Google Maps
+                    <a className={ghostButton} href={mapsUrl} target="_blank" rel="noreferrer">
+                      Google Maps
                     </a>
                   ) : null}
-                  <a className={primaryButton} href={waUrl} target="_blank" rel="noreferrer">
-                    Stuur via WhatsApp
-                  </a>
-                  <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(message)}>
+                  <button type="button" className={ghostButton} onClick={() => void navigator.clipboard?.writeText(message)}>
                     Kopieer bericht
                   </button>
                 </div>

@@ -3,8 +3,7 @@ import type { DashboardState } from "../../types/dashboard";
 import { emptyPacking } from "../../types/dashboard";
 import { OrderFilters } from "../orders/OrderFilters";
 import { SupplierPicker } from "../orders/SupplierPicker";
-import { StatusBadge } from "../../components/StatusBadge";
-import { Badge, Card, StatTile, formatDayLabel, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
+import { Badge, Card, formatDayLabel, ghostButton, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
 import { effectiveNote, mapsRouteUrlForOrders, mapsUrl, stopAddress } from "../../utils/orderUtils";
 import { navigate } from "../../lib/router";
 import { courierOrders, couriersOn, orderedStops, routeKey } from "./routeUtils";
@@ -40,77 +39,72 @@ export function CourierPage({ state, name, date: dateParam }: CourierPageProps) 
         <SupplierPicker supplierNames={couriers} selectedSupplier={null} onSelectSupplier={(n) => go(n, date)} />
       ) : (
         <>
-          <Card>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <Card className="grid gap-4">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-stone-500">Bezorger</p>
                 <p className="text-lg font-semibold text-stone-900">{name}</p>
-                <p className="text-sm text-stone-600">{formatDayLabel(date)}</p>
+                <p className="text-sm text-stone-500">
+                  {formatDayLabel(date)} · {orders.length} stops · {pieces} oliebollen
+                  {route ? ` · ${route.km.toLocaleString("nl-NL")} km (± ${route.minutes} min)` : ""}
+                </p>
               </div>
-              <button type="button" className={secondaryButton} onClick={() => go(null, date)}>
-                Andere bezorger
+              <button type="button" className={ghostButton} onClick={() => go(null, date)}>
+                Wissel
               </button>
             </div>
+            {routeUrl ? (
+              <a className={`${primaryButton} py-3 text-base`} href={routeUrl} target="_blank" rel="noreferrer">
+                Start route in Google Maps
+              </a>
+            ) : null}
+            <p className="-mt-2 text-center text-xs text-stone-500">Start en eindigt bij de baklocatie in Aalsmeer.</p>
           </Card>
-          <section className="grid grid-cols-3 gap-3">
-            <StatTile label="Stops" value={orders.length} />
-            <StatTile label="Oliebollen" value={pieces} />
-            <StatTile label="Afstand" value={route ? `${route.km.toLocaleString("nl-NL")} km` : "–"} hint={route ? `± ${route.minutes} min` : "nog niet berekend"} />
-          </section>
-          {routeUrl ? (
-            <a className={`${primaryButton} py-3 text-base`} href={routeUrl} target="_blank" rel="noreferrer">
-              Start route in Google Maps
-            </a>
-          ) : null}
-          <p className="text-center text-xs text-stone-600">De route start en eindigt bij de baklocatie in Aalsmeer.</p>
 
           <div className="grid gap-3">
             {stops.map((order, i) => {
               const note = effectiveNote(order, state.meta[order.id]);
               const packing = state.packing[order.id] ?? emptyPacking;
               return (
-                <Card key={order.id} className="grid gap-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex gap-3">
-                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-coby-600 text-sm font-bold text-white">{i + 1}</span>
-                      <div>
+                <Card key={order.id} className="grid gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-stone-900 text-xs font-bold text-white">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
                         <p className="font-semibold text-stone-900">{order.locationName || order.contactPerson}</p>
-                        <p className="text-sm text-stone-600">{stopAddress(order)}</p>
-                        {order.plannedTime ? <p className="text-xs text-stone-500">Gepland: {order.plannedTime}</p> : null}
+                        {packing.packedBy ? <Badge tone="green">Ingepakt</Badge> : <Badge tone="amber">Nog inpakken</Badge>}
                       </div>
-                    </div>
-                    <StatusBadge status={order.status} />
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-lg bg-stone-50 p-2">
-                      <p className="text-[11px] uppercase text-stone-500">Met</p>
-                      <p className="text-lg font-semibold tabular-nums">{order.withRaisins}</p>
-                    </div>
-                    <div className="rounded-lg bg-stone-50 p-2">
-                      <p className="text-[11px] uppercase text-stone-500">Zonder</p>
-                      <p className="text-lg font-semibold tabular-nums">{order.withoutRaisins}</p>
-                    </div>
-                    <div className="rounded-lg bg-stone-50 p-2">
-                      <p className="text-[11px] uppercase text-stone-500">Totaal</p>
-                      <p className="text-lg font-semibold tabular-nums">{order.withRaisins + order.withoutRaisins}</p>
+                      <p className="text-sm text-stone-600">{stopAddress(order)}</p>
+                      <p className="mt-0.5 text-xs text-stone-500">
+                        {[order.plannedTime && `Gepland ${order.plannedTime}`, order.deliveryMoment, order.packaging, /^ja/i.test(order.flyers ?? "") ? "met flyers" : "", order.status !== "open" ? order.status : ""]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
                     </div>
                   </div>
-                  {order.deliveryMoment || order.packaging || /^ja/i.test(order.flyers ?? "") ? (
-                    <p className="text-xs text-stone-600">
-                      {[order.deliveryMoment, order.packaging, /^ja/i.test(order.flyers ?? "") ? "met flyers" : ""].filter(Boolean).join(" · ")}
-                    </p>
-                  ) : null}
-                  {note ? <p className="rounded-lg bg-coby-50 px-3 py-2 text-sm text-coby-900">Opmerking: {note}</p> : null}
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="grid grid-cols-3 divide-x divide-stone-100 rounded-lg border border-stone-200 text-center">
+                    {[
+                      ["Met", order.withRaisins],
+                      ["Zonder", order.withoutRaisins],
+                      ["Totaal", order.withRaisins + order.withoutRaisins]
+                    ].map(([label, count]) => (
+                      <div key={label} className="py-2">
+                        <p className="text-[11px] font-medium text-stone-500">{label}</p>
+                        <p className="text-lg font-semibold tabular-nums text-stone-900">{count}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {note ? <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">{note}</p> : null}
+                  <div className="grid grid-cols-2 gap-2">
                     {order.phone ? (
                       <a className={secondaryButton} href={`tel:${order.phone}`}>
-                        Bel {order.contactPerson || "klant"}
+                        Bellen
                       </a>
-                    ) : null}
+                    ) : (
+                      <span />
+                    )}
                     <a className={secondaryButton} href={mapsUrl(order)} target="_blank" rel="noreferrer">
-                      Navigeer
+                      Navigeren
                     </a>
-                    {packing.packedBy ? <Badge tone="green">Ingepakt door {packing.packedBy}</Badge> : <Badge tone="amber">Nog niet ingepakt</Badge>}
                   </div>
                 </Card>
               );

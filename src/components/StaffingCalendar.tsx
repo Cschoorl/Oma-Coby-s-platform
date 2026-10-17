@@ -11,6 +11,12 @@ const statusClass: Record<StaffingStatus, string> = {
   bijna: "bg-amber-100 text-amber-900",
   genoeg: "bg-emerald-100 text-emerald-800"
 };
+/** In the cells only the number is coloured, so a quiet season does not turn the calendar into a wall of red. */
+const statusText: Record<StaffingStatus, string> = {
+  weinig: "text-red-700",
+  bijna: "text-amber-700",
+  genoeg: "text-emerald-700"
+};
 const statusIcon: Record<StaffingStatus, string> = { weinig: "!", bijna: "~", genoeg: "✓" };
 
 /** Season year from the configured options, e.g. "Dinsdag 15 december". */
@@ -82,22 +88,23 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
             const active = inSeason.has(date.toDateString());
             const key = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
             return (
-              <div key={date.toISOString()} className={`min-h-[96px] rounded-lg border p-1.5 ${active ? "border-stone-200 bg-white" : "border-transparent bg-stone-50/60"}`}>
+              <div key={date.toISOString()} className={`min-h-[92px] rounded-lg border p-1.5 ${active ? "border-stone-200 bg-white" : "border-transparent bg-transparent"}`}>
                 <p className={`text-xs font-semibold ${active ? "text-stone-900" : "text-stone-400"}`}>
                   {date.getDate()} {date.getDate() === 1 || date === cells[0] ? MONTHS[date.getMonth()].slice(0, 3) : ""}
                 </p>
                 {active ? (
                   <div className="mt-1 grid gap-0.5">
                     {staffingForDay(counts, key).map(({ role, parts }) => (
-                      <div key={role} className="flex flex-wrap items-center gap-0.5 text-[10px] leading-tight">
+                      <div key={role} className="flex flex-wrap items-center gap-1 text-[11px] leading-tight">
                         <span className="w-[42px] shrink-0 text-stone-600">{volunteerRoleLabel[role].replace("koerier", "").slice(0, 6)}</span>
                         {parts.map((p) => (
                           <span
                             key={p.label || "dag"}
-                            className={`rounded px-1 font-semibold tabular-nums ${statusClass[p.status]}`}
+                            className={`font-semibold tabular-nums ${statusText[p.status]}`}
                             title={`${volunteerRoleLabel[role]}${p.label ? ` ${p.label}` : ""}: ${p.count} aangemeld (${statusLabel[p.status].toLowerCase()})`}
                           >
-                            {statusIcon[p.status]} {p.label ? `${p.label[0]}${p.count}` : p.count}
+                            {p.status === "weinig" ? "!" : p.status === "genoeg" ? "✓" : ""}
+                            {p.label ? `${p.label[0]}${p.count}` : p.count}
                           </span>
                         ))}
                       </div>

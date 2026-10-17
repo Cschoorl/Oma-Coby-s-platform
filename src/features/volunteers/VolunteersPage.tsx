@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { DashboardState, VolunteerRole } from "../../types/dashboard";
 import { VOLUNTEER_ROLES, volunteerRoleLabel } from "../../types/dashboard";
-import { Badge, Card, SectionTitle, StatTile, inputClass, secondaryButton } from "../../components/ui";
+import { Badge, Card, SectionTitle, StatStrip, inputClass, secondaryButton } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { whatsappNumber } from "../routes/routeUtils";
 import { StaffingCalendar } from "../../components/StaffingCalendar";
@@ -45,31 +45,32 @@ export function VolunteersPage({ state }: { state: DashboardState }) {
   const signupLink = appLink("/aanmelden");
 
   return (
-    <div className="grid gap-4">
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <StatTile label="Aanmeldingen" value={state.volunteers.length} />
-        {VOLUNTEER_ROLES.map((r) => (
-          <StatTile key={r} label={volunteerRoleLabel[r]} value={count(r)} hint={r === "fietskoerier" ? `${state.volunteers.filter((v) => v.cargoBike).length} met bakfiets` : undefined} />
-        ))}
-      </section>
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
+        <p className="text-sm text-stone-600">
+          Aanmeldlink voor vrijwilligers (geen code nodig): <span className="break-all font-medium text-stone-900">{signupLink}</span>
+        </p>
+        <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(signupLink)}>
+          Kopieer link
+        </button>
+      </div>
+
+      <StatStrip
+        items={[
+          { label: "Aanmeldingen", value: state.volunteers.length },
+          ...VOLUNTEER_ROLES.map((r) => ({
+            label: volunteerRoleLabel[r],
+            value: count(r),
+            hint: r === "fietskoerier" ? `${state.volunteers.filter((v) => v.cargoBike).length} met bakfiets` : undefined
+          }))
+        ]}
+      />
 
       <Card>
         <SectionTitle title="Bezetting per dag" subtitle="Hoeveel vrijwilligers zich per taak hebben aangemeld, tegenover wat er nodig is. Rood = weinig." />
         <StaffingCalendar counts={countSignups(state.volunteers)} />
       </Card>
 
-      <Card>
-        <SectionTitle
-          title="Aanmeldlink"
-          subtitle="Deel deze link met vrijwilligers; ze hebben geen toegangscode nodig. Aanmeldingen komen in hetzelfde tabblad als het Google Formulier."
-          action={
-            <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(signupLink)}>
-              Kopieer link
-            </button>
-          }
-        />
-        <p className="break-all rounded-lg bg-stone-50 px-3 py-2 text-sm text-stone-700">{signupLink}</p>
-      </Card>
 
       <Card>
         <SectionTitle title="Vrijwilligers" subtitle={`${filtered.length} van ${state.volunteers.length} getoond`} />

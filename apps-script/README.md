@@ -12,6 +12,7 @@ Het script:
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
   zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
+- logt elke afgeronde en heropende order met naam en tijd in het tabblad `Inpaklog`;
 - berekent routes en kilometers met de ingebouwde Google Maps-dienst (geen API-sleutel nodig);
 - verstuurt klantbevestigingen vanuit het Google-account van de Sheet (`MailApp`);
 - laat bonnen uitlezen door Claude en bewaart de foto's in Google Drive.
@@ -76,7 +77,10 @@ in dezelfde kolommen en hetzelfde formaat als het formulier ("Vrijdag 18 decembe
 
 - De agenda in het dashboard wordt gevuld uit deze aanmeldingen (beschikbaarheid, niet het definitieve rooster).
 - Inpakkers en bezorgers zien alleen namen en dagen; telefoon, e-mail en opmerkingen ziet alleen beheer.
-- De dagen op de aanmeldpagina staan in `src/config.ts` (`SIGNUP_OPTIONS`).
+- De dagen op de aanmeldpagina staan in `src/config.ts` (`SIGNUP_OPTIONS`), het aantal benodigde mensen per
+  taak per dag(deel) in `STAFFING_TARGETS`. Daarmee kleurt de bezettingskalender en stelt de aanmeldpagina
+  rustige momenten voor (de aanmeldpagina krijgt alleen aantallen, geen namen).
+- Vult iemand een adres in, dan voegt het script achteraan een kolom `Adres` toe (het 2025-formulier had die niet).
 
 Het Google Formulier blijft gewoon werken; je kunt het naast de aanmeldpagina gebruiken of de aanmeldpagina
 in de plaats ervan delen.

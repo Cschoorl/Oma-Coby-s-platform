@@ -4,6 +4,8 @@ import { VOLUNTEER_ROLES, volunteerRoleLabel } from "../../types/dashboard";
 import { Badge, Card, SectionTitle, StatTile, inputClass, secondaryButton } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { whatsappNumber } from "../routes/routeUtils";
+import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { countSignups } from "../../utils/staffing";
 
 /** "Vrijdag 19 december: middag" → "19 december"; used to filter on a day regardless of role or dagdeel. */
 function dayKey(option: string): string {
@@ -35,7 +37,7 @@ export function VolunteersPage({ state }: { state: DashboardState }) {
       if (roles.length === 0) return false;
       if (day !== "alle" && !roles.some((r) => v.roles[r].days.some((d) => dayKey(d) === day))) return false;
       if (!q) return true;
-      return [v.name, v.city, v.phone, v.email, v.remark].some((x) => x.toLowerCase().includes(q));
+      return [v.name, v.city, v.address ?? "", v.phone, v.email, v.remark].some((x) => x.toLowerCase().includes(q));
     });
   }, [state.volunteers, query, role, day]);
 
@@ -50,6 +52,11 @@ export function VolunteersPage({ state }: { state: DashboardState }) {
           <StatTile key={r} label={volunteerRoleLabel[r]} value={count(r)} hint={r === "fietskoerier" ? `${state.volunteers.filter((v) => v.cargoBike).length} met bakfiets` : undefined} />
         ))}
       </section>
+
+      <Card>
+        <SectionTitle title="Bezetting per dag" subtitle="Hoeveel vrijwilligers zich per taak hebben aangemeld, tegenover wat er nodig is. Rood = weinig." />
+        <StaffingCalendar counts={countSignups(state.volunteers)} />
+      </Card>
 
       <Card>
         <SectionTitle
@@ -91,7 +98,7 @@ export function VolunteersPage({ state }: { state: DashboardState }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold text-stone-900">
                   {v.name}
-                  {v.city ? <span className="font-normal text-stone-500"> · {v.city}</span> : null}
+                  {v.address || v.city ? <span className="font-normal text-stone-500"> · {[v.address, v.city].filter(Boolean).join(", ")}</span> : null}
                 </p>
                 <span className="flex flex-wrap gap-1">
                   {VOLUNTEER_ROLES.filter((r) => v.roles[r].wants).map((r) => (

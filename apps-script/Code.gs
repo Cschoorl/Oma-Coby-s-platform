@@ -81,7 +81,8 @@ const CONFIG = {
     autokoerierDays: ['op welke dag(en) wil je helpen als autokoerier', 'op welke dag(en) kan je helpen als autokoerier'],
     oliebollenbar: ['wil je helpen in de oliebollenbar'],
     oliebollenbarDays: ['op welke dag(en) wil je helpen in de oliebollenbar'],
-    remark: ['wil je nog iets kwijt']
+    remark: ['wil je nog iets kwijt'],
+    address: ['adres', 'straat + huisnummer']
   }
 };
 
@@ -109,7 +110,8 @@ const TABS = {
   routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op']],
   costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url']],
   history: ['Historie', ['jaar', 'datum', 'bestellingen', 'oliebollen', 'omzet']],
-  settings: ['Instellingen', ['sleutel', 'waarde']]
+  settings: ['Instellingen', ['sleutel', 'waarde']],
+  packlog: ['Inpaklog', ['tijd', 'order_id', 'klant', 'actie', 'door', 'met_krenten', 'zonder_krenten']]
 };
 
 const PERMISSIONS = {
@@ -119,6 +121,8 @@ const PERMISSIONS = {
   release: ['beheer', 'inpakker'],
   checkPart: ['beheer', 'inpakker'],
   complete: ['beheer', 'inpakker'],
+  reopen: ['beheer', 'inpakker'],
+  signupStats: ['public'],
   setBaked: ['beheer', 'inpakker'],
   updateNote: ['beheer'],
   saveConfirmation: ['beheer'],
@@ -215,8 +219,14 @@ const HANDLERS = {
       const row = findOrCreate_('packing', body.orderId);
       if (row.values.geclaimd_door !== name) throw new Error('Claim de order eerst voordat je afvinkt.');
       if (row.values.ingepakt_door) throw new Error('Deze order is al afgerond.');
+      const done = !!body.done;
       const update = {};
-      update[column] = !!body.done;
+      update[column] = done;
+      // GEHEEL (totaal) can only be ticked after MET and ZONDER; unticking either clears it again.
+      if (body.part === 'totaal' && done && !(truthy_(row.values.met_klaar) && truthy_(row.values.zonder_klaar))) {
+        throw new Error('Vink eerst MET en ZONDER af.');
+      }
+      if (body.part !== 'totaal' && !done) update.totaal_klaar = false;
       row.set(update);
       return bump_();
     });
@@ -231,8 +241,35 @@ const HANDLERS = {
         throw new Error('Vink eerst MET, ZONDER en TOTAAL af.');
       }
       row.set({ ingepakt_door: name, ingepakt_op: now_() });
+      logPacking_(body.orderId, 'ingepakt', name);
       return bump_();
     });
+  },
+  reopen: function (body) {
+    return withLock_(function () {
+      const name = requireName_(body.name);
+      const row = findOrCreate_('packing', body.orderId);
+      if (!row.values.ingepakt_door) throw new Error('Deze order is nog niet afgerond.');
+      // The person reopening takes the order over; the ticks stay so only the change needs doing.
+      row.set({ ingepakt_door: '', ingepakt_op: '', geclaimd_door: name, geclaimd_op: now_() });
+      logPacking_(body.orderId, 'heropend', name);
+      return bump_();
+    });
+  },
+  signupStats: function () {
+    // Only counts, never names: this is shown on the public signup page.
+    const counts = {};
+    VOLUNTEER_ROLES.forEach(function (role) { counts[role] = {}; });
+    readVolunteers_().forEach(function (v) {
+      VOLUNTEER_ROLES.forEach(function (role) {
+        if (!v.roles[role].wants) return;
+        v.roles[role].days.forEach(function (option) {
+          const key = String(option).trim().toLowerCase();
+          counts[role][key] = (counts[role][key] || 0) + 1;
+        });
+      });
+    });
+    return { counts: counts };
   },
   setBaked: function (body) {
     return withLock_(function () {
@@ -381,7 +418,7 @@ const HANDLERS = {
     const wantsSomething = VOLUNTEER_ROLES.some(function (r) { return roles[r] && roles[r].wants; });
     if (!wantsSomething) throw new Error('Kies minstens één taak waarmee je wilt helpen.');
 
-    const values = { timestamp: new Date(), name: name, city: String(body.city || '').trim(), phone: phone, email: email, remark: String(body.remark || '').slice(0, 1000) };
+    const values = { timestamp: new Date(), name: name, address: String(body.address || '').trim(), city: String(body.city || '').trim(), phone: phone, email: email, remark: String(body.remark || '').slice(0, 1000) };
     VOLUNTEER_ROLES.forEach(function (role) {
       const r = roles[role] || {};
       values[role] = r.wants ? 'Ja' : 'Nee';
@@ -391,8 +428,14 @@ const HANDLERS = {
 
     return withLock_(function () {
       const sheet = volunteerSheet_();
-      const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-      const index = volunteerIndex_(headers);
+      let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+      let index = volunteerIndex_(headers);
+      // The 2025 form has no address question: add the column at the end when someone fills it in.
+      if (values.address && index.address === undefined) {
+        sheet.getRange(1, headers.length + 1).setValue('Adres');
+        headers = headers.concat(['Adres']);
+        index = volunteerIndex_(headers);
+      }
       const row = headers.map(function () { return ''; });
       Object.keys(index).forEach(function (field) {
         if (values[field] !== undefined) row[index[field]] = values[field];
@@ -495,7 +538,7 @@ function buildState_(role) {
   // Everyone sees who is available when (agenda); contact details only for beheer.
   state.volunteers = readVolunteers_().map(function (v) {
     if (isAdmin) return v;
-    return Object.assign({}, v, { phone: '', email: '', remark: '' });
+    return Object.assign({}, v, { phone: '', email: '', remark: '', address: '' });
   });
 
   const price = Number(getSetting_('prijs_per_oliebol'));
@@ -589,6 +632,12 @@ function dutchDate_(value, seasonYear) {
   return '';
 }
 
+function logPacking_(orderId, action, name) {
+  const order = findOrder_(orderId) || {};
+  sheet_('packlog').appendRow([now_(), String(orderId), String(order.locatie_naam || order.contactpersoon || ''), action, name,
+    Number(order.oliebollen_met_krenten) || 0, Number(order.oliebollen_zonder_krenten) || 0]);
+}
+
 function volunteerSheet_() {
   const id = PropertiesService.getScriptProperties().getProperty('VOLUNTEERS_SPREADSHEET_ID');
   const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActive();
@@ -643,6 +692,7 @@ function readVolunteers_() {
       createdAt: cell(row, 'timestamp'),
       name: cell(row, 'name'),
       city: cell(row, 'city'),
+      address: cell(row, 'address'),
       phone: cell(row, 'phone'),
       email: cell(row, 'email'),
       roles: roles,

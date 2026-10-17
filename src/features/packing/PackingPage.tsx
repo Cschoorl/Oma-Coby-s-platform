@@ -14,6 +14,7 @@ interface PackingPageProps {
 }
 
 type Filter = "open" | "mine" | "done" | "all";
+type TypeFilter = "alle" | "particulier" | "zakelijk";
 
 const customerLabel: Record<CustomerType, string> = { particulier: "Particulier", zakelijk: "Zakelijk (B2B)", barter: "Barter", onbekend: "Onbekend" };
 
@@ -25,6 +26,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
   const dates = useMemo(() => Array.from(new Set(state.orders.map((o) => o.deliveryDate))).sort(), [state.orders]);
   const [date, setDate] = useState(() => pickInitialDate(dates));
   const [filter, setFilter] = useState<Filter>("open");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("alle");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +70,9 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 
   const visibleOrders = dayOrders.filter((order) => {
     const p = packingOf(state, order.id);
+    // Barter goes with zakelijk: those are business deliveries too.
+    if (typeFilter === "particulier" && order.customerType !== "particulier") return false;
+    if (typeFilter === "zakelijk" && order.customerType !== "zakelijk" && order.customerType !== "barter") return false;
     if (filter === "open") return !p.packedBy;
     if (filter === "mine") return p.claimedBy === session.name && !p.packedBy;
     if (filter === "done") return Boolean(p.packedBy);
@@ -172,7 +177,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
       <Card>
         <SectionTitle
           title="Orders inpakken"
-          subtitle={`Ingelogd als ${session.name}. Claim een order, vink MET, ZONDER en TOTAAL af en rond af.`}
+          subtitle={`Ingelogd als ${session.name}. Claim een order, vink MET en ZONDER af, dan GEHEEL, en rond af. Afgeronde orders worden grijs en kun je heropenen.`}
         />
         <div className="mb-3 flex flex-wrap gap-2">
           {(
@@ -189,6 +194,25 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
               onClick={() => setFilter(value)}
               className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
                 filter === value ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700 hover:border-coby-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <span className="mx-1 hidden w-px self-stretch bg-stone-200 sm:block" />
+          {(
+            [
+              ["alle", "Particulier + zakelijk"],
+              ["particulier", "Alleen particulier"],
+              ["zakelijk", "Alleen zakelijk"]
+            ] as Array<[TypeFilter, string]>
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTypeFilter(value)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                typeFilter === value ? "border-sky-500 bg-sky-100 text-sky-900" : "border-stone-200 bg-white text-stone-700 hover:border-sky-300"
               }`}
             >
               {label}
@@ -269,13 +293,13 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
   const parts: Array<{ part: PackingPart; label: string; count: number }> = [
     { part: "met", label: "MET", count: order.withRaisins },
     { part: "zonder", label: "ZONDER", count: order.withoutRaisins },
-    { part: "totaal", label: "TOTAAL", count: order.withRaisins + order.withoutRaisins }
+    { part: "totaal", label: "GEHEEL", count: order.withRaisins + order.withoutRaisins }
   ];
 
   return (
     <article
       className={`grid gap-3 rounded-xl border p-3 ${
-        done ? "border-emerald-200 bg-emerald-50/60" : mine ? "border-coby-400 bg-coby-50" : claimedByOther ? "border-stone-200 bg-stone-50" : "border-stone-200 bg-white"
+        done ? "border-stone-300 bg-stone-100 text-stone-500" : mine ? "border-coby-400 bg-coby-50" : claimedByOther ? "border-stone-200 bg-stone-50" : "border-stone-200 bg-white"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -293,7 +317,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
           {order.customerType === "zakelijk" ? <Badge tone="blue">B2B</Badge> : null}
           {order.customerType === "barter" ? <Badge tone="blue">Barter</Badge> : null}
           {order.fulfilment === "afhalen" ? <Badge>Afhalen</Badge> : null}
-          {done ? <Badge tone="green">Ingepakt</Badge> : mine ? <Badge tone="coby">Jij bent bezig</Badge> : claimedByOther ? <Badge tone="amber">Bezig: {packing.claimedBy}</Badge> : <Badge>Vrij</Badge>}
+          {done ? <Badge>✓ Ingepakt</Badge> : mine ? <Badge tone="coby">Jij bent bezig</Badge> : claimedByOther ? <Badge tone="amber">Bezig: {packing.claimedBy}</Badge> : <Badge>Vrij</Badge>}
         </div>
       </div>
 
@@ -307,12 +331,14 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
       <div className="grid grid-cols-3 gap-2">
         {parts.map(({ part, label, count }) => {
           const checked = view[part];
+          // GEHEEL stays locked until MET and ZONDER are both ticked.
+          const locked = part === "totaal" && !(view.met && view.zonder);
           return (
             <label
               key={part}
               className={`flex cursor-pointer flex-col items-center gap-1 rounded-lg border p-2 text-center ${
                 checked ? "border-emerald-400 bg-emerald-100" : "border-stone-200 bg-white"
-              } ${!mine || done ? "cursor-not-allowed opacity-80" : ""}`}
+              } ${!mine || done || locked ? "cursor-not-allowed opacity-70" : ""}`}
             >
               <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-600">{label}</span>
               <span className="text-xl font-semibold tabular-nums text-stone-900">{count}</span>
@@ -320,29 +346,45 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
                 type="checkbox"
                 className="h-5 w-5 accent-emerald-600"
                 checked={checked}
-                disabled={!mine || done || isBusy}
+                disabled={!mine || done || isBusy || (locked && !checked)}
                 onChange={(e) => {
                   const value = e.target.checked;
-                  setOptimistic((o) => ({ ...o, [part]: value }));
+                  setOptimistic((o) => ({ ...o, [part]: value, ...(part !== "totaal" && !value ? { totaal: false } : {}) }));
                   void onAct(`${order.id}-${part}`, () => backend.checkPart(session, order.id, part, value)).finally(() =>
                     setOptimistic((o) => {
                       const next = { ...o };
                       delete next[part];
+                      if (part !== "totaal") delete next.totaal;
                       return next;
                     })
                   );
                 }}
                 aria-label={`${label} afgevinkt`}
               />
+              {locked && mine && !done ? <span className="text-[10px] text-stone-500">eerst MET en ZONDER</span> : null}
             </label>
           );
         })}
       </div>
 
       {done ? (
-        <p className="text-xs text-emerald-800">
-          Ingepakt door <span className="font-semibold">{packing.packedBy}</span> op {packing.packedAt}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-stone-600">
+            Ingepakt door <span className="font-semibold text-stone-800">{packing.packedBy}</span> op {packing.packedAt}
+          </p>
+          <button
+            type="button"
+            className={secondaryButton}
+            disabled={isBusy}
+            onClick={() => {
+              if (window.confirm("Deze order heropenen om iets aan te passen? Hij komt dan op jouw naam te staan.")) {
+                void onAct(`${order.id}-reopen`, () => backend.reopen(session, order.id));
+              }
+            }}
+          >
+            Heropenen om aan te passen
+          </button>
+        </div>
       ) : (
         <div className="flex flex-wrap gap-2">
           {!packing.claimedBy ? (

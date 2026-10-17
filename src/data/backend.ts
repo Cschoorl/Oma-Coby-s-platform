@@ -32,6 +32,7 @@ export interface RouteRequest {
 
 export interface VolunteerSignup {
   name: string;
+  address: string;
   city: string;
   phone: string;
   email: string;
@@ -46,6 +47,9 @@ export interface ReceiptResult {
   photoUrl: string;
   warning: string;
 }
+
+/** Signups per role per form option (lowercased), without names. */
+export type SignupCounts = Record<VolunteerRole, Record<string, number>>;
 
 export interface CostInput {
   date: string;
@@ -66,6 +70,8 @@ export interface Backend {
   release(session: Session, orderId: string): Promise<void>;
   checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<void>;
   complete(session: Session, orderId: string): Promise<void>;
+  reopen(session: Session, orderId: string): Promise<void>;
+  getSignupCounts(): Promise<SignupCounts>;
   setBaked(session: Session, date: string, counts: BakedCount): Promise<void>;
   updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
@@ -136,6 +142,13 @@ function createAppsScriptBackend(url: string): Backend {
     async complete(session, orderId) {
       await call("complete", withSession(session, { orderId }));
     },
+    async reopen(session, orderId) {
+      await call("reopen", withSession(session, { orderId }));
+    },
+    async getSignupCounts() {
+      const data = await call<{ counts: SignupCounts }>("signupStats", {});
+      return data.counts;
+    },
     async setBaked(session, date, counts) {
       await call("setBaked", withSession(session, { date, ...counts }));
     },
@@ -171,7 +184,7 @@ function createAppsScriptBackend(url: string): Backend {
 
 export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
 
-const DEMO_KEY = "omacoby-demo-v2";
+const DEMO_KEY = "omacoby-demo-v3";
 
 interface DemoStore {
   version: number;
@@ -187,7 +200,7 @@ const none: RoleAvailability = { wants: false, days: [] };
 
 /** Fictitious volunteers so the agenda and routes have something to show in demo mode. */
 function demoVolunteers(): Volunteer[] {
-  const base = { city: "Aalsmeer", cargoBike: false, remark: "", createdAt: "2026-10-01 10:00:00" };
+  const base = { city: "Aalsmeer", address: "", cargoBike: false, remark: "", createdAt: "2026-10-01 10:00:00" };
   return [
     {
       ...base,
@@ -312,7 +325,7 @@ function createDemoBackend(notice?: string): Backend {
         packing: store.packing,
         baked: store.baked,
         routes: store.routes,
-        volunteers: admin ? store.volunteers : store.volunteers.map((v) => ({ ...v, phone: "", email: "", remark: "" })),
+        volunteers: admin ? store.volunteers : store.volunteers.map((v) => ({ ...v, phone: "", email: "", remark: "", address: "" })),
         costs: admin ? store.costs : [],
         history: admin ? demoHistory() : [],
         pricePerPiece: 0.95
@@ -344,7 +357,9 @@ function createDemoBackend(notice?: string): Backend {
         const p = packingFor(store, orderId);
         if (p.claimedBy !== session.name) throw new Error("Claim de order eerst voordat je afvinkt.");
         if (p.packedBy) throw new Error("Deze order is al afgerond.");
+        if (part === "totaal" && done && !(p.met && p.zonder)) throw new Error("Vink eerst MET en ZONDER af.");
         p[part] = done;
+        if (part !== "totaal" && !done) p.totaal = false;
       });
     },
     async complete(session, orderId) {
@@ -356,6 +371,30 @@ function createDemoBackend(notice?: string): Backend {
         p.packedBy = session.name;
         p.packedAt = nowStamp();
       });
+    },
+    async reopen(session, orderId) {
+      await delay(150);
+      mutate((store) => {
+        const p = packingFor(store, orderId);
+        if (!p.packedBy) throw new Error("Deze order is nog niet afgerond.");
+        p.packedBy = "";
+        p.packedAt = "";
+        p.claimedBy = session.name;
+        p.claimedAt = nowStamp();
+      });
+    },
+    async getSignupCounts() {
+      const counts: SignupCounts = { inpakken: {}, fietskoerier: {}, autokoerier: {}, oliebollenbar: {} };
+      for (const v of readStore().volunteers) {
+        for (const role of Object.keys(counts) as VolunteerRole[]) {
+          if (!v.roles[role].wants) continue;
+          for (const option of v.roles[role].days) {
+            const key = option.trim().toLowerCase();
+            counts[role][key] = (counts[role][key] ?? 0) + 1;
+          }
+        }
+      }
+      return counts;
     },
     async setBaked(_session, date, counts) {
       mutate((store) => {
@@ -440,6 +479,7 @@ function createDemoBackend(notice?: string): Backend {
           id: `demo-${Date.now()}`,
           createdAt: nowStamp(),
           name: signup.name.trim(),
+          address: signup.address.trim(),
           city: signup.city.trim(),
           phone: signup.phone.trim(),
           email: signup.email.trim(),

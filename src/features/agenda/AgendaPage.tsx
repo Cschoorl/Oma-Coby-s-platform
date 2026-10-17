@@ -3,6 +3,8 @@ import type { Order } from "../../types/order";
 import type { AgendaShift } from "../../types/agenda";
 import { parseAgendaShifts, parseVolunteerShifts, seasonMonth } from "../../utils/agendaParser";
 import type { Volunteer } from "../../types/dashboard";
+import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { countSignups } from "../../utils/staffing";
 
 const START_HOUR = 9;
 const END_HOUR = 17;
@@ -90,6 +92,13 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
 
   return (
     <section className="grid gap-4">
+      {volunteers.length > 0 ? (
+        <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
+          <h2 className="mb-1 text-base font-semibold text-stone-900">Bezetting per dag</h2>
+          <p className="mb-3 text-sm text-stone-600">Rood betekent dat er die dag nog weinig mensen zijn. Kun je dan? Mail de planning.</p>
+          <StaffingCalendar counts={countSignups(volunteers)} />
+        </section>
+      ) : null}
       <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-[240px] flex-1">

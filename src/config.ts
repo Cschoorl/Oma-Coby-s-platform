@@ -31,4 +31,15 @@ export const SIGNUP_HINTS = {
   oliebollenbar: "Op welke dag(en) wil je helpen in de Oliebollenbar?"
 };
 
+/**
+ * How many volunteers are needed per role on each day (per dagdeel for couriers).
+ * Below half of this a day shows as "weinig"; below the number as "bijna".
+ */
+export const STAFFING_TARGETS = {
+  inpakken: 4,
+  fietskoerier: 4,
+  autokoerier: 4,
+  oliebollenbar: 4
+};
+
 export const CONTACT_EMAIL = "planning@omacobysoliebollenbar.nl";

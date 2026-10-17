@@ -60,7 +60,8 @@ export interface Volunteer {
   createdAt: string;
   name: string;
   city: string;
-  /** Contact details are only sent to beheer. */
+  /** Contact details (address, phone, e-mail) are only sent to beheer. */
+  address: string;
   phone: string;
   email: string;
   roles: Record<VolunteerRole, RoleAvailability>;

@@ -6,7 +6,7 @@ interface SupplierPickerProps {
 
 export function SupplierPicker({ supplierNames, selectedSupplier, onSelectSupplier }: SupplierPickerProps) {
   return (
-    <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
+    <section className="rounded-xl border border-stone-200 bg-white p-4">
       <h2 className="mb-3 text-base font-semibold text-stone-900">Bezorgers van deze dag</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {supplierNames.map((supplier) => {

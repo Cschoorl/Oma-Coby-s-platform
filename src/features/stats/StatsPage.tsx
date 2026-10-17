@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Notice, SectionTitle, StatTile, formatEuro, formatNumber, todayIso } from "../../components/ui";
+import { Card, Notice, SectionTitle, StatStrip, formatEuro, formatNumber, todayIso } from "../../components/ui";
 
 type Metric = "oliebollen" | "orders" | "revenue";
 
@@ -120,23 +120,24 @@ export function StatsPage({ state }: { state: DashboardState }) {
         ) : null}
       </Card>
 
-      <section className="grid gap-3 sm:grid-cols-3">
-        <StatTile label="Bestellingen" value={formatNumber(now.orders)} hint={delta(now.orders, last.orders)} />
-        <StatTile label="Oliebollen verkocht" value={formatNumber(now.oliebollen)} hint={delta(now.oliebollen, last.oliebollen)} />
-        <StatTile
-          label={revenueSource === "estimate" ? "Omzet (schatting)" : "Omzet"}
-          value={revenueSource === "none" ? "n.v.t." : formatEuro(now.revenue)}
-          hint={
-            revenueSource === "none"
-              ? "Geen bedragen of prijs in de Sheet"
-              : revenueSource === "estimate"
-                ? [`Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}`, last.hasRevenue ? delta(now.revenue, last.revenue) : undefined].filter(Boolean).join(" · ")
-                : last.hasRevenue
-                  ? delta(now.revenue, last.revenue)
-                  : undefined
+      <StatStrip
+        items={[
+          { label: "Bestellingen", value: formatNumber(now.orders), hint: delta(now.orders, last.orders) },
+          { label: "Oliebollen verkocht", value: formatNumber(now.oliebollen), hint: delta(now.oliebollen, last.oliebollen) },
+          {
+            label: revenueSource === "estimate" ? "Omzet (schatting)" : "Omzet",
+            value: revenueSource === "none" ? "n.v.t." : formatEuro(now.revenue),
+            hint:
+              revenueSource === "none"
+                ? "Geen bedragen of prijs in de Sheet"
+                : revenueSource === "estimate"
+                  ? [`Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}`, last.hasRevenue ? delta(now.revenue, last.revenue) : undefined].filter(Boolean).join(" · ")
+                  : last.hasRevenue
+                    ? delta(now.revenue, last.revenue)
+                    : undefined
           }
-        />
-      </section>
+        ]}
+      />
 
       <Card>
         <SectionTitle

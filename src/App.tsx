@@ -20,33 +20,44 @@ import { useDashboard } from "./lib/useDashboard";
 interface NavItem {
   path: string;
   label: string;
+  /** One line under the page title. */
+  description: string;
   roles: Role[];
 }
 
 const NAV: NavItem[] = [
-  { path: "/inpakken", label: "Inpakken", roles: ["beheer", "inpakker"] },
-  { path: "/orders", label: "Opmerkingen & bevestiging", roles: ["beheer"] },
-  { path: "/routes", label: "Routes", roles: ["beheer"] },
-  { path: "/bezorger", label: "Bezorgers", roles: ["beheer", "bezorger"] },
-  { path: "/tussenstand", label: "Tussenstand", roles: ["beheer"] },
-  { path: "/kosten", label: "Kosten", roles: ["beheer", "inpakker", "bezorger"] },
-  { path: "/vrijwilligers", label: "Vrijwilligers", roles: ["beheer"] },
-  { path: "/agenda", label: "Agenda", roles: ["beheer", "inpakker", "bezorger"] }
+  { path: "/inpakken", label: "Inpakken", description: "Claim een order, vink MET en ZONDER af, dan GEHEEL, en rond af.", roles: ["beheer", "inpakker"] },
+  { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
+  { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
+  { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["beheer", "bezorger"] },
+  { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren.", roles: ["beheer"] },
+  { path: "/vrijwilligers", label: "Vrijwilligers", description: "Aanmeldingen en bezetting per dag.", roles: ["beheer"] },
+  { path: "/agenda", label: "Agenda", description: "Wie wanneer beschikbaar is.", roles: ["beheer", "inpakker", "bezorger"] },
+  { path: "/kosten", label: "Kosten", description: "Foto van een bon uploaden en controleren.", roles: ["beheer", "inpakker", "bezorger"] }
 ];
 
 const HOME: Record<Role, string> = { beheer: "/inpakken", inpakker: "/inpakken", bezorger: "/bezorger" };
 
 const roleLabel: Record<Role, string> = { beheer: "Beheer", inpakker: "Inpakker", bezorger: "Bezorger" };
 
-function Header({ children }: { children?: React.ReactNode }) {
+function Brand() {
   return (
-    <header className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-coby-800 via-coby-700 to-coby-600 p-6 text-white shadow-2xl">
-      <div className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full bg-white/15 blur-2xl" />
-      <div className="pointer-events-none absolute bottom-0 right-24 h-24 w-24 rounded-full bg-amber-200/20 blur-xl" />
-      <p className="text-sm font-medium tracking-wide text-coby-100">Oma Coby's Oliebollenbar</p>
-      <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Oliebollen Platform</h1>
-      {children}
-    </header>
+    <a href="#/" className="flex items-center gap-2.5">
+      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-coby-600 text-sm font-bold text-white">OC</span>
+      <span className="leading-tight">
+        <span className="block text-sm font-semibold text-stone-900">Oma Coby</span>
+        <span className="block text-xs text-stone-500">Oliebollen platform</span>
+      </span>
+    </a>
+  );
+}
+
+function DemoPill() {
+  if (backend.kind !== "demo") return null;
+  return (
+    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900" title={backend.notice}>
+      Demo
+    </span>
   );
 }
 
@@ -72,49 +83,23 @@ function App() {
     setSession(null);
   }
 
-  const shell = (content: React.ReactNode, nav?: React.ReactNode) => (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#fff8ed,_#ffe5be_52%,_#ffd296)] p-4 sm:p-6">
-      <div className="mx-auto grid w-full max-w-6xl gap-5">
-        <Header>{nav}</Header>
-        {content}
-      </div>
-    </main>
+  // Pages without login (signup, login) get a simple centred layout.
+  const simpleShell = (content: React.ReactNode) => (
+    <div className="min-h-screen bg-stone-50">
+      <header className="border-b border-stone-200 bg-white">
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
+          <Brand />
+          <DemoPill />
+        </div>
+      </header>
+      <main className="mx-auto grid max-w-3xl gap-4 px-4 py-6">{content}</main>
+    </div>
   );
 
-  if (route.path === "/aanmelden") return shell(<SignupPage />);
-  if (!session) return shell(<LoginPage onLogin={login} />);
+  if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
+  if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
   const { state, error, lastSync, run } = dashboard;
-
-  const nav = (
-    <>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-coby-100">
-        <span>
-          {session.name} · {roleLabel[session.role]}
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className={`inline-block h-2 w-2 rounded-full ${error ? "bg-red-300" : "bg-emerald-300"}`} />
-          {error ? "Geen verbinding" : lastSync ? `Live · ${lastSync.toLocaleTimeString("nl-NL")}` : "Verbinden…"}
-        </span>
-        <button type="button" className="underline decoration-white/40 underline-offset-2 hover:text-white" onClick={logout}>
-          Uitloggen
-        </button>
-      </div>
-      <nav className="mt-4 flex flex-wrap gap-2">
-        {allowed.map((item) => (
-          <a
-            key={item.path}
-            href={`#${item.path}`}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
-              current?.path === item.path ? "bg-white/20 text-white" : "bg-white/0 text-white/90 hover:bg-white/10"
-            }`}
-          >
-            {item.label}
-          </a>
-        ))}
-      </nav>
-    </>
-  );
 
   let page: React.ReactNode = null;
   if (state) {
@@ -146,31 +131,69 @@ function App() {
     }
   }
 
-  return shell(
-    <>
-      {error && !state ? (
-        <Notice tone="error">
-          {error}
-          {/toegang/i.test(error) ? (
-            <>
-              {" "}
-              <button type="button" className="font-semibold underline" onClick={logout}>
-                Opnieuw inloggen
-              </button>
-            </>
-          ) : null}
-        </Notice>
-      ) : null}
-      {error && state ? <Notice tone="warning">Verbinding verbroken, je ziet de laatst bekende stand. ({error})</Notice> : null}
-      {!state && !error ? <Notice>Gegevens laden…</Notice> : null}
-      {page}
-      {backend.kind === "demo" ? (
-        <Notice tone="info">
-          <span className="font-semibold">Demo-modus.</span> {backend.notice}
-        </Notice>
-      ) : null}
-    </>,
-    nav
+  return (
+    <div className="min-h-screen bg-stone-50">
+      <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+          <Brand />
+          <div className="flex items-center gap-3 text-xs text-stone-600">
+            <DemoPill />
+            <span className="hidden items-center gap-1.5 sm:inline-flex" title={lastSync ? `Bijgewerkt ${lastSync.toLocaleTimeString("nl-NL")}` : undefined}>
+              <span className={`inline-block h-2 w-2 rounded-full ${error ? "bg-red-500" : lastSync ? "bg-emerald-500" : "bg-stone-300"}`} />
+              {error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}
+            </span>
+            <span className="hidden text-stone-300 sm:inline">|</span>
+            <span className="text-stone-800">
+              <span className="font-semibold">{session.name}</span>
+              <span className="hidden text-stone-500 sm:inline"> · {roleLabel[session.role]}</span>
+            </span>
+            <button type="button" className="rounded-md px-2 py-1 font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900" onClick={logout}>
+              Uitloggen
+            </button>
+          </div>
+        </div>
+        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2 sm:px-4" aria-label="Hoofdmenu">
+          {allowed.map((item) => (
+            <a
+              key={item.path}
+              href={`#${item.path}`}
+              aria-current={current?.path === item.path ? "page" : undefined}
+              className={`shrink-0 border-b-2 px-3 py-2.5 text-sm transition ${
+                current?.path === item.path ? "border-coby-600 font-semibold text-stone-900" : "border-transparent text-stone-600 hover:text-stone-900"
+              }`}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+      </header>
+
+      <main className="mx-auto grid max-w-6xl gap-5 px-4 py-6">
+        {current ? (
+          <div>
+            <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">{current.label}</h1>
+            <p className="mt-0.5 text-sm text-stone-600">{current.description}</p>
+          </div>
+        ) : null}
+        {error && !state ? (
+          <Notice tone="error">
+            {error}
+            {/toegang/i.test(error) ? (
+              <>
+                {" "}
+                <button type="button" className="font-semibold underline" onClick={logout}>
+                  Opnieuw inloggen
+                </button>
+              </>
+            ) : null}
+          </Notice>
+        ) : null}
+        {error && state ? <Notice tone="warning">Verbinding verbroken, je ziet de laatst bekende stand. ({error})</Notice> : null}
+        {!state && !error ? <p className="text-sm text-stone-500">Gegevens laden…</p> : null}
+        {page}
+        {backend.kind === "demo" ? <p className="pt-2 text-center text-xs text-stone-500">Demo-modus: {backend.notice}</p> : null}
+      </main>
+    </div>
   );
 }
 

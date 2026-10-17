@@ -93,13 +93,13 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
   return (
     <section className="grid gap-4">
       {volunteers.length > 0 ? (
-        <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
+        <section className="rounded-xl border border-stone-200 bg-white p-4">
           <h2 className="mb-1 text-base font-semibold text-stone-900">Bezetting per dag</h2>
           <p className="mb-3 text-sm text-stone-600">Rood betekent dat er die dag nog weinig mensen zijn. Kun je dan? Mail de planning.</p>
           <StaffingCalendar counts={countSignups(volunteers)} />
         </section>
       ) : null}
-      <section className="rounded-2xl border border-white/60 bg-white/85 p-4 shadow-card backdrop-blur">
+      <section className="rounded-xl border border-stone-200 bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-[240px] flex-1">
             <p className="text-xs uppercase tracking-wide text-stone-500">Zoek bezorger</p>
@@ -122,7 +122,7 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
           Nog geen aanmeldingen met dagen. Zodra vrijwilligers zich aanmelden (formulier of aanmeldpagina) verschijnen ze hier.
         </section>
       ) : (
-        <section className="rounded-2xl border border-white/60 bg-white/90 p-3 shadow-card backdrop-blur sm:p-4">
+        <section className="rounded-xl border border-stone-200 bg-white p-4">
           {columns.length === 0 ? (
             <p className="text-sm text-stone-600">Geen resultaten voor je zoekopdracht.</p>
           ) : (

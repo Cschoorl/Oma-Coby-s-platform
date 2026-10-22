@@ -3,7 +3,7 @@ import { backend, type Session } from "../../data/backend";
 import type { DashboardState, OrderMeta } from "../../types/dashboard";
 import { emptyMeta } from "../../types/dashboard";
 import type { Order } from "../../types/order";
-import { Badge, Card, Notice, SectionTitle, Segmented, formatDayLabel, ghostButton, inputClass, primaryButton, secondaryButton } from "../../components/ui";
+import { Badge, Bollenteller, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Notice, SectionTitle, Segmented, formatDayLabel, ghostButton, inputClass, primaryButton, toast } from "../../components/ui";
 import { confirmationSubject, defaultConfirmation } from "../../utils/confirmation";
 import { effectiveNote } from "../../utils/orderUtils";
 
@@ -60,41 +60,44 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
           value={filter}
           onChange={setFilter}
           options={[
-            ["review", `Opmerking beoordelen (${counts.review})`],
-            ["confirm", `Nog bevestigen (${counts.confirm})`],
-            ["all", `Alle (${state.orders.length})`]
+            ["review", "Opmerking beoordelen", counts.review],
+            ["confirm", "Nog bevestigen", counts.confirm],
+            ["all", "Alle", state.orders.length]
           ]}
         />
-        <input className={`${inputClass} sm:max-w-xs`} type="search" placeholder="Zoek op naam, plaats of order" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <label className="relative w-full sm:max-w-xs">
+          <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input className={`${inputClass} pl-9`} type="search" placeholder="Zoek op naam, plaats of order" aria-label="Zoek bestellingen" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
       </div>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
-        <Card className="p-3">
-          <div className="grid max-h-[70vh] gap-2 overflow-y-auto">
+        <Card className="p-1.5 sm:p-1.5">
+          <div className="grid max-h-[70vh] gap-0.5 overflow-y-auto" role="listbox" aria-label="Bestellingen">
             {orders.map((order) => {
               const meta = metaOf(order.id);
               return (
                 <button
                   key={order.id}
                   type="button"
+                  role="option"
+                  aria-selected={selected?.id === order.id}
                   onClick={() => setSelectedId(order.id)}
-                  className={`grid gap-1 rounded-xl border p-3 text-left transition ${
-                    selected?.id === order.id ? "border-coby-500 bg-white ring-2 ring-coby-100" : "border-stone-200 bg-white hover:border-stone-300"
-                  }`}
+                  className={`grid gap-1 rounded-lg px-3 py-2.5 text-left transition ${selected?.id === order.id ? "bg-gouwe-50 ring-1 ring-inset ring-gouwe/70" : "hover:bg-vul"}`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-stone-900">{order.locationName || order.contactPerson}</span>
-                    <span className="text-xs text-stone-500">{order.id}</span>
+                    <span className="font-bold text-krent">{order.locationName || order.contactPerson}</span>
+                    <span className="text-xs tabular-nums text-muted">{order.id}</span>
                   </div>
-                  <span className="text-xs text-stone-600">{formatDayLabel(order.deliveryDate)} · {order.withRaisins + order.withoutRaisins} oliebollen</span>
+                  <span className="text-xs text-muted">{formatDayLabel(order.deliveryDate)} · {order.withRaisins + order.withoutRaisins} oliebollen</span>
                   <span className="flex flex-wrap gap-1">
-                    {order.extras ? meta.noteStatus === "beoordeeld" ? <Badge tone="green">Opmerking beoordeeld</Badge> : <Badge tone="amber">Opmerking nieuw</Badge> : null}
-                    {meta.confirmationStatus === "verzonden" ? <Badge tone="green">Bevestigd</Badge> : meta.confirmationStatus === "concept" ? <Badge tone="coby">Concept klaar</Badge> : null}
+                    {order.extras ? meta.noteStatus === "beoordeeld" ? <Badge tone="klaar">Opmerking beoordeeld</Badge> : <Badge tone="aandacht">Opmerking nieuw</Badge> : null}
+                    {meta.confirmationStatus === "verzonden" ? <Badge tone="klaar">Bevestigd</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept klaar</Badge> : null}
                   </span>
                 </button>
               );
             })}
-            {orders.length === 0 ? <p className="p-3 text-sm text-stone-600">Niets te doen in deze selectie.</p> : null}
+            {orders.length === 0 ? <EmptyState title="Niets te doen." text="Alle opmerkingen en bevestigingen in deze selectie zijn afgehandeld. Héééél netjes." /> : null}
           </div>
         </Card>
 
@@ -116,6 +119,7 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
   const [text, setText] = useState(meta.confirmationText || defaultConfirmation(order, effectiveNote(order, meta)));
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
+  const [askSend, setAskSend] = useState(false);
 
   // Pick up edits made by someone else, unless this user is typing in the field.
   const [noteDirty, setNoteDirty] = useState(false);
@@ -153,23 +157,35 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
 
   async function sendConfirmation() {
     if (!order.email) return;
-    if (!window.confirm(`Bevestiging versturen naar ${order.email}?`)) return;
+    setAskSend(false);
     const ok = await act("send", () => backend.sendConfirmation(session, order.id, confirmationSubject(order), text), `Bevestiging verzonden naar ${order.email}.`);
-    if (ok) setTextDirty(false);
+    if (ok) {
+      setTextDirty(false);
+      toast("Bevestiging is de deur uit.");
+    }
   }
 
   return (
     <div className="grid content-start gap-4">
       <Card>
         <SectionTitle title={order.locationName || order.contactPerson} subtitle={`${order.id} · ${formatDayLabel(order.deliveryDate)} ${order.plannedTime}`} />
-        <dl className="grid gap-1 text-sm text-stone-700 sm:grid-cols-2">
-          <div>Contact: {order.contactPerson || "–"}</div>
-          <div>Telefoon: {order.phone || "–"}</div>
-          <div>E-mail: {order.email || <span className="text-amber-800">geen e-mailadres</span>}</div>
-          <div>Klant: {order.customerType === "onbekend" ? "type onbekend" : order.customerType}</div>
-          <div>MET: {order.withRaisins} · ZONDER: {order.withoutRaisins}</div>
-          <div>Bezorger: {order.supplierName}</div>
-        </dl>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
+          <dl className="grid content-start gap-1 text-sm text-krent sm:grid-cols-2">
+            <div><span className="text-muted">Contact:</span> {order.contactPerson || "–"}</div>
+            <div><span className="text-muted">Telefoon:</span> {order.phone || "–"}</div>
+            <div><span className="text-muted">E-mail:</span> {order.email || <span className="text-gouwe-ink">geen e-mailadres</span>}</div>
+            <div><span className="text-muted">Klant:</span> {order.customerType === "onbekend" ? "type onbekend" : order.customerType}</div>
+            <div><span className="text-muted">Bezorger:</span> {order.supplierName || "–"}</div>
+          </dl>
+          <Bollenteller
+            compact
+            cells={[
+              { label: "Met", value: order.withRaisins },
+              { label: "Zonder", value: order.withoutRaisins },
+              { label: "Totaal", value: order.withRaisins + order.withoutRaisins }
+            ]}
+          />
+        </div>
       </Card>
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
@@ -178,9 +194,9 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
         <SectionTitle
           title="Opmerking"
           subtitle="Pas de opmerking aan als dat nodig is. Inpakkers en bezorgers zien direct de beoordeelde versie."
-          action={meta.noteStatus === "beoordeeld" ? <Badge tone="green">Beoordeeld{meta.updatedBy ? ` door ${meta.updatedBy}` : ""}</Badge> : <Badge tone="amber">Nog niet beoordeeld</Badge>}
+          action={meta.noteStatus === "beoordeeld" ? <Badge tone="klaar">Beoordeeld{meta.updatedBy ? ` door ${meta.updatedBy}` : ""}</Badge> : <Badge tone="aandacht">Nog niet beoordeeld</Badge>}
         />
-        {order.extras ? <p className="mb-2 rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-600">Origineel uit de Sheet: {order.extras}</p> : null}
+        {order.extras ? <p className="mb-2 text-xs text-muted">Origineel uit de Sheet: {order.extras}</p> : null}
         <textarea
           className={`${inputClass} min-h-[90px]`}
           value={note}
@@ -194,7 +210,7 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
           <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => void saveNote(true)}>
             Opslaan en markeren als beoordeeld
           </button>
-          <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => void saveNote(false)}>
+          <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void saveNote(false)}>
             Alleen opslaan
           </button>
         </div>
@@ -205,12 +221,12 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
           title="Klantbevestiging"
           subtitle="Controleer en pas de tekst aan voordat je verstuurt. Dit is een bevestiging, geen factuur."
           action={
-            sent ? <Badge tone="green">Verzonden {meta.confirmationSentAt}</Badge> : meta.confirmationStatus === "concept" ? <Badge tone="coby">Concept opgeslagen</Badge> : <Badge>Nog niet klaargezet</Badge>
+            sent ? <Badge tone="klaar">Verzonden {meta.confirmationSentAt}</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept opgeslagen</Badge> : <Badge tone="zacht">Nog niet klaargezet</Badge>
           }
         />
-        <p className="mb-2 text-xs text-stone-600">Onderwerp: {confirmationSubject(order)}</p>
+        <p className="mb-2 text-xs text-muted">Onderwerp: {confirmationSubject(order)}</p>
         <textarea
-          className={`${inputClass} min-h-[320px] font-mono text-[13px] leading-relaxed`}
+          className={`${inputClass} min-h-[320px] text-[13px] leading-relaxed`}
           value={text}
           disabled={sent}
           onChange={(e) => {
@@ -224,36 +240,45 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
           </div>
         ) : null}
         {!sent ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={secondaryButton}
-              disabled={busy !== null}
-              onClick={async () => {
-                const ok = await act("save", () => backend.saveConfirmation(session, order.id, text), "Concept opgeslagen.");
-                if (ok) setTextDirty(false);
-              }}
-            >
-              Concept opslaan
-            </button>
-            <button
-              type="button"
-              className={ghostButton}
-              disabled={busy !== null}
-              onClick={() => {
-                setText(defaultConfirmation(order, effectiveNote(order, meta)));
-                setTextDirty(true);
-              }}
-            >
-              Standaardtekst herstellen
-            </button>
-            <button type="button" className={ghostButton} onClick={() => void navigator.clipboard?.writeText(text)}>
-              Kopiëren
-            </button>
-            <button type="button" className={primaryButton} disabled={busy !== null || !order.email} onClick={() => void sendConfirmation()}>
-              {busy === "send" ? "Versturen…" : "Versturen per e-mail"}
-            </button>
-          </div>
+          askSend ? (
+            <div className="mt-3">
+              <ConfirmPanel confirmLabel="Ja, versturen" busy={busy === "send"} onConfirm={() => void sendConfirmation()} onCancel={() => setAskSend(false)}>
+                <p>
+                  Bevestiging versturen naar <b>{order.email}</b>?
+                </p>
+              </ConfirmPanel>
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              <button type="button" className={primaryButton} disabled={busy !== null || !order.email} onClick={() => setAskSend(true)}>
+                <Icon name="mail" />
+                {busy === "send" ? "Versturen…" : "Versturen per e-mail"}
+              </button>
+              <button
+                type="button"
+                className={ghostButton}
+                disabled={busy !== null}
+                onClick={async () => {
+                  const ok = await act("save", () => backend.saveConfirmation(session, order.id, text), "Concept opgeslagen.");
+                  if (ok) setTextDirty(false);
+                }}
+              >
+                Concept opslaan
+              </button>
+              <button
+                type="button"
+                className={ghostButton}
+                disabled={busy !== null}
+                onClick={() => {
+                  setText(defaultConfirmation(order, effectiveNote(order, meta)));
+                  setTextDirty(true);
+                }}
+              >
+                Standaardtekst
+              </button>
+              <CopyButton text={text} label="Kopiëren" className={ghostButton} />
+            </div>
+          )
         ) : null}
       </Card>
     </div>

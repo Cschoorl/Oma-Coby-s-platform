@@ -17,6 +17,11 @@ via een Apps Script.
 | Agenda | iedereen met code | wie wanneer beschikbaar is, uit de aanmeldingen |
 | Pakbonnen (`#/pakbonnen`) | inpakker, beheer | printbare pakbon per order, in routevolgorde |
 
+## Huisstijl
+
+De schermen volgen de huisstijl van Oma Coby's Oliebollenbar: fonts, kleuren en bouwstenen staan in
+`tailwind.config.js` en `src/components/ui.tsx`, de regels in [docs/huisstijl-regels.md](docs/huisstijl-regels.md).
+
 ## Starten
 
 ```bash

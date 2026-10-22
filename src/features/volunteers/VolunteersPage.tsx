@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { backend, type AnonymizeResult, type Session } from "../../data/backend";
 import type { DashboardState, VolunteerRole } from "../../types/dashboard";
 import { VOLUNTEER_ROLES, volunteerRoleLabel } from "../../types/dashboard";
-import { Badge, Card, Notice, SectionTitle, StatStrip, inputClass, secondaryButton } from "../../components/ui";
+import { Badge, Card, CopyButton, EmptyState, Icon, Notice, SectionTitle, StatStrip, dangerButton, fieldLabel, ghostButton, inputClass, taskClass, textAction } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { whatsappNumber } from "../routes/routeUtils";
 import { StaffingCalendar } from "../../components/StaffingCalendar";
@@ -53,14 +53,17 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
 
   return (
     <div className="grid gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3">
-        <p className="text-sm text-stone-600">
-          Aanmeldlink voor vrijwilligers (geen code nodig): <span className="break-all font-medium text-stone-900">{signupLink}</span>
+      <Card>
+        <SectionTitle
+          title="Waar is nog plek?"
+          subtitle="Hoeveel vrijwilligers zich per taak hebben aangemeld, tegenover wat er nodig is."
+          action={<CopyButton text={signupLink} label="Kopieer aanmeldlink" done="Aanmeldlink gekopieerd" />}
+        />
+        <StaffingCalendar counts={countSignups(state.volunteers)} />
+        <p className="mt-3 text-xs text-muted">
+          Aanmeldlink (geen code nodig): <span className="break-all text-krent">{signupLink}</span>
         </p>
-        <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(signupLink)}>
-          Kopieer link
-        </button>
-      </div>
+      </Card>
 
       <StatStrip
         items={[
@@ -74,15 +77,12 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
       />
 
       <Card>
-        <SectionTitle title="Bezetting per dag" subtitle="Hoeveel vrijwilligers zich per taak hebben aangemeld, tegenover wat er nodig is. Rood = weinig." />
-        <StaffingCalendar counts={countSignups(state.volunteers)} />
-      </Card>
-
-
-      <Card>
         <SectionTitle title="Vrijwilligers" subtitle={`${filtered.length} van ${state.volunteers.length} getoond`} />
         <div className="mb-3 grid gap-2 sm:grid-cols-3">
-          <input className={inputClass} type="search" placeholder="Zoek op naam of woonplaats" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <label className="relative">
+            <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+            <input className={`${inputClass} pl-9`} type="search" placeholder="Zoek op naam of woonplaats" aria-label="Zoek vrijwilligers" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
           <select className={inputClass} value={role} onChange={(e) => setRole(e.target.value as VolunteerRole | "alle")}>
             <option value="alle">Alle taken</option>
             {VOLUNTEER_ROLES.map((r) => (
@@ -100,46 +100,46 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
             ))}
           </select>
         </div>
-        <div className="grid gap-2">
+        <div className="grid">
           {filtered.map((v) => (
-            <article key={v.id} className="grid gap-1 rounded-xl border border-stone-200 bg-white p-3 text-sm">
+            <article key={v.id} className="grid gap-1 border-b border-lijn py-3.5 text-sm first:pt-1 last:border-0 last:pb-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold text-stone-900">
+                <p className="font-bold text-krent">
                   {v.name}
-                  {v.address || v.city ? <span className="font-normal text-stone-500"> · {[v.address, v.city].filter(Boolean).join(", ")}</span> : null}
+                  {v.address || v.city ? <span className="font-normal text-muted"> · {[v.address, v.city].filter(Boolean).join(", ")}</span> : null}
                 </p>
                 <span className="flex flex-wrap gap-1">
                   {VOLUNTEER_ROLES.filter((r) => v.roles[r].wants).map((r) => (
-                    <Badge key={r} tone="coby">
+                    <span key={r} className={`rounded px-2 py-0.5 text-[11px] font-bold ${taskClass[r]}`}>
                       {volunteerRoleLabel[r]}
-                    </Badge>
+                    </span>
                   ))}
-                  {v.cargoBike ? <Badge tone="blue">Bakfiets</Badge> : null}
+                  {v.cargoBike ? <Badge tone="zacht">Bakfiets</Badge> : null}
                 </span>
               </div>
-              <p className="text-stone-700">
+              <p className="text-krent">
                 {v.phone ? (
-                  <a className="underline" href={`https://wa.me/${whatsappNumber(v.phone)}`} target="_blank" rel="noreferrer">
+                  <a className={textAction} href={`https://wa.me/${whatsappNumber(v.phone)}`} target="_blank" rel="noreferrer">
                     {v.phone}
                   </a>
                 ) : null}
                 {v.phone && v.email ? " · " : null}
                 {v.email ? (
-                  <a className="underline" href={`mailto:${v.email}`}>
+                  <a className={textAction} href={`mailto:${v.email}`}>
                     {v.email}
                   </a>
                 ) : null}
               </p>
               {VOLUNTEER_ROLES.filter((r) => v.roles[r].wants && v.roles[r].days.length > 0).map((r) => (
-                <p key={r} className="text-xs text-stone-600">
-                  <span className="font-semibold">{volunteerRoleLabel[r]}:</span> {v.roles[r].days.join(", ")}
+                <p key={r} className="text-xs text-muted">
+                  <span className="font-bold text-krent">{volunteerRoleLabel[r]}:</span> {v.roles[r].days.join(", ")}
                 </p>
               ))}
-              {v.remark ? <p className="text-xs text-stone-600">Opmerking: {v.remark}</p> : null}
-              {v.createdAt ? <p className="text-[11px] text-stone-400">Aangemeld {v.createdAt}</p> : null}
+              {v.remark ? <p className="text-xs text-muted">Opmerking: {v.remark}</p> : null}
+              {v.createdAt ? <p className="text-[11px] text-muted/70">Aangemeld {v.createdAt}</p> : null}
             </article>
           ))}
-          {filtered.length === 0 ? <p className="text-sm text-stone-600">Geen aanmeldingen in deze selectie.</p> : null}
+          {filtered.length === 0 ? <EmptyState title="Geen aanmeldingen in deze selectie." text="Kies een andere taak of dag." /> : null}
         </div>
       </Card>
       <PrivacyCard session={session} run={run} />
@@ -174,7 +174,7 @@ function PrivacyCard({ session, run }: { session: Session; run: (change: () => P
   }
 
   return (
-    <Card className="border-red-200">
+    <Card tone="danger">
       <SectionTitle
         title="Na de actie: persoonsgegevens verwijderen (AVG)"
         subtitle="Wist alle aanmeldingen van vrijwilligers, de namen, telefoonnummers, e-mailadressen, adressen en opmerkingen van klanten, IBANs, routes en de bonfoto's in Drive. Aantallen en bedragen blijven staan voor de cijfers van volgend jaar."
@@ -185,22 +185,22 @@ function PrivacyCard({ session, run }: { session: Session; run: (change: () => P
         </Notice>
       ) : null}
       {!open ? (
-        <button type="button" className={`${secondaryButton} border-red-300 text-red-700 hover:bg-red-50`} onClick={() => setOpen(true)}>
+        <button type="button" className={dangerButton} onClick={() => setOpen(true)}>
           Persoonsgegevens verwijderen…
         </button>
       ) : (
         <div className="grid gap-2">
           <Notice tone="warning">Dit kan niet ongedaan worden gemaakt. Doe dit pas als alles is bezorgd en uitbetaald. Maak eventueel eerst een kopie van de Sheet.</Notice>
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Typ VERWIJDER om te bevestigen</span>
+            <span className={fieldLabel}>Typ VERWIJDER om te bevestigen</span>
             <input className={`${inputClass} max-w-xs`} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
           </label>
           {error ? <Notice tone="error">{error}</Notice> : null}
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-40" disabled={busy || confirm.trim() !== "VERWIJDER"} onClick={() => void go()}>
+            <button type="button" className="inline-flex min-h-[40px] items-center justify-center rounded-md bg-feest-ink px-4 py-2 text-sm font-bold text-meel hover:bg-feest-hover disabled:cursor-not-allowed disabled:opacity-40" disabled={busy || confirm.trim() !== "VERWIJDER"} onClick={() => void go()}>
               {busy ? "Bezig…" : "Definitief verwijderen"}
             </button>
-            <button type="button" className={secondaryButton} disabled={busy} onClick={() => setOpen(false)}>
+            <button type="button" className={ghostButton} disabled={busy} onClick={() => setOpen(false)}>
               Annuleren
             </button>
           </div>

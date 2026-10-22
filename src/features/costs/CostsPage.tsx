@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { backend, isValidIban, normaliseIban, type Session } from "../../data/backend";
 import type { CostEntry, CostStatus, DashboardState, ReceiptFields } from "../../types/dashboard";
-import { costStatusLabel } from "../../types/dashboard";
-import { Badge, Card, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, secondaryButton, todayIso } from "../../components/ui";
+import { Badge, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Notice, SectionTitle, Segmented, StatStrip, StatusTrack, fieldLabel, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, secondaryButton, textAction, todayIso } from "../../components/ui";
 
 interface CostsPageProps {
   state: DashboardState;
@@ -75,12 +74,9 @@ function fromFields(fields: ReceiptFields, photoUrl: string): Draft {
   };
 }
 
-const statusTone: Record<CostStatus, "neutral" | "amber" | "green" | "blue" | "coby"> = {
-  ingediend: "amber",
-  goedgekeurd: "blue",
-  afgekeurd: "neutral",
-  uitbetaald: "green"
-};
+const STEPS = ["Ingediend", "Goedgekeurd", "Uitbetaald"];
+const stepOf: Record<CostStatus, number> = { ingediend: 0, goedgekeurd: 1, uitbetaald: 2, afgekeurd: -1 };
+const stepHint: Record<CostStatus, string> = { ingediend: "beheer kijkt ernaar", goedgekeurd: "uitbetaling volgt", uitbetaald: "", afgekeurd: "" };
 
 export function CostsPage({ state, session, run }: CostsPageProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -134,7 +130,8 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
       <Card>
         <SectionTitle title="Kosten declareren" subtitle="Maak een foto van je bon. Datum, bedrag, leverancier en omschrijving worden automatisch uitgelezen; jij controleert, vult je IBAN in en dient in." />
         <div className="flex flex-wrap gap-2">
-          <label className={`${primaryButton} cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
+          <label className={`${primaryButton} min-h-[48px] cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
+            <Icon name="camera" />
             {busy === "read" ? "Bon wordt uitgelezen…" : "Foto van bon maken of kiezen"}
             <input
               type="file"
@@ -148,7 +145,7 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
             />
           </label>
           {!draft ? (
-            <button type="button" className={secondaryButton} onClick={() => setDraft(emptyDraft())}>
+            <button type="button" className={ghostButton} onClick={() => setDraft(emptyDraft())}>
               Zonder foto invullen
             </button>
           ) : null}
@@ -161,30 +158,30 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
         <Card>
           <SectionTitle title="Controleer de gegevens" subtitle={`Wordt ingediend op naam van ${session.name}.`} />
           <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-            {preview ? <img src={preview} alt="Foto van de bon" className="max-h-80 w-full rounded-xl border border-stone-200 object-contain" /> : <div className="hidden md:block" />}
+            {preview ? <img src={preview} alt="Foto van de bon" className="max-h-80 w-full rounded-kaart bg-vul object-contain" /> : <div className="hidden md:block" />}
             <div className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Datum</span>
+                  <span className={fieldLabel}>Datum</span>
                   <input type="date" className={inputClass} value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
                 </label>
                 <label className="grid gap-1 text-sm">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Bedrag (€)</span>
+                  <span className={fieldLabel}>Bedrag (€)</span>
                   <input inputMode="decimal" className={inputClass} placeholder="0,00" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
                 </label>
               </div>
               <label className="grid gap-1 text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Leverancier</span>
+                <span className={fieldLabel}>Leverancier</span>
                 <input className={inputClass} value={draft.supplier} onChange={(e) => setDraft({ ...draft, supplier: e.target.value })} />
               </label>
               <label className="grid gap-1 text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Omschrijving</span>
+                <span className={fieldLabel}>Omschrijving</span>
                 <textarea className={`${inputClass} min-h-[70px]`} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
               </label>
               <label className="grid gap-1 text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">IBAN voor de terugbetaling</span>
+                <span className={fieldLabel}>IBAN voor de terugbetaling</span>
                 <input className={`${inputClass} font-mono uppercase`} placeholder="NL00 BANK 0123 4567 89" value={draft.iban} onChange={(e) => setDraft({ ...draft, iban: e.target.value })} autoComplete="off" />
-                <span className="text-xs text-stone-500">Alleen beheer ziet je volledige IBAN. Dit apparaat onthoudt hem voor de volgende keer.</span>
+                <span className="text-xs text-muted">Alleen beheer ziet je volledige IBAN. Dit apparaat onthoudt hem voor de volgende keer.</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => void save()}>
@@ -192,7 +189,7 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
                 </button>
                 <button
                   type="button"
-                  className={secondaryButton}
+                  className={ghostButton}
                   disabled={busy !== null}
                   onClick={() => {
                     setDraft(null);
@@ -212,14 +209,18 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
   );
 }
 
+/** Three dots and one word; a rejected declaration shows the reason instead. */
 function StatusLine({ cost }: { cost: CostEntry }) {
-  return (
-    <span className="grid gap-0.5">
-      <Badge tone={statusTone[cost.status]}>{costStatusLabel[cost.status]}</Badge>
-      {cost.status === "afgekeurd" && cost.reason ? <span className="text-xs text-stone-600">Reden: {cost.reason}</span> : null}
-      {cost.status === "uitbetaald" && cost.paidAt ? <span className="text-xs text-stone-500">op {cost.paidAt}</span> : null}
-    </span>
-  );
+  if (cost.status === "afgekeurd") {
+    return (
+      <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+        <Badge tone="probleem">Afgekeurd</Badge>
+        {cost.reason ? <span>Reden: {cost.reason}</span> : null}
+      </p>
+    );
+  }
+  const hint = cost.status === "uitbetaald" && cost.paidAt ? `op ${cost.paidAt}` : stepHint[cost.status];
+  return <StatusTrack step={stepOf[cost.status]} labels={STEPS} hint={hint || undefined} />;
 }
 
 /** A volunteer sees only their own declarations and where they are in the process. */
@@ -227,21 +228,18 @@ function MyCosts({ costs }: { costs: CostEntry[] }) {
   const open = costs.filter((c) => c.status === "ingediend" || c.status === "goedgekeurd").reduce((sum, c) => sum + c.amount, 0);
   return (
     <Card>
-      <SectionTitle title="Mijn declaraties" subtitle={costs.length ? `${costs.length} ingediend · nog te ontvangen ${formatEuro(open)}` : undefined} />
-      {costs.length === 0 ? <p className="text-sm text-stone-600">Je hebt nog niets gedeclareerd.</p> : null}
-      <div className="grid gap-2">
+      <SectionTitle title="Mijn declaraties" subtitle={costs.length ? <>nog te ontvangen <b className="tabular-nums text-krent">{formatEuro(open)}</b></> : undefined} />
+      {costs.length === 0 ? <EmptyState title="Nog niets gedeclareerd." text="Iets voorgeschoten voor de actie? Maak een foto van de bon hierboven." /> : null}
+      <div className="grid">
         {[...costs].reverse().map((c) => (
-          <div key={c.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-stone-200 p-3 text-sm">
-            <div className="min-w-0">
-              <p className="font-semibold text-stone-900">
-                {formatEuro(c.amount)} · {c.supplier}
-              </p>
-              <p className="text-xs text-stone-500">
-                {c.date}
-                {c.description ? ` · ${c.description}` : ""}
-                {c.iban ? ` · ${c.iban}` : ""}
-              </p>
-            </div>
+          <div key={c.id} className="border-b border-lijn py-3.5 text-sm first:pt-0 last:border-0 last:pb-0">
+            <p>
+              <span className="font-serif text-xl font-bold tabular-nums text-krent">{formatEuro(c.amount)}</span> <b className="text-krent">{c.supplier}</b>
+            </p>
+            <p className="text-xs text-muted">
+              {c.date}
+              {c.description ? ` · ${c.description}` : ""}
+            </p>
             <StatusLine cost={c} />
           </div>
         ))}
@@ -256,6 +254,8 @@ function AdminCosts({ state, session, run }: CostsPageProps) {
   const [filter, setFilter] = useState<AdminFilter>("ingediend");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Rejecting asks for a reason and paying for a date, in the row itself instead of a browser prompt.
+  const [asking, setAsking] = useState<{ id: string; kind: "afkeuren" | "uitbetalen"; value: string } | null>(null);
 
   const sum = (status: CostStatus) => state.costs.filter((c) => c.status === status).reduce((s, c) => s + c.amount, 0);
   const count = (status: CostStatus) => state.costs.filter((c) => c.status === status).length;
@@ -274,20 +274,19 @@ function AdminCosts({ state, session, run }: CostsPageProps) {
     }
   }
 
-  function reject(c: CostEntry) {
-    const reason = window.prompt(`Waarom keur je de declaratie van ${c.createdBy} (${formatEuro(c.amount)}) af?`);
-    if (reason === null) return;
-    if (!reason.trim()) {
-      setError("Geef een reden, dan weet de vrijwilliger waarom.");
-      return;
+  function confirmAsk(c: CostEntry) {
+    if (!asking) return;
+    const value = asking.value.trim();
+    if (asking.kind === "afkeuren") {
+      if (!value) {
+        setError("Geef een reden, dan weet de vrijwilliger waarom.");
+        return;
+      }
+      void act(c.id, () => backend.reviewCost(session, c.id, "afgekeurd", value));
+    } else {
+      void act(c.id, () => backend.payCost(session, c.id, true, value || todayIso()));
     }
-    void act(c.id, () => backend.reviewCost(session, c.id, "afgekeurd", reason));
-  }
-
-  function pay(c: CostEntry) {
-    const date = window.prompt(`Datum van uitbetaling aan ${c.createdBy} (${formatEuro(c.amount)}):`, todayIso());
-    if (date === null) return;
-    void act(c.id, () => backend.payCost(session, c.id, true, date.trim()));
+    setAsking(null);
   }
 
   return (
@@ -309,9 +308,9 @@ function AdminCosts({ state, session, run }: CostsPageProps) {
               value={filter}
               onChange={setFilter}
               options={[
-                ["ingediend", `Te beoordelen (${count("ingediend")})`],
-                ["goedgekeurd", `Uit te betalen (${count("goedgekeurd")})`],
-                ["alles", `Alles (${state.costs.length})`]
+                ["ingediend", "Te beoordelen", count("ingediend")],
+                ["goedgekeurd", "Uit te betalen", count("goedgekeurd")],
+                ["alles", "Alles", state.costs.length]
               ]}
             />
           }
@@ -321,47 +320,70 @@ function AdminCosts({ state, session, run }: CostsPageProps) {
             <Notice tone="error">{error}</Notice>
           </div>
         ) : null}
-        <div className="grid gap-2">
+        <div className="grid">
           {visible.map((c) => (
-            <div key={c.id} className="grid gap-2 rounded-lg border border-stone-200 p-3 text-sm sm:grid-cols-[1fr_auto]">
+            <div key={c.id} className="grid gap-2 border-b border-lijn py-3.5 text-sm first:pt-0 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_auto]">
               <div className="min-w-0">
-                <p className="font-semibold text-stone-900">
-                  {formatEuro(c.amount)} · {c.supplier} <span className="font-normal text-stone-500">door {c.createdBy || "–"}</span>
+                <p>
+                  <span className="font-serif text-xl font-bold tabular-nums text-krent">{formatEuro(c.amount)}</span> <b className="text-krent">{c.supplier}</b>{" "}
+                  <span className="text-muted">door {c.createdBy || "–"}</span>
                 </p>
-                <p className="text-xs text-stone-500">
-                  {c.date}
-                  {c.description ? ` · ${c.description}` : ""}
-                </p>
-                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-600">
+                <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted">
+                  <span>
+                    {c.date}
+                    {c.description ? ` · ${c.description}` : ""}
+                  </span>
                   {c.iban ? (
-                    <button type="button" className="font-mono underline-offset-2 hover:underline" title="Kopieer IBAN" onClick={() => void navigator.clipboard?.writeText(c.iban)}>
-                      {c.iban}
-                    </button>
+                    <CopyButton text={c.iban} label={<span className="font-mono">{c.iban}</span>} done="IBAN gekopieerd" className={textAction} icon={false} />
                   ) : (
-                    <span className="text-amber-800">geen IBAN</span>
+                    <span className="text-gouwe-ink">geen IBAN</span>
                   )}
                   {c.photoUrl ? (
-                    <a className="text-coby-700 underline" href={c.photoUrl} target="_blank" rel="noreferrer">
+                    <a className={textAction} href={c.photoUrl} target="_blank" rel="noreferrer">
                       bon bekijken
                     </a>
                   ) : null}
                 </p>
-              </div>
-              <div className="flex flex-wrap items-start justify-start gap-2 sm:justify-end">
                 <StatusLine cost={c} />
+                {asking?.id === c.id ? (
+                  <div className="mt-3 max-w-md">
+                    <ConfirmPanel
+                      confirmLabel={asking.kind === "afkeuren" ? "Afkeuren" : "Markeer uitbetaald"}
+                      busy={busy === c.id}
+                      onCancel={() => setAsking(null)}
+                      onConfirm={() => confirmAsk(c)}
+                    >
+                      <label className="grid gap-1">
+                        <span className={fieldLabel}>
+                          {asking.kind === "afkeuren" ? `Waarom keur je dit af? ${c.createdBy} ziet de reden.` : `Datum van uitbetaling aan ${c.createdBy}`}
+                        </span>
+                        <input
+                          className={inputClass}
+                          type={asking.kind === "afkeuren" ? "text" : "date"}
+                          autoFocus
+                          value={asking.value}
+                          placeholder={asking.kind === "afkeuren" ? "Bijv. bon is onleesbaar" : undefined}
+                          onChange={(e) => setAsking({ ...asking, value: e.target.value })}
+                        />
+                      </label>
+                    </ConfirmPanel>
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-start justify-start gap-1.5 sm:justify-end">
                 {c.status === "ingediend" ? (
                   <>
                     <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => void act(c.id, () => backend.reviewCost(session, c.id, "goedgekeurd", ""))}>
                       Goedkeuren
                     </button>
-                    <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => reject(c)}>
+                    <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => setAsking({ id: c.id, kind: "afkeuren", value: "" })}>
                       Afkeuren
                     </button>
                   </>
                 ) : null}
                 {c.status === "goedgekeurd" ? (
                   <>
-                    <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => pay(c)}>
+                    <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => setAsking({ id: c.id, kind: "uitbetalen", value: todayIso() })}>
                       Uitbetaald
                     </button>
                     <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void act(c.id, () => backend.reviewCost(session, c.id, "ingediend", ""))}>
@@ -382,7 +404,7 @@ function AdminCosts({ state, session, run }: CostsPageProps) {
               </div>
             </div>
           ))}
-          {visible.length === 0 ? <p className="text-sm text-stone-600">Niets in deze selectie.</p> : null}
+          {visible.length === 0 ? <EmptyState title="Niets in deze selectie." text="Alles is beoordeeld en uitbetaald." /> : null}
         </div>
       </Card>
       <MileageCard state={state} />
@@ -415,21 +437,21 @@ function MileageCard({ state }: { state: DashboardState }) {
             : "Berekende routekilometers per bezorger. Zet km_vergoeding (bijv. 0,23) in het tabblad Instellingen om ook het bedrag te zien."
         }
       />
-      {rows.length === 0 ? <p className="text-sm text-stone-600">Nog geen routes berekend.</p> : null}
+      {rows.length === 0 ? <p className="text-sm text-muted">Nog geen routes berekend.</p> : null}
       {rows.length > 0 ? (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="py-2 pr-3 font-semibold">Bezorger</th>
-              <th className="py-2 pr-3 text-right font-semibold">Routes</th>
-              <th className="py-2 pr-3 text-right font-semibold">Km</th>
-              {state.kmRate ? <th className="py-2 text-right font-semibold">Vergoeding</th> : null}
+            <tr className="border-b border-lijn-2 text-left text-[11px] uppercase tracking-[0.12em] text-muted">
+              <th className="py-2 pr-3 font-bold">Bezorger</th>
+              <th className="py-2 pr-3 text-right font-bold">Routes</th>
+              <th className="py-2 pr-3 text-right font-bold">Km</th>
+              {state.kmRate ? <th className="py-2 text-right font-bold">Vergoeding</th> : null}
             </tr>
           </thead>
           <tbody className="tabular-nums">
             {rows.map((r) => (
-              <tr key={r.courier} className="border-t border-stone-100">
-                <td className="py-2 pr-3 text-stone-900">{r.courier}</td>
+              <tr key={r.courier} className="border-b border-lijn last:border-0">
+                <td className="py-2 pr-3 text-krent">{r.courier}</td>
                 <td className="py-2 pr-3 text-right">{r.routes}</td>
                 <td className="py-2 pr-3 text-right">{formatNumber(r.km)}</td>
                 {state.kmRate ? <td className="py-2 text-right">{formatEuro(r.km * state.kmRate)}</td> : null}

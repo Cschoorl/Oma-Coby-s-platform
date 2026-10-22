@@ -12,7 +12,8 @@ import { RoutesPage } from "./features/routes/RoutesPage";
 import { StatsPage } from "./features/stats/StatsPage";
 import { SignupPage } from "./features/volunteers/SignupPage";
 import { VolunteersPage } from "./features/volunteers/VolunteersPage";
-import { Notice } from "./components/ui";
+import { Notice, Skeleton, Toaster } from "./components/ui";
+import logoUrl from "./assets/logo-oliebollenbar.svg";
 import { CONTACT_EMAIL, applyAgenda } from "./config";
 import { navigate, useRoute } from "./lib/router";
 import { loadSession, saveSession } from "./lib/session";
@@ -29,7 +30,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { path: "/inpakken", label: "Inpakken", description: "Claim een order, vink MET en ZONDER af, dan GEHEEL, en rond af.", roles: ["beheer", "inpakker"] },
+  { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["beheer", "bezorger"] },
@@ -44,14 +45,22 @@ const HOME: Record<Role, string> = { beheer: "/inpakken", inpakker: "/inpakken",
 
 const roleLabel: Record<Role, string> = { beheer: "Beheer", inpakker: "Inpakker", bezorger: "Bezorger" };
 
+/** One glyph per page for the phone menu grid. */
+const menuGlyph: Record<string, string> = {
+  "/inpakken": "▣",
+  "/orders": "@",
+  "/routes": "→",
+  "/bezorger": "✓",
+  "/tussenstand": "%",
+  "/vrijwilligers": "♥",
+  "/agenda": "#",
+  "/kosten": "€"
+};
+
 function Brand() {
   return (
-    <a href="#/" className="flex items-center gap-2.5">
-      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-coby-600 text-sm font-bold text-white">OC</span>
-      <span className="leading-tight">
-        <span className="block text-sm font-semibold text-stone-900">Oma Coby</span>
-        <span className="block text-xs text-stone-500">Oliebollen platform</span>
-      </span>
+    <a href="#/" className="block shrink-0" aria-label="Oma Coby's Oliebollenbar, naar de startpagina">
+      <img src={logoUrl} alt="Oma Coby's Oliebollenbar" className="h-auto w-28" />
     </a>
   );
 }
@@ -59,7 +68,7 @@ function Brand() {
 function DemoPill() {
   if (backend.kind !== "demo") return null;
   return (
-    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900" title={backend.notice}>
+    <span className="rounded bg-gouwe px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-krent" title={backend.notice}>
       Demo
     </span>
   );
@@ -68,6 +77,7 @@ function DemoPill() {
 function App() {
   const route = useRoute();
   const [session, setSession] = useState<Session | null>(loadSession);
+  const [menuOpen, setMenuOpen] = useState(false);
   const dashboard = useDashboard(session);
 
   const allowed = session ? NAV.filter((item) => item.roles.includes(session.role)) : [];
@@ -76,6 +86,8 @@ function App() {
   useEffect(() => {
     if (session && route.path !== "/aanmelden" && !current) navigate(HOME[session.role]);
   }, [session, route.path, current]);
+
+  useEffect(() => setMenuOpen(false), [route.path]);
 
   function login(next: Session) {
     saveSession(next);
@@ -89,14 +101,15 @@ function App() {
 
   // Pages without login (signup, login) get a simple centred layout.
   const simpleShell = (content: React.ReactNode) => (
-    <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
+    <div className="min-h-screen bg-meel">
+      <header className="border-b border-lijn bg-papier">
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4">
           <Brand />
           <DemoPill />
         </div>
       </header>
       <main className="mx-auto grid max-w-3xl gap-4 px-4 py-6">{content}</main>
+      <Toaster />
     </div>
   );
 
@@ -140,48 +153,84 @@ function App() {
     }
   }
 
+  const menu = allowed.filter((item) => !item.hidden);
+  const liveDot = error ? "bg-feest shadow-[0_0_0_3px_#fbe5dd]" : lastSync ? "bg-kerst shadow-[0_0_0_3px_#e7efd8]" : "bg-lijn-2";
+
   return (
-    <div className="min-h-screen bg-stone-50">
-      <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur print:hidden">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+    <div className="min-h-screen bg-meel">
+      <header className="sticky top-0 z-30 border-b border-lijn bg-papier/95 backdrop-blur print:hidden">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
           <Brand />
-          <div className="flex items-center gap-3 text-xs text-stone-600">
+          <div className="flex items-center gap-3 text-xs text-muted">
             <DemoPill />
-            <span className="hidden items-center gap-1.5 sm:inline-flex" title={lastSync ? `Bijgewerkt ${lastSync.toLocaleTimeString("nl-NL")}` : undefined}>
-              <span className={`inline-block h-2 w-2 rounded-full ${error ? "bg-red-500" : lastSync ? "bg-emerald-500" : "bg-stone-300"}`} />
-              {error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}
+            <span className="inline-flex items-center gap-1.5" title={lastSync ? `Bijgewerkt ${lastSync.toLocaleTimeString("nl-NL")}` : undefined}>
+              <span className={`inline-block h-2 w-2 rounded-full ${liveDot}`} />
+              <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}</span>
             </span>
-            <span className="hidden text-stone-300 sm:inline">|</span>
-            <span className="text-stone-800">
-              <span className="font-semibold">{session.name}</span>
-              <span className="hidden text-stone-500 sm:inline"> · {roleLabel[session.role]}</span>
+            <span className="hidden text-krent sm:inline">
+              <b>{session.name}</b> · {roleLabel[session.role]}
             </span>
-            <button type="button" className="rounded-md px-2 py-1 font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900" onClick={logout}>
+            <button type="button" className="hidden rounded-md px-2 py-1 font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent sm:inline" onClick={logout}>
               Uitloggen
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-vul px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-krent sm:hidden"
+              aria-expanded={menuOpen}
+              aria-controls="menu-raster"
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              {menuOpen ? "Sluiten" : "Menu"}
             </button>
           </div>
         </div>
-        <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2 sm:px-4" aria-label="Hoofdmenu">
-          {allowed.filter((item) => !item.hidden).map((item) => (
+        {/* Laptop: tabs. Telefoon: een raster achter de Menu-knop, nooit zijwaarts scrollen. */}
+        <nav className="mx-auto hidden max-w-6xl flex-wrap gap-x-1 px-3 sm:flex" aria-label="Hoofdmenu">
+          {menu.map((item) => (
             <a
               key={item.path}
               href={`#${item.path}`}
               aria-current={current?.path === item.path ? "page" : undefined}
-              className={`shrink-0 border-b-2 px-3 py-2.5 text-sm transition ${
-                current?.path === item.path ? "border-coby-600 font-semibold text-stone-900" : "border-transparent text-stone-600 hover:text-stone-900"
+              className={`border-b-[3px] px-2.5 pb-2 pt-2.5 text-xs font-bold uppercase tracking-[0.08em] transition ${
+                current?.path === item.path ? "border-feest text-krent" : "border-transparent text-muted hover:text-krent"
               }`}
             >
               {item.label}
             </a>
           ))}
         </nav>
+        {menuOpen ? (
+          <nav id="menu-raster" className="grid grid-cols-3 gap-1.5 px-3.5 pb-3.5 sm:hidden" aria-label="Hoofdmenu">
+            {menu.map((item) => (
+              <a
+                key={item.path}
+                href={`#${item.path}`}
+                aria-current={current?.path === item.path ? "page" : undefined}
+                className={`grid min-h-[64px] justify-items-center gap-0.5 rounded-kaart px-1 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em] ${
+                  current?.path === item.path ? "bg-gouwe-100 text-krent" : "bg-vul text-krent"
+                }`}
+              >
+                <span className="font-display text-[22px] leading-6 tracking-normal text-feest">{menuGlyph[item.path] ?? "•"}</span>
+                {item.label}
+              </a>
+            ))}
+            <button type="button" className="grid min-h-[64px] justify-items-center gap-0.5 rounded-kaart bg-vul px-1 py-2.5 text-[11px] font-bold uppercase tracking-[0.06em] text-krent" onClick={logout}>
+              <span className="font-display text-[22px] leading-6 tracking-normal text-feest">×</span>
+              Uitloggen
+            </button>
+            <p className="col-span-3 pt-1 text-center text-xs text-muted">
+              Ingelogd als <b className="text-krent">{session.name}</b> · {roleLabel[session.role]}
+            </p>
+          </nav>
+        ) : null}
       </header>
 
       <main className="mx-auto grid max-w-6xl gap-5 px-4 py-6">
         {current ? (
-          <div className="print:hidden">
-            <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">{current.label}</h1>
-            <p className="mt-0.5 text-sm text-stone-600">{current.description}</p>
+          <div className="grid gap-1 print:hidden">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">#{current.path}</p>
+            <h1 className="font-display text-[40px] uppercase leading-none tracking-wide text-krent">{current.label}</h1>
+            <p className="text-sm text-oliebol">{current.description}</p>
           </div>
         ) : null}
         {error && !state ? (
@@ -198,10 +247,11 @@ function App() {
           </Notice>
         ) : null}
         {error && state ? <Notice tone="warning">Verbinding verbroken, je ziet de laatst bekende stand. ({error})</Notice> : null}
-        {!state && !error ? <p className="text-sm text-stone-500">Gegevens laden…</p> : null}
+        {!state && !error ? <Skeleton /> : null}
         {page}
-        {backend.kind === "demo" ? <p className="pt-2 text-center text-xs text-stone-500">Demo-modus: {backend.notice}</p> : null}
+        {backend.kind === "demo" ? <p className="pt-2 text-center text-xs text-muted">Demo-modus: {backend.notice}</p> : null}
       </main>
+      <Toaster />
     </div>
   );
 }

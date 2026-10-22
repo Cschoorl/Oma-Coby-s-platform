@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { backend, type Session } from "../../data/backend";
 import type { DashboardState } from "../../types/dashboard";
 import { OrderFilters } from "../orders/OrderFilters";
-import { Badge, Card, Notice, SectionTitle, StatStrip, formatDayLabel, formatNumber, ghostButton, inputClass, pickInitialDate, primaryButton } from "../../components/ui";
+import { Badge, Card, CopyButton, EmptyState, Icon, Notice, SectionTitle, StatStrip, fieldLabel, formatDayLabel, formatNumber, ghostButton, inputClass, pickInitialDate, primaryButton, secondaryButton, toast } from "../../components/ui";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
 import { courierCandidates, courierOrders, couriersOn, deliveryOrders, findVolunteer, guessMode, isRouteStale, orderPart, orderedStops, routeKey, transportOn, whatsappNumber } from "./routeUtils";
@@ -87,6 +87,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
   async function computeAll() {
     for (const courier of couriers) await compute(courier);
+    toast("Alle routes berekend. De bezorgers kunnen op pad.");
   }
 
   return (
@@ -105,7 +106,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
       {staleCouriers.length > 0 ? (
         <Notice tone="warning">
           Na het berekenen zijn er bezorgingen bijgekomen, vervallen of verschoven bij {staleCouriers.join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
-          <button type="button" className="font-semibold underline" disabled={busy !== null} onClick={() => void (async () => { for (const c of staleCouriers) await compute(c); })()}>
+          <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void (async () => { for (const c of staleCouriers) await compute(c); })()}>
             Deze routes opnieuw berekenen
           </button>
         </Notice>
@@ -113,7 +114,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
       <CourierAssignment state={state} date={date} orders={dayDeliveries} busy={busy} onAssign={assign} />
 
-      <Card>
+      <section>
         <SectionTitle
           title={`Routes voor ${formatDayLabel(date)}`}
           subtitle="Bereken per bezorger de snelste volgorde en de kilometers vanaf de baklocatie, en stuur de route via WhatsApp."
@@ -123,14 +124,14 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             </button>
           }
         />
-        {isDemo ? <p className="-mt-2 mb-3 text-xs text-amber-800">Demo: kilometers zijn een schatting. Met de Sheet-koppeling rekent Google Maps de echte route.</p> : null}
+        {isDemo ? <p className="-mt-2 mb-3 text-xs text-gouwe-ink">Demo: kilometers zijn een schatting. Met de Sheet-koppeling rekent Google Maps de echte route.</p> : null}
         {error ? (
           <div className="mb-3">
             <Notice tone="error">{error}</Notice>
           </div>
         ) : null}
 
-        <div className="grid gap-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           {couriers.map((courier) => {
             const orders = courierOrders(state, date, courier);
             const route = state.routes[routeKey(date, courier)];
@@ -164,17 +165,17 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             const waUrl = `https://wa.me/${volunteer?.phone ? whatsappNumber(volunteer.phone) : ""}?text=${encodeURIComponent(message)}`;
 
             return (
-              <article key={courier} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-3">
+              <Card key={courier} className="grid content-start gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-stone-900">{courier}</p>
-                    <p className="text-xs text-stone-600">
+                    <p className="font-serif text-lg font-bold text-krent">{courier}</p>
+                    <p className="text-xs text-muted">
                       {orders.length} {orders.length === 1 ? "stop" : "stops"} · {pieces} oliebollen · {done} van {orders.length} afgeleverd
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {route ? (
-                      <Badge tone={stale ? "amber" : "green"}>
+                      <Badge tone={stale ? "aandacht" : "klaar"}>
                         {route.km.toLocaleString("nl-NL")} km · ± {route.minutes} min{stale ? " · verouderd" : ""}
                       </Badge>
                     ) : (
@@ -189,7 +190,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                       <option value="driving">Auto</option>
                       <option value="bicycling">Fiets</option>
                     </select>
-                    <label className="flex items-center gap-1 text-xs text-stone-600">
+                    <label className="flex items-center gap-1 text-xs text-muted">
                       Vertrek
                       <input
                         type="time"
@@ -202,25 +203,27 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                   </div>
                 </div>
                 {warnings.length > 0 ? (
-                  <ul className="grid gap-1 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    {warnings.map((w) => (
-                      <li key={w}>{w}</li>
-                    ))}
-                  </ul>
+                  <Notice tone="warning">
+                    <ul className="grid gap-0.5 text-xs">
+                      {warnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  </Notice>
                 ) : null}
 
-                <ol className="grid gap-1 text-sm text-stone-700">
+                <ol className="grid gap-1 text-sm text-krent">
                   {stops.map((o, i) => {
                     const eta = route && !stale ? route.stopTimes[route.orderIds.indexOf(o.id)] : "";
                     return (
                       <li key={o.id} className="flex gap-2">
-                        <span className="w-5 shrink-0 text-right font-semibold tabular-nums text-coby-700">{i + 1}.</span>
-                        <span className="w-11 shrink-0 tabular-nums text-stone-500">{eta || o.plannedTime || ""}</span>
-                        <span className={state.delivery[o.id] ? "text-stone-400 line-through" : ""}>
-                          {o.locationName || o.contactPerson} — {stopAddress(o)}
-                          {o.deliveryMoment ? <span className="text-stone-500"> · {o.deliveryMoment}</span> : null}
+                        <span className="w-5 shrink-0 text-right font-bold tabular-nums text-feest-ink">{i + 1}.</span>
+                        <span className="w-11 shrink-0 tabular-nums text-muted">{eta || o.plannedTime || ""}</span>
+                        <span className={state.delivery[o.id] ? "text-muted line-through" : ""}>
+                          {o.locationName || o.contactPerson} · {stopAddress(o)}
+                          {o.deliveryMoment ? <span className="text-muted"> · {o.deliveryMoment}</span> : null}
                         </span>
-                        {state.delivery[o.id] ? <span className="text-xs text-emerald-700">✓ {state.delivery[o.id].deliveredAt.slice(11, 16)}</span> : null}
+                        {state.delivery[o.id] ? <Badge tone="klaar">✓ {state.delivery[o.id].deliveredAt.slice(11, 16)}</Badge> : null}
                       </li>
                     );
                   })}
@@ -228,6 +231,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
                 <div className="flex flex-wrap items-center gap-1">
                   <a className={`${primaryButton} mr-1`} href={waUrl} target="_blank" rel="noreferrer">
+                    <Icon name="whatsapp" />
                     Stuur via WhatsApp
                   </a>
                   <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void compute(courier)}>
@@ -238,19 +242,17 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                       Google Maps
                     </a>
                   ) : null}
-                  <button type="button" className={ghostButton} onClick={() => void navigator.clipboard?.writeText(message)}>
-                    Kopieer bericht
-                  </button>
+                  <CopyButton text={message} label="Kopieer bericht" done="Bericht gekopieerd" className={ghostButton} />
                 </div>
                 {!volunteer?.phone ? (
-                  <p className="text-xs text-stone-500">Geen telefoonnummer van deze bezorger bij de aanmeldingen: WhatsApp vraagt zelf aan wie je het stuurt.</p>
+                  <p className="text-xs text-muted">Geen telefoonnummer van deze bezorger bij de aanmeldingen: WhatsApp vraagt zelf aan wie je het stuurt.</p>
                 ) : null}
-              </article>
+              </Card>
             );
           })}
-          {couriers.length === 0 ? <p className="text-sm text-stone-600">Nog geen bezorgers ingedeeld op deze dag.</p> : null}
         </div>
-      </Card>
+        {couriers.length === 0 ? <EmptyState title="Nog geen bezorgers ingedeeld." text="Deel hierboven de bezorgingen in; daarna verschijnen hier de routes." /> : null}
+      </section>
     </div>
   );
 }
@@ -270,6 +272,9 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
   const known = new Set(state.volunteers.map((v) => v.name));
   const extra = assignedNames.filter((n) => !known.has(n));
   const sorted = [...orders].sort((a, b) => (a.city + a.address).localeCompare(b.city + b.address));
+  // "Andere naam…" opens a small field in the row instead of a browser prompt.
+  const [otherFor, setOtherFor] = useState<string | null>(null);
+  const [otherName, setOtherName] = useState("");
 
   const transportLabel = (name: string, part = "") => {
     const v = findVolunteer(state.volunteers, name);
@@ -285,15 +290,15 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
         title="Bezorgers indelen"
         subtitle={`${available.length} koeriers hebben zich voor ${formatDayLabel(date)} aangemeld. Per bezorging staan bovenaan wie in dat dagdeel kan, met fiets of auto.`}
       />
-      {orders.length === 0 ? <p className="text-sm text-stone-600">Geen bezorgingen op deze dag.</p> : null}
+      {orders.length === 0 ? <p className="text-sm text-muted">Geen bezorgingen op deze dag.</p> : null}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="py-2 pr-3 font-semibold">Bezorging</th>
-              <th className="py-2 pr-3 font-semibold">Adres</th>
-              <th className="py-2 pr-3 text-right font-semibold">Bollen</th>
-              <th className="py-2 font-semibold">Bezorger</th>
+            <tr className={`border-b border-lijn-2 text-left ${fieldLabel}`}>
+              <th className="py-2 pr-3 font-bold">Bezorging</th>
+              <th className="py-2 pr-3 font-bold">Adres</th>
+              <th className="py-2 pr-3 text-right font-bold">Bollen</th>
+              <th className="py-2 font-bold">Bezorger</th>
             </tr>
           </thead>
           <tbody>
@@ -302,23 +307,43 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
               const part = orderPart(order);
               const { available: fits, others } = courierCandidates(state.volunteers, date, part);
               return (
-                <tr key={order.id} className="border-t border-stone-100 align-top">
-                  <td className="py-2 pr-3">
-                    <p className="font-semibold text-stone-900">{order.locationName || order.contactPerson}</p>
-                    {order.deliveryMoment || part ? <p className="text-xs text-stone-500">{order.deliveryMoment || part}</p> : null}
+                <tr key={order.id} className="border-b border-lijn align-top last:border-0">
+                  <td className="py-2.5 pr-3">
+                    <p className="font-bold text-krent">{order.locationName || order.contactPerson}</p>
+                    {order.deliveryMoment || part ? <p className="text-xs text-muted">{order.deliveryMoment || part}</p> : null}
                   </td>
-                  <td className="py-2 pr-3 text-stone-700">{stopAddress(order)}</td>
+                  <td className="py-2.5 pr-3 text-oliebol">{stopAddress(order)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{order.withRaisins + order.withoutRaisins}</td>
                   <td className="py-2">
+                    {otherFor === order.id ? (
+                      <form
+                        className="flex gap-1.5"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!otherName.trim()) return;
+                          void onAssign(order, otherName.trim());
+                          setOtherFor(null);
+                          setOtherName("");
+                        }}
+                      >
+                        <input className={`${inputClass} py-1`} autoFocus placeholder="Naam van de bezorger" value={otherName} onChange={(e) => setOtherName(e.target.value)} aria-label="Naam van de bezorger" />
+                        <button type="submit" className={`${primaryButton} min-h-[34px] px-3 py-1`}>
+                          Indelen
+                        </button>
+                        <button type="button" className={`${secondaryButton} min-h-[34px] px-3 py-1`} onClick={() => setOtherFor(null)}>
+                          ×
+                        </button>
+                      </form>
+                    ) : (
                     <select
-                      className={`${inputClass} py-1 ${current ? "" : "border-amber-400 bg-amber-50"}`}
+                      className={`${inputClass} py-1 ${current ? "" : "border-gouwe bg-gouwe-50"}`}
                       value={current}
                       disabled={busy === `assign-${order.id}`}
                       onChange={(e) => {
-                        let value = e.target.value;
+                        const value = e.target.value;
                         if (value === "__other") {
-                          value = window.prompt("Naam van de bezorger") ?? "";
-                          if (!value.trim()) return;
+                          setOtherFor(order.id);
+                          return;
                         }
                         void onAssign(order, value);
                       }}
@@ -350,6 +375,7 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
                       ))}
                       <option value="__other">Andere naam…</option>
                     </select>
+                    )}
                   </td>
                 </tr>
               );

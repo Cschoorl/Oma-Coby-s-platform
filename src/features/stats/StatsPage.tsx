@@ -1,6 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Notice, SectionTitle, StatStrip, formatEuro, formatNumber, todayIso } from "../../components/ui";
+import { Card, Notice, SectionTitle, Segmented, StatStrip, Sticker, fieldLabel, formatEuro, formatNumber, rollOliebol, toast, todayIso, type Delta } from "../../components/ui";
+import { GOAL_MILESTONES, GOAL_OLIEBOLLEN } from "../../config";
+import dansenUrl from "../../assets/gouwe-ouwe-dansen.jpg";
 import { StaffingCalendar } from "../../components/StaffingCalendar";
 import { countSignups } from "../../utils/staffing";
 
@@ -20,8 +22,8 @@ interface Season {
   current: boolean;
 }
 
-/** Validated categorical palette (light surface): this year, last year, two years ago. */
-const SERIES_COLORS = ["#cc6717", "#2a6fb5", "#6b8e23"];
+/** This year in feest (solid), last year in oliebol and older years in grey (both dashed). */
+const SERIES_COLORS = ["#d05438", "#5c4238", "#b6a68e"];
 
 const metricLabel: Record<Metric, string> = { oliebollen: "Oliebollen", orders: "Bestellingen", revenue: "Omzet" };
 
@@ -103,40 +105,46 @@ export function StatsPage({ state }: { state: DashboardState }) {
   const now = totals(thisSeason);
   const last = totals(pastSeasons[0]);
 
-  const delta = (current: number, previous: number) => {
+  // Compared with the same period last season. A tiny base reads "was N" in grey, never a red -100%.
+  const delta = (current: number, previous: number): Delta | undefined => {
     if (!pastSeasons[0] || previous === 0) return undefined;
+    if (previous < 5) return { tone: "flat", text: `was ${formatNumber(previous)}` };
     const pct = Math.round(((current - previous) / previous) * 100);
-    return `${pct >= 0 ? "+" : ""}${pct}% t.o.v. ${pastSeasons[0].year} (zelfde periode)`;
+    return { tone: pct > 0 ? "up" : pct < 0 ? "down" : "flat", text: `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct)}%` };
   };
+  const lastHint = (previous: number, format: (n: number) => string = formatNumber) => (pastSeasons[0] ? `${pastSeasons[0].year}: ${format(previous)}` : undefined);
 
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
 
   return (
     <div className="grid gap-4">
-      <Card>
-        <SectionTitle title={`Tussenstand ${currentYear}`} subtitle={`Vergelijking per seizoen, ${periodLabel}. Telt op besteldatum (of leverdatum als die ontbreekt).`} />
-        {pastSeasons.length === 0 ? (
-          <Notice tone="warning">
-            Er zijn nog geen cijfers van voorgaande jaren. Vul het tabblad <code>Historie</code> in de Sheet (jaar, datum, bestellingen, oliebollen, omzet) om te vergelijken.
-          </Notice>
-        ) : null}
-      </Card>
+      <p className="-mt-2 text-sm text-muted">
+        Seizoen {currentYear}, {periodLabel}. Telt op besteldatum (of leverdatum als die ontbreekt).
+      </p>
+      {pastSeasons.length === 0 ? (
+        <Notice tone="warning">
+          Er zijn nog geen cijfers van voorgaande jaren. Vul het tabblad <code>Historie</code> in de Sheet (jaar, datum, bestellingen, oliebollen, omzet) om te vergelijken.
+        </Notice>
+      ) : null}
+
+      <GoalMeter oliebollen={thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0} />
 
       <StatStrip
         items={[
-          { label: "Bestellingen", value: formatNumber(now.orders), hint: delta(now.orders, last.orders) },
-          { label: "Oliebollen verkocht", value: formatNumber(now.oliebollen), hint: delta(now.oliebollen, last.oliebollen) },
+          { label: "Bestellingen", value: formatNumber(now.orders), hint: lastHint(last.orders), delta: delta(now.orders, last.orders) },
+          { label: "Oliebollen verkocht", value: formatNumber(now.oliebollen), hint: lastHint(last.oliebollen), delta: delta(now.oliebollen, last.oliebollen) },
           {
             label: revenueSource === "estimate" ? "Omzet (schatting)" : "Omzet",
-            value: revenueSource === "none" ? "n.v.t." : formatEuro(now.revenue),
+            value: revenueSource === "none" ? "—" : formatEuro(now.revenue),
             hint:
               revenueSource === "none"
                 ? "Geen bedragen of prijs in de Sheet"
                 : revenueSource === "estimate"
-                  ? [`Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}`, last.hasRevenue ? delta(now.revenue, last.revenue) : undefined].filter(Boolean).join(" · ")
+                  ? `Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}`
                   : last.hasRevenue
-                    ? delta(now.revenue, last.revenue)
-                    : undefined
+                    ? lastHint(last.revenue, formatEuro)
+                    : undefined,
+            delta: revenueSource !== "none" && last.hasRevenue ? delta(now.revenue, last.revenue) : undefined
           }
         ]}
       />
@@ -148,21 +156,12 @@ export function StatsPage({ state }: { state: DashboardState }) {
           title={`${metricLabel[metric]} opgeteld per dag`}
           subtitle="Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
           action={
-            <div className="flex gap-1">
-              {(Object.keys(metricLabel) as Metric[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={m === "revenue" && revenueSource === "none"}
-                  onClick={() => setMetric(m)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 ${
-                    metric === m ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700 hover:border-coby-300"
-                  }`}
-                >
-                  {metricLabel[m]}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              label="Metriek"
+              value={metric}
+              onChange={setMetric}
+              options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
+            />
           }
         />
         <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />
@@ -173,20 +172,20 @@ export function StatsPage({ state }: { state: DashboardState }) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-                <th className="py-2 pr-3 font-semibold">Seizoen</th>
-                <th className="py-2 pr-3 text-right font-semibold">Bestellingen</th>
-                <th className="py-2 pr-3 text-right font-semibold">Oliebollen</th>
-                <th className="py-2 pr-3 text-right font-semibold">Omzet</th>
-                <th className="py-2 pr-3 text-right font-semibold">Oliebollen hele seizoen</th>
+              <tr className="border-b border-lijn-2 text-left text-[11px] uppercase tracking-[0.12em] text-muted">
+                <th className="py-2 pr-3 font-bold">Seizoen</th>
+                <th className="py-2 pr-3 text-right font-bold">Bestellingen</th>
+                <th className="py-2 pr-3 text-right font-bold">Oliebollen</th>
+                <th className="py-2 pr-3 text-right font-bold">Omzet</th>
+                <th className="py-2 pr-3 text-right font-bold">Oliebollen hele seizoen</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
               {seasons.map((season) => {
                 const t = totals(season);
                 return (
-                  <tr key={season.year} className="border-t border-stone-100">
-                    <td className="py-2 pr-3 font-semibold text-stone-900">{season.year}{season.current ? " (nu)" : ""}</td>
+                  <tr key={season.year} className="border-b border-lijn last:border-0">
+                    <td className="py-2 pr-3 font-bold text-krent">{season.year}{season.current ? " (nu)" : ""}</td>
                     <td className="py-2 pr-3 text-right">{formatNumber(t.orders)}</td>
                     <td className="py-2 pr-3 text-right">{formatNumber(t.oliebollen)}</td>
                     <td className="py-2 pr-3 text-right">{t.hasRevenue ? formatEuro(t.revenue) : "–"}</td>
@@ -259,7 +258,7 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
   );
 
   const allPoints = series.flatMap((s) => s.points);
-  if (allPoints.length === 0) return <p className="text-sm text-stone-600">Nog geen gegevens om te tonen.</p>;
+  if (allPoints.length === 0) return <p className="text-sm text-muted">Nog geen gegevens om te tonen.</p>;
 
   const maxX = Math.max(7, ...allPoints.map((p) => p.x));
   const maxY = Math.max(1, ...allPoints.map((p) => p.y));
@@ -286,7 +285,7 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
 
   return (
     <div className="relative">
-      <div className="mb-2 flex flex-wrap gap-4 text-xs text-stone-700" aria-hidden="true">
+      <div className="mb-2 flex flex-wrap gap-4 text-xs text-krent" aria-hidden="true">
         {series.map((s) => (
           <span key={s.season.year} className="inline-flex items-center gap-2">
             <svg width="22" height="8">
@@ -307,14 +306,14 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
       >
         {ticksY.map((t) => (
           <g key={t}>
-            <line x1={PAD.left} x2={WIDTH - PAD.right} y1={sy(t)} y2={sy(t)} stroke="#e7e5e4" strokeWidth="1" />
-            <text x={PAD.left - 8} y={sy(t)} textAnchor="end" dominantBaseline="middle" fontSize="11" fill="#78716c">
+            <line x1={PAD.left} x2={WIDTH - PAD.right} y1={sy(t)} y2={sy(t)} stroke="#ebe1bf" strokeWidth="1" />
+            <text x={PAD.left - 8} y={sy(t)} textAnchor="end" dominantBaseline="middle" fontSize="11" fill="#6d5a4f">
               {metric === "revenue" ? `€${formatNumber(Math.round(t))}` : formatNumber(Math.round(t))}
             </text>
           </g>
         ))}
         {ticksX.map((t) => (
-          <text key={t} x={sx(t)} y={HEIGHT - 10} textAnchor="middle" fontSize="11" fill="#78716c">
+          <text key={t} x={sx(t)} y={HEIGHT - 10} textAnchor="middle" fontSize="11" fill="#6d5a4f">
             {t === 0 ? "31 dec" : `-${t} d`}
           </text>
         ))}
@@ -323,7 +322,7 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
             key={s.season.year}
             fill="none"
             stroke={s.color}
-            strokeWidth="2"
+            strokeWidth={s.season.current ? 3 : 2}
             strokeLinejoin="round"
             strokeLinecap="round"
             strokeDasharray={s.season.current ? undefined : "6 4"}
@@ -335,8 +334,8 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
           if (!lastPoint) return null;
           return (
             <g key={`end-${s.season.year}`}>
-              <circle cx={sx(lastPoint.x)} cy={sy(lastPoint.y)} r="4" fill={s.color} stroke="#fff" strokeWidth="2" />
-              <text x={sx(lastPoint.x) + 8} y={sy(lastPoint.y)} dominantBaseline="middle" fontSize="11" fontWeight="600" fill="#44403c">
+              <circle cx={sx(lastPoint.x)} cy={sy(lastPoint.y)} r="4" fill={s.color} stroke="#fffdf6" strokeWidth="2" />
+              <text x={sx(lastPoint.x) + 8} y={sy(lastPoint.y)} dominantBaseline="middle" fontSize="11" fontWeight="600" fill="#261f1f">
                 {s.season.year}
               </text>
             </g>
@@ -344,10 +343,10 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
         })}
         {hover !== null ? (
           <g>
-            <line x1={sx(hover)} x2={sx(hover)} y1={PAD.top} y2={HEIGHT - PAD.bottom} stroke="#a8a29e" strokeWidth="1" />
+            <line x1={sx(hover)} x2={sx(hover)} y1={PAD.top} y2={HEIGHT - PAD.bottom} stroke="#d8c998" strokeWidth="1" />
             {series.map((s) =>
               s.season.current && hover < cutoff ? null : (
-                <circle key={s.season.year} cx={sx(hover)} cy={sy(valueAt(s.points, hover))} r="4" fill={s.color} stroke="#fff" strokeWidth="2" />
+                <circle key={s.season.year} cx={sx(hover)} cy={sy(valueAt(s.points, hover))} r="4" fill={s.color} stroke="#fffdf6" strokeWidth="2" />
               )
             )}
           </g>
@@ -355,14 +354,14 @@ function CumulativeChart({ seasons, metric, cutoff }: { seasons: Season[]; metri
       </svg>
       {hover !== null ? (
         <div
-          className="pointer-events-none absolute top-8 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs shadow-card"
+          className="pointer-events-none absolute top-8 rounded-md bg-papier px-3 py-2 text-xs shadow-zwevend"
           style={{ left: `${Math.min(70, (sx(hover) / WIDTH) * 100)}%` }}
         >
-          <p className="mb-1 font-semibold text-stone-900">{hover === 0 ? "31 december" : `${hover} dagen voor 31 december`}</p>
+          <p className="mb-1 font-bold text-krent">{hover === 0 ? "31 december" : `${hover} dagen voor 31 december`}</p>
           {series.map((s) => (
-            <p key={s.season.year} className="flex items-center gap-2 text-stone-700">
+            <p key={s.season.year} className="flex items-center gap-2 text-krent">
               <span className="inline-block h-2 w-2 rounded-full" style={{ background: s.color }} />
-              {s.season.year}: <span className="font-semibold tabular-nums text-stone-900">{s.season.current && hover < cutoff ? "–" : format(valueAt(s.points, hover))}</span>
+              {s.season.year}: <span className="font-bold tabular-nums text-krent">{s.season.current && hover < cutoff ? "–" : format(valueAt(s.points, hover))}</span>
             </p>
           ))}
         </div>
@@ -393,4 +392,60 @@ function xTicks(maxX: number): number[] {
   const ticks: number[] = [];
   for (let t = 0; t <= maxX; t += step) ticks.push(t);
   return ticks;
+}
+
+const MILESTONE_KEY = "omacoby-mijlpaal";
+
+/** The goal of the action, in oudjes. A milestone passed since this device last looked gets a sticker and a rolling oliebol. */
+function GoalMeter({ oliebollen }: { oliebollen: number }) {
+  const pct = Math.min(100, (oliebollen / GOAL_OLIEBOLLEN) * 100);
+  const reached = GOAL_MILESTONES.filter((m) => oliebollen >= m);
+  const top = reached[reached.length - 1] ?? 0;
+
+  useEffect(() => {
+    let seen = 0;
+    try {
+      seen = Number(localStorage.getItem(MILESTONE_KEY) ?? "0");
+    } catch {
+      return;
+    }
+    if (top > seen) {
+      // Only celebrate milestones passed while this device was watching; the first visit just records them.
+      if (seen > 0) {
+        rollOliebol();
+        toast(`${formatNumber(top)} oliebollen: ${formatNumber(top / 10)} oudjes aan het rock-'n-rollen!`);
+      }
+      try {
+        localStorage.setItem(MILESTONE_KEY, String(top));
+      } catch {
+        // Private mode: no memory, no celebration.
+      }
+    }
+  }, [top]);
+
+  return (
+    <Card className="grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_150px]">
+      <div>
+        <p className="font-serif text-xl font-bold text-krent">Op weg naar {formatNumber(GOAL_OLIEBOLLEN)} oliebollen</p>
+        <p className="text-sm text-muted">
+          Dat zijn {formatNumber(GOAL_OLIEBOLLEN / 10)} gratis entrees voor een Gouwe Ouwe-avond. Nu: <b className="tabular-nums text-krent">{formatNumber(oliebollen)}</b> oliebollen, goed voor{" "}
+          <b className="tabular-nums text-krent">{formatNumber(Math.floor(oliebollen / 10))}</b> oudjes.
+        </p>
+        <div className="relative mb-7 mt-11 h-3.5 rounded-full bg-vul">
+          <div className="h-full rounded-full bg-gradient-to-r from-gouwe to-feest transition-all duration-1000" style={{ width: `${pct}%` }} />
+          {GOAL_MILESTONES.map((m) => (
+            <span key={m} className="absolute -bottom-1.5 -top-1.5 w-0.5 bg-krent" style={{ left: `${(m / GOAL_OLIEBOLLEN) * 100}%` }}>
+              {oliebollen >= m ? (
+                <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2">
+                  <Sticker tone="gouwe" className="px-2.5 py-1 text-base">Gehaald!</Sticker>
+                </span>
+              ) : null}
+              <span className={`absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap ${fieldLabel} tracking-normal`}>{formatNumber(m)}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+      <img src={dansenUrl} alt="Dansende ouderen op een Gouwe Ouwe-avond" className="hidden h-[150px] w-[150px] rounded-kaart object-cover sm:block" />
+    </Card>
+  );
 }

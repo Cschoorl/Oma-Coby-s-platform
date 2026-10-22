@@ -5,6 +5,7 @@ import { parseAgendaShifts, parseVolunteerShifts, seasonMonth } from "../../util
 import type { Volunteer } from "../../types/dashboard";
 import { StaffingCalendar } from "../../components/StaffingCalendar";
 import { countSignups } from "../../utils/staffing";
+import { Card, CopyButton, EmptyState, Icon, SectionTitle, inputClass, taskClass, textAction } from "../../components/ui";
 
 const START_HOUR = 9;
 const END_HOUR = 17;
@@ -93,59 +94,53 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
   return (
     <section className="grid gap-4">
       {volunteers.length > 0 ? (
-        <section className="rounded-xl border border-stone-200 bg-white p-4">
-          <h2 className="mb-1 text-base font-semibold text-stone-900">Bezetting per dag</h2>
-          <p className="mb-3 text-sm text-stone-600">Rood betekent dat er die dag nog weinig mensen zijn. Kun je dan? Mail de planning.</p>
+        <Card>
+          <SectionTitle title="Waar is nog plek?" subtitle="Met een ! zijn er die dag nog weinig mensen. Kun je dan? Laat het de planning weten." />
           <StaffingCalendar counts={countSignups(volunteers)} />
-        </section>
+        </Card>
       ) : null}
-      <section className="rounded-xl border border-stone-200 bg-white p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="min-w-[240px] flex-1">
-            <p className="text-xs uppercase tracking-wide text-stone-500">Zoek bezorger</p>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Bijv. Cesar Schoorl"
-              type="search"
-              className="mt-2 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm focus:border-coby-500 focus:outline-none"
-            />
-          </div>
-          <div className="text-sm text-stone-700">
-            <span className="font-semibold text-stone-900">{filtered.length}</span> ingepland
-          </div>
-        </div>
-      </section>
-
       {shifts.length === 0 ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          Nog geen aanmeldingen met dagen. Zodra vrijwilligers zich aanmelden (formulier of aanmeldpagina) verschijnen ze hier.
-        </section>
+        <EmptyState title="Nog niemand ingepland." text="Oma Coby bakt ze niet alleen. Zodra vrijwilligers zich aanmelden, verschijnen ze hier." />
       ) : (
-        <section className="rounded-xl border border-stone-200 bg-white p-4">
+        <Card>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <label className="relative min-w-[240px] flex-1 sm:max-w-sm">
+              <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek een naam of taak" aria-label="Zoek in de agenda" type="search" className={`${inputClass} pl-9`} />
+            </label>
+            <p className="text-sm text-muted">
+              <b className="tabular-nums text-krent">{filtered.length}</b> ingepland
+            </p>
+          </div>
+          <div className="mb-3 flex flex-wrap gap-1.5 text-[11px] font-bold">
+            {(["Inpakken", "Fietskoerier", "Autokoerier", "Oliebollenbar"] as const).map((r) => (
+              <span key={r} className={`rounded px-2 py-0.5 ${taskClass[r.toLowerCase()]}`}>
+                {r}
+              </span>
+            ))}
+          </div>
           {columns.length === 0 ? (
-            <p className="text-sm text-stone-600">Geen resultaten voor je zoekopdracht.</p>
+            <EmptyState title="Niemand gevonden." text="Probeer een andere naam of taak." />
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-[900px]">
                 <div className="grid grid-cols-[72px_repeat(var(--cols),minmax(0,1fr))]" style={{ ["--cols" as string]: columns.length }}>
-                  <div className="border-b border-stone-200 p-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  <div className="border-b border-lijn-2 p-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
                     Tijd
                   </div>
                   {columns.map(([dateLabel]) => (
-                    <div key={dateLabel} className="border-b border-l border-stone-200 p-2 text-center">
-                      <p className="text-xs uppercase tracking-wide text-stone-500">Dag</p>
-                      <p className="text-sm font-semibold text-stone-900">{dateLabel}</p>
+                    <div key={dateLabel} className="border-b border-lijn-2 p-2 text-center">
+                      <p className="text-sm font-bold text-krent">{dateLabel}</p>
                     </div>
                   ))}
                 </div>
 
                 <div className="grid grid-cols-[72px_repeat(var(--cols),minmax(0,1fr))]" style={{ ["--cols" as string]: columns.length }}>
-                  <div className="relative border-r border-stone-200" style={{ height: `${CALENDAR_HEIGHT}px` }}>
+                  <div className="relative border-r border-lijn" style={{ height: `${CALENDAR_HEIGHT}px` }}>
                     {hourLines.map((hour) => {
                       const top = ((hour - START_HOUR) / (END_HOUR - START_HOUR)) * CALENDAR_HEIGHT;
                       return (
-                        <div key={hour} className="absolute left-0 right-0 -translate-y-1/2 pr-2 text-right text-xs text-stone-500" style={{ top }}>
+                        <div key={hour} className="absolute left-0 right-0 -translate-y-1/2 pr-2 text-right text-xs tabular-nums text-muted" style={{ top }}>
                           {formatHour(hour)}
                         </div>
                       );
@@ -155,16 +150,16 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
                   {columns.map(([dateLabel, items]) => {
                     const { lanes, laneCount } = assignLanes(items);
                     return (
-                    <div key={dateLabel} className="relative border-l border-stone-200 bg-white/60" style={{ height: `${CALENDAR_HEIGHT}px` }}>
+                    <div key={dateLabel} className="relative border-r border-lijn last:border-r-0" style={{ height: `${CALENDAR_HEIGHT}px` }}>
                       {hourLines.map((hour) => {
                         const top = ((hour - START_HOUR) / (END_HOUR - START_HOUR)) * CALENDAR_HEIGHT;
-                        return <div key={hour} className="absolute left-0 right-0 border-t border-stone-100" style={{ top }} />;
+                        return <div key={hour} className="absolute left-0 right-0 border-t border-lijn/70" style={{ top }} />;
                       })}
 
                       {items.map((shift) => (
                         <article
                           key={shift.id}
-                          className="absolute overflow-hidden rounded-lg border border-coby-300 bg-coby-100/95 p-2 shadow-sm"
+                          className={`absolute overflow-hidden rounded-md p-2 ${taskClass[shift.role.toLowerCase()] ?? taskClass.inpakken}`}
                           style={{
                             top: `${eventTopPx(shift)}px`,
                             height: `${eventHeightPx(shift)}px`,
@@ -172,11 +167,11 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
                             width: `calc(${100 / laneCount}% - 4px)`
                           }}
                         >
-                          <p className="truncate text-xs font-semibold text-coby-900">{shift.personName}</p>
-                          <p className="text-[11px] text-coby-800">
-                            {shift.startTime} - {shift.endTime}
+                          <p className="truncate text-xs font-bold">{shift.personName}</p>
+                          <p className="text-[11px] tabular-nums">
+                            {shift.startTime}–{shift.endTime}
                           </p>
-                          <p className="text-[11px] text-coby-700">{shift.role}</p>
+                          <p className="text-[11px] opacity-80">{shift.role}</p>
                         </article>
                       ))}
                     </div>
@@ -186,16 +181,16 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
               </div>
             </div>
           )}
-        </section>
+        </Card>
       )}
 
-      <section className="rounded-2xl border border-dashed border-stone-300 bg-white/40 p-4 text-sm text-stone-700">
-        Niet kunnen of anders plannen? Mail dan naar{" "}
-        <a className="font-semibold text-coby-700 underline decoration-coby-300 underline-offset-2" href={`mailto:${contactEmail}`}>
+      <p className="text-center text-sm text-muted">
+        Niet kunnen of anders plannen? Mail naar{" "}
+        <a className={textAction} href={`mailto:${contactEmail}`}>
           {contactEmail}
-        </a>
-        .
-      </section>
+        </a>{" "}
+        <CopyButton text={contactEmail} label="Kopieer" done="Gekopieerd" className={textAction} icon={false} />
+      </p>
     </section>
   );
 }

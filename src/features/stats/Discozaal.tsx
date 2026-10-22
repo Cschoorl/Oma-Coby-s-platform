@@ -10,10 +10,11 @@ import "./discozaal.css";
 const POLONAISE_FROM = 60;
 /** Three rows on the dance floor, front to back; every figure is one oudje. */
 const ROWS = [
-  { scale: 1, bottom: 6, step: 84 },
-  { scale: 0.82, bottom: 30, step: 70 },
-  { scale: 0.66, bottom: 52, step: 58 }
+  { scale: 1, bottom: 4, step: 84 },
+  { scale: 0.9, bottom: 16, step: 76 },
+  { scale: 0.8, bottom: 28, step: 68 }
 ];
+const ROW_SHIFT = [0, 0.5, 0.25];
 
 export function oudjesFor(oliebollen: number): number {
   return Math.floor(oliebollen / OLIEBOLLEN_PER_OUDJE);
@@ -60,12 +61,12 @@ interface Character {
 const CAST: Character[] = [
   { move: "wave", skin: "#f1d3b3", hair: ["perm", "#ddd4ea"], dress: "#d05438", glasses: true },
   { move: "cane", skin: "#e7bf98", hair: ["side", "#d9d5cc"], hat: ["cap", "#6b4d3a"], jacket: "#8a6a4f", trousers: "#4a3d38", cane: true, glasses: true },
-  { move: "pump", skin: "#c99168", hair: ["bun", "#ece8df"], dress: "#dcc05d", bag: "#5c4238" },
+  { move: "pump", skin: "#f3dcc4", hair: ["bun", "#ece8df"], dress: "#dcc05d", bag: "#5c4238" },
   { move: "hat", skin: "#f1d3b3", hair: ["side", "#cfc9be"], hat: ["trilby", "#3a2f2c"], jacket: "#69873c", trousers: "#3d4a35", glasses: true },
-  { move: "hop", skin: "#9c6644", hair: ["short", "#f5f2ea"], dress: "#4f7a9a", glasses: true },
+  { move: "hop", skin: "#ecc9a6", hair: ["short", "#f5f2ea"], dress: "#4f7a9a", glasses: true },
   { move: "fever", skin: "#e7bf98", hair: ["short", "#bfb9ae"], shirt: "#fff3d6", trousers: "#5c4238", braces: "#d05438" },
   { move: "twist", skin: "#f1d3b3", hair: ["bun", "#e8e4dc"], dress: "#c46b8c", glasses: true },
-  { move: "clap", skin: "#6e4630", hair: ["bald", "#d9d5cc"], jacket: "#e0894a", trousers: "#4a3d38", glasses: true }
+  { move: "clap", skin: "#e7bf98", hair: ["bald", "#d9d5cc"], jacket: "#e0894a", trousers: "#4a3d38", glasses: true }
 ];
 
 function hairSvg([style, c]: Character["hair"]): string {
@@ -113,11 +114,33 @@ function oudjeSvg(f: Character): string {
   const face = `<rect x="27.5" y="31" width="5" height="7" fill="${f.skin}"/><circle cx="30" cy="24" r="10.5" fill="${f.skin}"/>${hairSvg(f.hair)}<circle cx="26.2" cy="24.5" r="1.1" fill="${K}"/><circle cx="33.8" cy="24.5" r="1.1" fill="${K}"/>${glasses}<path d="M26.5 29.5 Q30 32 33.5 29.5" stroke="${K}" stroke-width="1.1" fill="none" stroke-linecap="round"/><circle cx="23" cy="28" r="1.6" fill="#e88a7a" opacity=".45"/><circle cx="37" cy="28" r="1.6" fill="#e88a7a" opacity=".45"/>`;
   return `<svg viewBox="0 0 60 92"><ellipse cx="30" cy="89.5" rx="14" ry="2.2" fill="#5c4238" opacity=".18"/><g class="sway"><g class="jump">${body}${shoes}${arm("l")}${arm("r")}${face}${f.hat ? hatSvg(f.hat) : ""}</g></g></svg>`;
 }
-const CAST_SVG = CAST.map(oudjeSvg);
+/** Roughly one in ten oudjes has a darker skin. */
+const DIVERSE_SKINS = ["#9c6644", "#6e4630"];
+const svgCache = new Map<string, string>();
+
+/** The drawing for one dancer: the cast decides look and dance, the index decides the skin. */
+function dancerSvg(cast: number, index: number): string {
+  const skin = index % 10 === 6 ? DIVERSE_SKINS[Math.floor(index / 10) % DIVERSE_SKINS.length] : CAST[cast].skin;
+  const key = `${cast}-${skin}`;
+  let svg = svgCache.get(key);
+  if (!svg) {
+    svg = oudjeSvg({ ...CAST[cast], skin });
+    svgCache.set(key, svg);
+  }
+  return svg;
+}
+
+/** Standalone dancer drawings (with size and namespace) for the share card canvas. */
+export function cardDancerSvgs(count: number): string[] {
+  return Array.from({ length: count }, (_, i) =>
+    dancerSvg(i % CAST.length, i).replace('<svg viewBox="0 0 60 92">', '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="184" viewBox="0 0 60 92">')
+  );
+}
 
 // ---------- inrichting: het bruine café van Oma Coby, licht getekend ----------
 
-const LAMP_SVG = `<svg viewBox="0 0 70 108" aria-hidden="true"><path d="M35 0v38" stroke="${K}" stroke-width="1.6"/><ellipse cx="35" cy="78" rx="30" ry="12" fill="#ffe7a8" opacity=".55"/><path d="M15 38h40l11 32H4z" fill="#d9a35b" stroke="${K}" stroke-width="1.4" stroke-linejoin="round"/><path d="M20 44h30M17 52h36M13 61h44" stroke="#b8803e" stroke-width="1.2" opacity=".6"/><g stroke="#b8803e" stroke-width="1.6" stroke-linecap="round">${Array.from({ length: 13 }, (_, i) => `<path d="M${6 + i * 4.8} 71v${i % 2 ? 7 : 9}"/>`).join("")}</g><circle cx="35" cy="73" r="4" fill="#fff6d0"/></svg>`;
+/** A standing lamp with a fringed shade, as in the old café. */
+const LAMP_SVG = `<svg viewBox="0 0 60 150" aria-hidden="true"><ellipse cx="30" cy="40" rx="28" ry="10" fill="#ffe7a8" opacity=".5"/><path d="M30 34v108" stroke="#6b4d3a" stroke-width="3" stroke-linecap="round"/><ellipse cx="30" cy="145" rx="14" ry="3.6" fill="#6b4d3a"/><path d="M14 6h32l10 28H4z" fill="#d9a35b" stroke="${K}" stroke-width="1.4" stroke-linejoin="round"/><path d="M17 13h26M14 21h32" stroke="#b8803e" stroke-width="1.2" opacity=".6"/><g stroke="#b8803e" stroke-width="1.6" stroke-linecap="round">${Array.from({ length: 12 }, (_, i) => `<path d="M${6 + i * 4.4} 35v${i % 2 ? 6 : 8}"/>`).join("")}</g><circle cx="30" cy="36" r="3.4" fill="#fff6d0"/></svg>`;
 
 const BOOKCASE_SVG = `<svg viewBox="0 0 96 150" aria-hidden="true"><rect x="2" y="4" width="92" height="144" rx="2" fill="#8a6a4f" stroke="${K}" stroke-width="1.4"/><rect x="8" y="10" width="80" height="132" fill="#5c4238"/>${[10, 43, 76, 109]
   .map((y, r) => {
@@ -196,7 +219,8 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
     const startPct = narrow ? 4 : 15;
     const widthPct = narrow ? 92 : 70;
     order.slice(0, n).forEach((j) => {
-      placed.push({ row: ri, left: startPct + ((j + 0.5 + (ri % 2 ? 0.25 : 0)) / cap) * widthPct, cast: (placed.length * 3 + ri) % CAST.length });
+      // Rows are shifted against each other so every head stays visible on this flat floor.
+      placed.push({ row: ri, left: startPct + ((j + 0.5 + ROW_SHIFT[ri]) / cap) * widthPct, cast: (placed.length * 3 + ri) % CAST.length });
     });
   });
 
@@ -272,7 +296,7 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
                   ["--dl" as string]: `${(-(i * 0.37) % 2).toFixed(2)}s`,
                   ["--sw" as string]: `${(2.2 + (i % 3) * 0.3).toFixed(1)}s`
                 }}
-                dangerouslySetInnerHTML={{ __html: CAST_SVG[d.cast] }}
+                dangerouslySetInnerHTML={{ __html: dancerSvg(d.cast, i) }}
               />
             );
           })}
@@ -282,7 +306,7 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
             <div className="dz-train" style={{ ["--zw" as string]: `${width + 40}px` }}>
               {Array.from({ length: poloMembers }, (_, i) => {
                 const c = (i + 2) % CAST.length;
-                return <div key={i} className={`dz-d m-${CAST[c].move}`} dangerouslySetInnerHTML={{ __html: CAST_SVG[c] }} />;
+                return <div key={i} className={`dz-d m-${CAST[c].move}`} dangerouslySetInnerHTML={{ __html: dancerSvg(c, 100 + i) }} />;
               })}
             </div>
           </div>

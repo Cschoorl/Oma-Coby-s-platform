@@ -1,19 +1,21 @@
 import { formatNumber } from "../../components/ui";
-import { GOAL_OLIEBOLLEN, OLIEBOLLEN_PER_OUDJE } from "../../config";
+import { OLIEBOLLEN_PER_OUDJE } from "../../config";
 import logoUrl from "../../assets/logo-oliebollenbar.svg";
+import { cardDancerSvgs } from "./Discozaal";
 
 export type CardFormat = "post" | "story";
 
 export interface StandData {
   /** ISO date of the stand, e.g. "2026-12-22". */
   date: string;
+  /** Oliebollen sold this season so far. */
   oliebollen: number;
-  /** Oliebollen added up per day this season, oldest first; drawn as the "route". */
-  curve: number[];
+  /** The same period last season, to compare with; left out when there is nothing to compare. */
+  previous?: { year: number; now: number; then: number };
 }
 
 const SIZE: Record<CardFormat, [number, number]> = { post: [1080, 1350], story: [1080, 1920] };
-const C = { meel: "#f9f3d9", krent: "#261f1f", oliebol: "#5c4238", feest: "#d05438", muted: "#6d5a4f", line: "rgba(92, 66, 56, 0.14)" };
+const C = { meel: "#f9f3d9", papier: "#fffdf6", krent: "#261f1f", oliebol: "#5c4238", feest: "#d05438", kerst: "#69873c", muted: "#6d5a4f" };
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -24,14 +26,57 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/** Arrow in a circle: up and to the right when it went better, down and to the left when it went less. */
+function drawArrow(ctx: CanvasRenderingContext2D, cx: number, cy: number, up: boolean, color: string, tint: string) {
+  ctx.fillStyle = tint;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 58, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(up ? 0 : Math.PI);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 12;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(-22, 22);
+  ctx.lineTo(22, -22);
+  ctx.moveTo(-6, -22);
+  ctx.lineTo(22, -22);
+  ctx.lineTo(22, 6);
+  ctx.stroke();
+  ctx.restore();
+}
+
 /**
- * The stand as a minimal share card, like a Strava activity card: date and title, the season as one line,
- * three numbers in a row, a thin line to the goal, and the logo. Post is 4:5, Story is 9:16.
+ * The stand as a share card: how many oudjes are dancing, how many oliebollen that took,
+ * and how it compares with last season. Post is 4:5, Story is 9:16.
  */
 export async function drawStandCard(data: StandData, format: CardFormat): Promise<Blob> {
+  try {
+    return await render(data, format, true);
+  } catch {
+    // Some browsers refuse SVG drawings on a canvas they export; then the card goes without them.
+    return render(data, format, false);
+  }
+}
+
+async function render(data: StandData, format: CardFormat, withDrawings: boolean): Promise<Blob> {
   // Arvo for the numbers: canvas cannot switch on lining figures, and Vollkorn draws old-style ones.
   await Promise.all([document.fonts.load("400 120px Bangers"), document.fonts.load("700 80px Arvo"), document.fonts.load("400 30px Arvo")]);
   const [W, H] = SIZE[format];
+  const story = format === "story";
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -42,11 +87,11 @@ export async function drawStandCard(data: StandData, format: CardFormat): Promis
   const left = pad;
   const right = W - pad;
   const oudjes = Math.floor(data.oliebollen / OLIEBOLLEN_PER_OUDJE);
-  const pct = Math.min(100, Math.round((data.oliebollen / GOAL_OLIEBOLLEN) * 100));
 
   ctx.fillStyle = C.meel;
   ctx.fillRect(0, 0, W, H);
 
+  // Head: date and title.
   const day = new Date(`${data.date}T12:00:00`).toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
   ctx.fillStyle = C.muted;
   ctx.font = "700 30px Arvo";
@@ -54,74 +99,60 @@ export async function drawStandCard(data: StandData, format: CardFormat): Promis
   ctx.fillText(`TUSSENSTAND · ${day.toUpperCase()}`, left, pad + 30);
   ctx.letterSpacing = "0px";
   ctx.fillStyle = C.krent;
-  ctx.font = "400 120px Bangers";
-  ctx.fillText("DE DISCOZAAL", left, pad + 160);
+  ctx.font = "400 110px Bangers";
+  ctx.fillText("DE DISCOZAAL", left, pad + 150);
 
-  // The season so far as a route: start ring, line, end dot.
-  const top = pad + 240;
-  const bottom = format === "story" ? H - 760 : H - 590;
-  const pts = data.curve.length > 1 ? data.curve : [0, data.oliebollen];
-  const max = Math.max(1, ...pts);
-  const px = (i: number) => left + (i / (pts.length - 1)) * (right - left);
-  const py = (v: number) => bottom - (v / max) * (bottom - top);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = C.line;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(left, bottom);
-  ctx.lineTo(right, bottom);
-  ctx.stroke();
-  ctx.strokeStyle = C.feest;
-  ctx.lineWidth = 12;
-  ctx.beginPath();
-  pts.forEach((v, i) => (i ? ctx.lineTo(px(i), py(v)) : ctx.moveTo(px(i), py(v))));
-  ctx.stroke();
-  ctx.fillStyle = C.meel;
-  ctx.strokeStyle = C.krent;
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(px(0), py(pts[0]), 14, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  // The number of oudjes, big.
+  let y = pad + (story ? 470 : 400);
   ctx.fillStyle = C.feest;
-  ctx.strokeStyle = C.meel;
-  ctx.beginPath();
-  ctx.arc(px(pts.length - 1), py(pts[pts.length - 1]), 18, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  ctx.font = "700 230px Arvo";
+  ctx.fillText(formatNumber(oudjes), left - 8, y);
+  y += 84;
+  ctx.fillStyle = C.krent;
+  ctx.font = "400 72px Bangers";
+  ctx.fillText(oudjes === 1 ? "OUDJE OP DE DANSVLOER" : "OUDJES OP DE DANSVLOER", left, y);
+  y += 70;
+  ctx.fillStyle = C.oliebol;
+  ctx.font = "400 40px Arvo";
+  ctx.fillText(`dankzij ${formatNumber(data.oliebollen)} verkochte oliebollen`, left, y);
 
-  // Three numbers in a row.
-  const statsY = bottom + (format === "story" ? 170 : 150);
-  const colW = (right - left) / 3;
-  const stats: Array<[string, string]> = [["Oliebollen", formatNumber(data.oliebollen)], ["Oudjes", formatNumber(oudjes)], ["Van het doel", `${pct}%`]];
-  stats.forEach(([label, value], i) => {
-    const x = left + i * colW;
+  // Compared with last season: arrow up-right in green, or down-left in red.
+  y += story ? 110 : 80;
+  const boxH = 170;
+  ctx.fillStyle = C.papier;
+  roundRect(ctx, left, y, right - left, boxH, 24);
+  ctx.fill();
+  const p = data.previous;
+  if (p && p.then > 0) {
+    const pct = Math.round(((p.now - p.then) / p.then) * 100);
+    const up = pct >= 0;
+    drawArrow(ctx, left + 100, y + boxH / 2, up, up ? C.kerst : C.feest, up ? "#e7efd8" : "#fbe5dd");
+    ctx.fillStyle = up ? "#3c561b" : "#9a3219";
+    ctx.font = "700 84px Arvo";
+    ctx.fillText(`${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct)}%`, left + 196, y + 92);
     ctx.fillStyle = C.muted;
     ctx.font = "400 30px Arvo";
-    ctx.fillText(label, x, statsY);
-    ctx.fillStyle = i === 1 ? C.feest : C.krent;
-    ctx.font = "700 80px Arvo";
-    ctx.fillText(value, x, statsY + 92, colW - 24);
-  });
+    ctx.fillText(`t.o.v. ${p.year}, zelfde periode (${formatNumber(p.then)} oliebollen)`, left + 196, y + 136, right - left - 220);
+  } else {
+    ctx.fillStyle = C.muted;
+    ctx.font = "400 34px Arvo";
+    ctx.fillText("Nog geen cijfers van vorig jaar om mee te vergelijken.", left + 40, y + 96, right - left - 80);
+  }
 
-  // A thin line to the goal.
-  const barY = statsY + 150;
-  ctx.fillStyle = "rgba(92, 66, 56, 0.12)";
-  ctx.fillRect(left, barY, right - left, 8);
-  ctx.fillStyle = C.feest;
-  ctx.fillRect(left, barY, Math.max(8, ((right - left) * pct) / 100), 8);
-  ctx.fillStyle = C.muted;
-  ctx.font = "400 26px Arvo";
-  ctx.fillText(
-    `Op weg naar ${formatNumber(GOAL_OLIEBOLLEN)} oliebollen = ${formatNumber(GOAL_OLIEBOLLEN / OLIEBOLLEN_PER_OUDJE)} oudjes naar de Gouwe Ouwe-avond`,
-    left,
-    barY + 52,
-    right - left
-  );
+  // A row of dancing oudjes.
+  const footY = H - pad;
+  if (withDrawings) {
+    const count = 7;
+    const imgs = await Promise.all(cardDancerSvgs(count).map((svg) => loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`)));
+    const w = (right - left) / count;
+    const h = w * (92 / 60);
+    const rowY = footY - 90 - h;
+    ctx.fillStyle = "rgba(92, 66, 56, 0.08)";
+    ctx.fillRect(0, rowY + h - 6, W, 4);
+    imgs.forEach((img, i) => ctx.drawImage(img, left + i * w, rowY, w, h));
+  }
 
   // Logo and address.
-  const footY = H - pad;
   try {
     const logo = await loadImage(logoUrl);
     const lw = 240;

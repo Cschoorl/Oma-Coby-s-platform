@@ -130,10 +130,9 @@ export function StatsPage({ state }: { state: DashboardState }) {
   const oudjes = oudjesFor(seasonOliebollen);
 
   function openShare() {
-    // The season so far, added up per day: the line on the card.
-    let running = 0;
-    const curve = (thisSeason?.days ?? []).filter((d) => d.daysBefore >= cutoff).map((d) => (running += d.oliebollen));
-    setSharing({ date: todayIso(), oliebollen: seasonOliebollen, curve: [0, ...curve] });
+    // Compared with the same period last season, like the numbers at the top of this page.
+    const previous = pastSeasons[0] ? { year: pastSeasons[0].year, now: now.oliebollen, then: last.oliebollen } : undefined;
+    setSharing({ date: todayIso(), oliebollen: seasonOliebollen, previous });
   }
 
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;

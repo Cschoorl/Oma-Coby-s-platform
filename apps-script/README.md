@@ -33,7 +33,7 @@ Het script:
 
    | Eigenschap | Waarde |
    |---|---|
-   | `CODE_BEHEER` | lange code voor beheer, bijv. `Coby-beheer-7391` |
+   | `CODE_BEHEER` | een lange, zelfbedachte code voor beheer |
    | `CODE_INPAKKER` | code voor inpakkers |
    | `CODE_BEZORGER` | code voor bezorgers |
    | `ANTHROPIC_API_KEY` | API-sleutel van console.anthropic.com (alleen nodig voor het uitlezen van bonnen) |

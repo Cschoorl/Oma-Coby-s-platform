@@ -138,13 +138,23 @@ const PERMISSIONS = {
 // ---------------------------------------------------------------------------
 // HTTP
 
-function doGet() {
-  return json_({ ok: true, message: 'Oma Coby dashboard API. Gebruik POST.' });
+/**
+ * GET with ?p=<json> works the same as POST. The dashboard uses GET for small requests: a POST can
+ * turn into a GET on a redirect (and then lose its body), a GET never does.
+ */
+function doGet(e) {
+  const payload = e && e.parameter && e.parameter.p;
+  if (!payload) return json_({ ok: true, message: 'Oma Coby dashboard API.' });
+  return handle_(payload);
 }
 
 function doPost(e) {
+  return handle_((e && e.postData && e.postData.contents) || '{}');
+}
+
+function handle_(raw) {
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const body = JSON.parse(raw);
     const action = String(body.action || '');
     const allowed = PERMISSIONS[action];
     if (!allowed) return json_({ ok: false, error: 'Onbekende actie: ' + action });

@@ -1,3 +1,5 @@
+import { Card, Oval } from "../../components/ui";
+
 interface SupplierPickerProps {
   supplierNames: string[];
   selectedSupplier: string | null;
@@ -6,8 +8,8 @@ interface SupplierPickerProps {
 
 export function SupplierPicker({ supplierNames, selectedSupplier, onSelectSupplier }: SupplierPickerProps) {
   return (
-    <section className="rounded-xl border border-stone-200 bg-white p-4">
-      <h2 className="mb-3 text-base font-semibold text-stone-900">Bezorgers van deze dag</h2>
+    <Card>
+      <h2 className="mb-3 font-serif text-xl font-bold text-krent">Wie ben jij?</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {supplierNames.map((supplier) => {
           const initials = supplier
@@ -22,23 +24,17 @@ export function SupplierPicker({ supplierNames, selectedSupplier, onSelectSuppli
               key={supplier}
               type="button"
               onClick={() => onSelectSupplier(supplier)}
-              className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                selectedSupplier === supplier
-                  ? "border-coby-500 bg-coby-100 text-coby-900 shadow-sm"
-                  : "border-stone-200 bg-white text-stone-800 hover:border-coby-300 hover:bg-coby-50/40"
+              className={`flex min-h-[52px] items-center gap-3 rounded-kaart px-3 py-2.5 text-left text-sm font-bold transition ${
+                selectedSupplier === supplier ? "bg-gouwe-50 text-krent ring-1 ring-gouwe/70" : "bg-vul text-krent hover:bg-gouwe-50"
               }`}
             >
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-coby-200 text-xs font-bold text-coby-900">
-                {initials}
-              </span>
+              <Oval>{initials}</Oval>
               <span>{supplier}</span>
             </button>
           );
         })}
       </div>
-      {supplierNames.length === 0 ? (
-        <p className="mt-3 text-sm text-stone-600">Nog geen bezorgers ingedeeld op deze datum.</p>
-      ) : null}
-    </section>
+      {supplierNames.length === 0 ? <p className="mt-3 text-sm text-muted">Nog geen bezorgers ingedeeld op deze datum.</p> : null}
+    </Card>
   );
 }

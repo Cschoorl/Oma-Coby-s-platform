@@ -3,7 +3,8 @@ import { backend, type SignupCounts } from "../../data/backend";
 import { countFor, labelQuietOptions, optionKey, shortOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
 import type { RoleAvailability, VolunteerRole } from "../../types/dashboard";
 import { VOLUNTEER_ROLES } from "../../types/dashboard";
-import { Card, Notice, SectionTitle, inputClass, primaryButton, secondaryButton } from "../../components/ui";
+import { Card, Notice, SectionTitle, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
+import omaUrl from "../../assets/oma-coby.jpg";
 import { CONTACT_EMAIL, OPTION_TIMES, SIGNUP_HINTS, SIGNUP_OPTIONS, applyAgenda } from "../../config";
 import { volunteerRoleLabel } from "../../types/dashboard";
 
@@ -68,6 +69,7 @@ export function SignupPage() {
     try {
       await backend.registerVolunteer({ name, address, city, phone, email, roles: finalRoles, cargoBike, remark, consent });
       setDone(true);
+      rollOliebol();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Aanmelden mislukt.");
     } finally {
@@ -114,61 +116,74 @@ export function SignupPage() {
 
   if (done) {
     return (
-      <Card>
-        <SectionTitle title={`Bedankt, ${name.split(" ")[0]}!`} subtitle="Je aanmelding is binnen. We delen je in waar we je het hardst nodig hebben en nemen contact met je op." />
-        <p className="text-sm text-stone-700">
-          Vragen of iets wijzigen? Mail naar{" "}
-          <a className="font-semibold text-coby-700 underline" href={`mailto:${CONTACT_EMAIL}`}>
-            {CONTACT_EMAIL}
-          </a>
-          .
-        </p>
-      </Card>
+      <section className="overflow-hidden rounded-kaart bg-papier shadow-zacht">
+        <img src={omaUrl} alt="Oma Coby met een bord oliebollen" className="h-60 w-full object-cover object-[50%_35%]" />
+        <div className="relative grid gap-2 p-5">
+          <Sticker slap className="absolute -top-7 right-4">Bedankt!</Sticker>
+          <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Bedankt, {name.split(" ")[0]}!</h1>
+          <p className="text-krent">Je bent nu officieel Oma's hulpje. We delen je in waar we je het hardst nodig hebben en sturen je een berichtje.</p>
+          <p className="text-sm text-muted">
+            Vragen of iets wijzigen? Mail naar{" "}
+            <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+          <p className="text-xs text-muted">Met 10 oliebollen laat je 1 oudje rock en rollen.</p>
+        </div>
+      </section>
     );
   }
 
   return (
     <form className="grid gap-4" onSubmit={submit}>
+      <div className="grid gap-1">
+        <p className={fieldLabel}>Vrijwilligers gezocht</p>
+        <h1 className="font-display text-[44px] uppercase leading-none tracking-wide text-krent">
+          Help je <span className="text-feest">mee</span>?
+        </h1>
+        <p className="text-oliebol">Inpakken, bezorgen of achter de bar: kies wat je wilt doen en wanneer je kunt.</p>
+      </div>
       <Card>
-        <SectionTitle title="Aanmelden als vrijwilliger" subtitle="Help mee met inpakken, bezorgen of in de Oliebollenbar. Kies wat je wilt doen en wanneer je kunt." />
+        <SectionTitle title="Over jou" />
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Naam + achternaam *</span>
+            <span className={fieldLabel}>Naam + achternaam *</span>
             <input required className={inputClass} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Adres</span>
+            <span className={fieldLabel}>Adres</span>
             <input className={inputClass} value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" placeholder="Straat en huisnummer" />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Woonplaats</span>
+            <span className={fieldLabel}>Woonplaats</span>
             <input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} autoComplete="address-level2" />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Telefoonnummer</span>
+            <span className={fieldLabel}>Telefoonnummer</span>
             <input className={inputClass} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">E-mailadres</span>
+            <span className={fieldLabel}>E-mailadres</span>
             <input className={inputClass} type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </label>
         </div>
-        <p className="mt-2 text-xs text-stone-500">Vul minimaal een telefoonnummer of e-mailadres in.</p>
+        <p className="mt-2 text-xs text-muted">Vul minimaal een telefoonnummer of e-mailadres in.</p>
       </Card>
 
       {VOLUNTEER_ROLES.map((role) => (
         <Card key={role}>
           <fieldset>
-            <legend className="text-base font-semibold text-stone-900">{questions[role].ask}</legend>
-            <div className="mt-2 flex gap-2">
+            <legend className="font-serif text-lg font-bold text-krent">{questions[role].ask}</legend>
+            <div className="mt-2 inline-flex gap-0.5 rounded-lg bg-vul p-[3px]">
               {[true, false].map((value) => (
                 <label
                   key={String(value)}
-                  className={`flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-1.5 text-sm ${
-                    roles[role].wants === value ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700"
+                  className={`flex min-h-[36px] cursor-pointer items-center rounded-md px-5 py-1.5 text-sm transition has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-krent ${
+                    roles[role].wants === value ? "bg-krent font-bold text-meel" : "text-krent hover:bg-vul"
                   }`}
                 >
-                  <input type="radio" name={role} className="accent-coby-600" checked={roles[role].wants === value} onChange={() => setRole(role, { wants: value, days: value ? roles[role].days : [] })} />
+                  <input type="radio" name={role} className="sr-only" checked={roles[role].wants === value} onChange={() => setRole(role, { wants: value, days: value ? roles[role].days : [] })} />
                   {value ? "Ja" : "Nee"}
                 </label>
               ))}
@@ -178,22 +193,22 @@ export function SignupPage() {
           {roles[role].wants ? (
             <div className="mt-3 grid gap-2">
               {role === "fietskoerier" ? (
-                <label className="flex items-center gap-2 text-sm text-stone-700">
-                  <input type="checkbox" className="accent-coby-600" checked={cargoBike} onChange={(e) => setCargoBike(e.target.checked)} />
+                <label className="flex items-center gap-2 text-sm text-krent">
+                  <input type="checkbox" className="accent-[#69873c]" checked={cargoBike} onChange={(e) => setCargoBike(e.target.checked)} />
                   Ik kan een bakfiets lenen van iemand
                 </label>
               ) : null}
-              <p className="text-sm font-semibold text-stone-800">{questions[role].days}</p>
-              <p className="text-xs text-stone-600">{SIGNUP_HINTS[role]}</p>
+              <p className="text-sm font-bold text-krent">{questions[role].days}</p>
+              <p className="text-xs text-muted">{SIGNUP_HINTS[role]}</p>
               {counts && shortOptions(counts, role).length > 0 ? (
-                <p className="text-xs font-semibold text-red-800">
+                <p className="text-xs font-bold text-feest-ink">
                   {labelQuietOptions(counts, role)
                     ? 'Gemarkeerd met "nog nodig": daar hebben we nog weinig aanmeldingen.'
                     : "We hebben op bijna alle momenten nog mensen nodig. Alles wat je kunt is welkom!"}
                 </p>
               ) : null}
-              {loaded && SIGNUP_OPTIONS[role].length === 0 ? <p className="text-sm text-stone-600">Hiervoor staan nog geen momenten in de agenda.</p> : null}
-              <div className="flex flex-wrap gap-2">
+              {loaded && SIGNUP_OPTIONS[role].length === 0 ? <p className="text-sm text-muted">Hiervoor staan nog geen momenten in de agenda.</p> : null}
+              <div className="flex flex-wrap gap-1.5">
                 {SIGNUP_OPTIONS[role].map((day) => {
                   const checked = roles[role].days.includes(day);
                   const needed = counts ? labelQuietOptions(counts, role) && staffingStatus(countFor(counts, role, day), targetFor(role, day)) === "weinig" : false;
@@ -201,12 +216,12 @@ export function SignupPage() {
                   return (
                     <label
                       key={day}
-                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${checked ? "border-coby-500 bg-coby-100 text-coby-900" : "border-stone-200 bg-white text-stone-700"}`}
+                      className={`flex min-h-[38px] cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${checked ? "bg-kerst-50 font-bold text-kerst-ink" : "bg-vul text-krent hover:bg-vul-2"}`}
                     >
-                      <input type="checkbox" className="accent-coby-600" checked={checked} onChange={() => toggleDay(role, day)} />
+                      <input type="checkbox" className="accent-[#69873c]" checked={checked} onChange={() => toggleDay(role, day)} />
                       {day}
-                      {time ? <span className="text-xs text-stone-500">{time}</span> : null}
-                      {needed ? <span className="rounded bg-red-100 px-1.5 text-[10px] font-semibold text-red-800">nog nodig</span> : null}
+                      {time ? <span className="text-xs font-normal text-muted">{time}</span> : null}
+                      {needed ? <span className="rounded bg-feest-50 px-1.5 text-[10px] font-bold text-feest-ink">nog nodig</span> : null}
                     </label>
                   );
                 })}
@@ -218,11 +233,11 @@ export function SignupPage() {
 
       <Card>
         <label className="grid gap-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Wil je nog iets kwijt? Opmerkingen, vragen, ideeën, suggesties?</span>
+          <span className={fieldLabel}>Wil je nog iets kwijt? Opmerkingen, vragen, ideeën, suggesties?</span>
           <textarea className={`${inputClass} min-h-[70px]`} value={remark} onChange={(e) => setRemark(e.target.value)} />
         </label>
-        <label className="mt-3 flex items-start gap-2 text-sm text-stone-700">
-          <input type="checkbox" className="mt-1 accent-coby-600" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />
+        <label className="mt-3 flex items-start gap-2 text-sm text-krent">
+          <input type="checkbox" className="mt-1 accent-[#69873c]" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />
           Ik geef toestemming om mijn gegevens te bewaren voor de planning van deze oliebollenactie. Na de actie worden ze verwijderd.
         </label>
         {error ? (
@@ -236,22 +251,22 @@ export function SignupPage() {
       </Card>
 
       {suggestions ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-stone-900/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="suggest-title">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
-            <h2 id="suggest-title" className="text-lg font-semibold text-stone-900">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-krent/40 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="suggest-title">
+          <div className="w-full max-w-md rounded-kaart bg-papier p-5 shadow-zwevend">
+            <h2 id="suggest-title" className="font-serif text-xl font-bold text-krent">
               Kun je misschien ook op een van deze momenten?
             </h2>
-            <p className="mt-1 text-sm text-stone-600">Hier hebben we nog weinig vrijwilligers. Vink aan wat je erbij kunt doen, of verstuur zoals je het had.</p>
-            <div className="mt-3 grid gap-2">
+            <p className="mt-1 text-sm text-muted">Hier hebben we nog weinig vrijwilligers. Vink aan wat je erbij kunt doen, of verstuur zoals je het had.</p>
+            <div className="mt-3 grid gap-1">
               {suggestions.map((s) => {
                 const key = `${s.role}|${s.option}`;
                 const n = counts ? countFor(counts, s.role, s.option) : 0;
                 return (
-                  <label key={key} className="flex cursor-pointer items-center gap-3 rounded-xl border border-stone-200 p-3 text-sm hover:border-coby-300">
-                    <input type="checkbox" className="h-4 w-4 accent-coby-600" checked={picked.includes(key)} onChange={() => setPicked((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]))} />
+                  <label key={key} className="flex cursor-pointer items-center gap-3 rounded-md p-3 text-sm hover:bg-vul">
+                    <input type="checkbox" className="h-4 w-4 accent-[#69873c]" checked={picked.includes(key)} onChange={() => setPicked((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]))} />
                     <span className="flex-1">
-                      <span className="font-semibold text-stone-900">{s.option}</span>
-                      <span className="block text-xs text-stone-600">
+                      <span className="font-bold text-krent">{s.option}</span>
+                      <span className="block text-xs text-muted">
                         {volunteerRoleLabel[s.role]} · {n === 0 ? "nog niemand" : `pas ${n} ${n === 1 ? "aanmelding" : "aanmeldingen"}`}
                       </span>
                     </span>
@@ -260,7 +275,7 @@ export function SignupPage() {
               })}
             </div>
             <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button type="button" className={secondaryButton} disabled={busy} onClick={() => { setSuggestions(null); void send(roles); }}>
+              <button type="button" className={ghostButton} disabled={busy} onClick={() => { setSuggestions(null); void send(roles); }}>
                 Nee, verstuur zo
               </button>
               <button type="button" className={primaryButton} disabled={busy || picked.length === 0} onClick={() => void confirmSuggestions()}>

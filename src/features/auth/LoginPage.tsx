@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { backend, DEMO_CODES, type Session } from "../../data/backend";
-import { Card, Notice, SectionTitle, inputClass, primaryButton } from "../../components/ui";
+import { Card, Notice, fieldLabel, inputClass, primaryButton, textAction, toast } from "../../components/ui";
 import { appLink } from "../../lib/router";
 
 export function LoginPage({ onLogin }: { onLogin: (session: Session) => void }) {
@@ -20,6 +20,7 @@ export function LoginPage({ onLogin }: { onLogin: (session: Session) => void }) 
     try {
       const role = await backend.login(code);
       onLogin({ code: code.trim(), role, name: name.trim() });
+      toast(`Welkom, ${name.trim().split(" ")[0]}!`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Inloggen mislukt.");
     } finally {
@@ -28,17 +29,20 @@ export function LoginPage({ onLogin }: { onLogin: (session: Session) => void }) 
   }
 
   return (
-    <form onSubmit={submit} className="mx-auto grid w-full max-w-md gap-4">
+    <form onSubmit={submit} className="mx-auto grid w-full max-w-md gap-4 pt-2">
+      <h1 className="text-center font-display text-[38px] uppercase leading-none tracking-wide text-krent">
+        Wie staat er <span className="text-feest">achter de pan</span>?
+      </h1>
       <Card>
-        <SectionTitle title="Inloggen" subtitle="Vul je naam en de toegangscode van je rol in. Die krijg je van de organisatie." />
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Je naam</span>
+            <span className={fieldLabel}>Je naam</span>
             <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Voor- en achternaam" />
           </label>
           <label className="grid gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Toegangscode</span>
+            <span className={fieldLabel}>Toegangscode</span>
             <input className={inputClass} value={code} onChange={(e) => setCode(e.target.value)} type="password" autoComplete="current-password" />
+            <span className="text-xs text-muted">De code van je rol krijg je van de organisatie.</span>
           </label>
           {error ? <Notice tone="error">{error}</Notice> : null}
           <button type="submit" className={primaryButton} disabled={busy}>
@@ -51,9 +55,9 @@ export function LoginPage({ onLogin }: { onLogin: (session: Session) => void }) 
           Demo-codes: beheer <code>{DEMO_CODES.beheer}</code>, inpakker <code>{DEMO_CODES.inpakker}</code>, bezorger <code>{DEMO_CODES.bezorger}</code>.
         </Notice>
       ) : null}
-      <p className="text-center text-sm text-stone-700">
+      <p className="text-center text-sm text-krent">
         Wil je meehelpen?{" "}
-        <a className="font-semibold text-coby-700 underline" href={appLink("/aanmelden")}>
+        <a className={textAction} href={appLink("/aanmelden")}>
           Meld je aan als vrijwilliger
         </a>
       </p>

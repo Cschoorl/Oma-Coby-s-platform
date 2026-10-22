@@ -1,10 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { backend, type Session } from "../../data/backend";
 import type { DashboardState, PackingPart, PackingState } from "../../types/dashboard";
 import { emptyPacking } from "../../types/dashboard";
 import type { CustomerType, Order } from "../../types/order";
 import { OrderFilters } from "../orders/OrderFilters";
-import { Badge, Notice, Segmented, cardClass, formatNumber, ghostButton, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
+import {
+  Badge,
+  Bollenteller,
+  ConfirmPanel,
+  EmptyState,
+  Icon,
+  Note,
+  Notice,
+  Oval,
+  ProgressBar,
+  Segmented,
+  Sticker,
+  fieldLabel,
+  formatNumber,
+  ghostButton,
+  oudjesLine,
+  pickInitialDate,
+  primaryButton,
+  quickButton,
+  rollOliebol,
+  secondaryButton,
+  textAction,
+  toast
+} from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 
@@ -78,13 +101,15 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     return true;
   });
 
-  async function act(key: string, change: () => Promise<unknown>) {
+  async function act(key: string, change: () => Promise<unknown>): Promise<boolean> {
     setBusy(key);
     setError(null);
     try {
       await run(change);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Er ging iets mis.");
+      return false;
     } finally {
       setBusy(null);
     }
@@ -100,100 +125,102 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 
   const orderedTotal = totals.met + totals.zonder;
   const packedTotal = totals.packedMet + totals.packedZonder;
-  // Progress counts orders: that is what the packers work through. Oliebollen are shown per column above.
-  const packedPct = dayOrders.length ? Math.round((totals.packedOrders / dayOrders.length) * 100) : 0;
   const counts = {
     open: dayOrders.filter((o) => !packingOf(state, o.id).packedBy).length,
     mine: dayOrders.filter((o) => packingOf(state, o.id).claimedBy === session.name && !packingOf(state, o.id).packedBy).length,
     done: totals.packedOrders
   };
+  const allPacked = dayOrders.length > 0 && totals.packedOrders === dayOrders.length;
+
+  // Knipoog: the moment the last order of the day is packed, a drawn oliebol rolls by.
+  const lastPacked = useRef<{ date: string; packed: number } | null>(null);
+  useEffect(() => {
+    const prev = lastPacked.current;
+    lastPacked.current = { date, packed: totals.packedOrders };
+    if (prev && prev.date === date && prev.packed < dayOrders.length && allPacked) {
+      rollOliebol();
+      toast("Alles ingepakt. Tijd voor een bakkie.");
+    }
+  }, [date, totals.packedOrders, dayOrders.length, allPacked]);
 
   return (
     <div className="grid gap-5">
       <OrderFilters selectedDate={date} availableDates={dates} onDateChange={setDate} />
 
       {/* One summary: what is ordered, still to bake and already packed. */}
-      <section className={cardClass}>
-        <div className="grid grid-cols-3 gap-3 sm:gap-4">
-          <Summary label="Met krenten" ordered={totals.met} toBake={toBakeMet} packed={totals.packedMet} />
-          <Summary label="Zonder krenten" ordered={totals.zonder} toBake={toBakeZonder} packed={totals.packedZonder} />
-          <Summary label="Totaal" ordered={orderedTotal} toBake={toBakeMet + toBakeZonder} packed={packedTotal} strong />
+      <Bollenteller
+        cells={[
+          { label: "Met", value: totals.met, sub: <BakeLine toBake={toBakeMet} packed={totals.packedMet} /> },
+          { label: "Zonder", value: totals.zonder, sub: <BakeLine toBake={toBakeZonder} packed={totals.packedZonder} /> },
+          { label: "Totaal", value: orderedTotal, sub: <BakeLine toBake={toBakeMet + toBakeZonder} packed={packedTotal} /> }
+        ]}
+      />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-[220px] flex-1">
+          <ProgressBar label="Orders ingepakt" done={totals.packedOrders} total={dayOrders.length} />
         </div>
-        <div className="mt-4">
-          <div className="flex items-center justify-between text-xs text-stone-500">
-            <span>
-              Orders ingepakt: <span className="font-semibold text-stone-700">{totals.packedOrders} van {dayOrders.length}</span>
-            </span>
-            <span className="tabular-nums">{packedPct}% van de orders</span>
-          </div>
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-valuenow={packedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Orders ingepakt">
-            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${packedPct}%` }} />
-          </div>
-        </div>
+        {allPacked ? <Sticker tone="kerst">Alles ingepakt!</Sticker> : null}
+      </div>
 
-        {/* Baking is tracked here; "nog bakken" above only goes down once this is filled in. */}
-        <div className="mt-4 grid gap-2 rounded-lg bg-coby-50 p-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-sm font-semibold text-stone-900">Gebakken op deze leverdag</p>
-            <p className="text-xs text-stone-600">Bakkers: vul hier in hoeveel er klaar ligt. Dan daalt "nog bakken" hierboven.</p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(["withRaisins", "withoutRaisins"] as const).map((field) => (
-              <BakedInput
-                key={`${date}-${field}`}
-                label={field === "withRaisins" ? "Met krenten" : "Zonder krenten"}
-                value={baked[field]}
-                ordered={field === "withRaisins" ? totals.met : totals.zonder}
-                disabled={busy !== null}
-                onChange={(v) => setBakedValue(field, v)}
-              />
-            ))}
-          </div>
+      {/* Baking is tracked here; "nog bakken" above only goes down once this is filled in. */}
+      <section className="grid gap-2.5 rounded-kaart bg-gouwe-50 p-3.5 sm:p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-serif text-base font-bold text-krent">Gebakken op deze leverdag</p>
+          <p className="text-xs text-oliebol">Bakkers: vul in wat klaar ligt, dan zakt "nog bakken" mee.</p>
         </div>
-
-        <details className="group mt-4 border-t border-stone-100 pt-3">
-          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium text-stone-700 hover:text-stone-900">
-            <span>Verdeling particulier / zakelijk / barter</span>
-            <span className="text-stone-400 transition group-open:rotate-180">▾</span>
-          </summary>
-          <div className="mt-4 grid gap-5 lg:grid-cols-2">
-            <div>
-              <p className="mb-2 text-xs font-medium text-stone-500">Besteld per klanttype</p>
-              {!hasTypes ? (
-                <p className="text-sm text-amber-800">
-                  Nog geen klanttype in de Sheet (kolom <code>Type</code>).
-                </p>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-xs text-stone-500">
-                      <th className="pb-1 font-medium">Type</th>
-                      <th className="pb-1 text-right font-medium">Met</th>
-                      <th className="pb-1 text-right font-medium">Zonder</th>
-                      <th className="pb-1 text-right font-medium">Totaal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="tabular-nums">
-                    {(Object.keys(totals.byType) as CustomerType[])
-                      .filter((type) => type === "particulier" || type === "zakelijk" || totals.byType[type].met + totals.byType[type].zonder > 0)
-                      .map((type) => {
-                        const row = totals.byType[type];
-                        return (
-                          <tr key={type} className="border-t border-stone-100">
-                            <td className="py-1.5 text-stone-700">{customerLabel[type]}</td>
-                            <td className="py-1.5 text-right">{formatNumber(row.met)}</td>
-                            <td className="py-1.5 text-right">{formatNumber(row.zonder)}</td>
-                            <td className="py-1.5 text-right font-semibold">{formatNumber(row.met + row.zonder)}</td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </details>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(["withRaisins", "withoutRaisins"] as const).map((field) => (
+            <BakedInput
+              key={`${date}-${field}`}
+              label={field === "withRaisins" ? "Met krenten" : "Zonder krenten"}
+              value={baked[field]}
+              ordered={field === "withRaisins" ? totals.met : totals.zonder}
+              disabled={busy !== null}
+              onChange={(v) => setBakedValue(field, v)}
+            />
+          ))}
+        </div>
       </section>
+
+      <details className="group">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-sm font-bold text-oliebol hover:text-krent">
+          Verdeling particulier / zakelijk / barter
+          <span className="transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="mt-3 max-w-xl rounded-kaart bg-papier p-4 shadow-zacht">
+          {!hasTypes ? (
+            <p className="text-sm text-gouwe-ink">
+              Nog geen klanttype in de Sheet (kolom <code>Type</code>).
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`border-b border-lijn-2 text-left ${fieldLabel}`}>
+                  <th className="pb-1.5 font-bold">Type</th>
+                  <th className="pb-1.5 text-right font-bold">Met</th>
+                  <th className="pb-1.5 text-right font-bold">Zonder</th>
+                  <th className="pb-1.5 text-right font-bold">Totaal</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {(Object.keys(totals.byType) as CustomerType[])
+                  .filter((type) => type === "particulier" || type === "zakelijk" || totals.byType[type].met + totals.byType[type].zonder > 0)
+                  .map((type) => {
+                    const row = totals.byType[type];
+                    return (
+                      <tr key={type} className="border-b border-lijn last:border-0">
+                        <td className="py-2">{customerLabel[type]}</td>
+                        <td className="py-2 text-right">{formatNumber(row.met)}</td>
+                        <td className="py-2 text-right">{formatNumber(row.zonder)}</td>
+                        <td className="py-2 text-right font-bold">{formatNumber(row.met + row.zonder)}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </details>
 
       <section className="grid gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -202,9 +229,9 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
             value={filter}
             onChange={setFilter}
             options={[
-              ["open", `Te doen (${counts.open})`],
-              ["mine", `Mijn orders (${counts.mine})`],
-              ["done", `Klaar (${counts.done})`],
+              ["open", "Te doen", counts.open],
+              ["mine", "Mijn orders", counts.mine],
+              ["done", "Klaar", counts.done],
               ["all", "Alles"]
             ]}
           />
@@ -221,7 +248,8 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
               ]}
             />
             <a className={ghostButton} href={appLink(`/pakbonnen?datum=${date}`)} target="_blank" rel="noreferrer">
-              Pakbonnen printen
+              <Icon name="print" />
+              Pakbonnen
             </a>
           </div>
         </div>
@@ -242,7 +270,13 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
             />
           ))}
         </div>
-        {visibleOrders.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500">Geen orders in deze selectie.</p> : null}
+        {visibleOrders.length === 0 ? (
+          allPacked && filter === "open" ? (
+            <EmptyState title="Niks meer te doen." text="Alle orders voor deze dag zijn ingepakt. Oma Coby is trots op je." />
+          ) : (
+            <EmptyState title="Geen orders in deze selectie." text="Kies een andere status, klanttype of leverdag." />
+          )
+        ) : null}
       </section>
     </div>
   );
@@ -258,11 +292,11 @@ function BakedInput({ label, value, ordered, disabled, onChange }: { label: stri
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="flex items-center gap-2 text-sm text-stone-700">
+      <label className="flex items-center gap-2 text-sm text-krent">
         <span className="w-28">{label}</span>
         <input
           inputMode="numeric"
-          className="w-20 rounded-md border border-stone-300 bg-white px-2 py-1 text-right text-base font-semibold tabular-nums text-stone-900 focus:border-coby-500 focus:outline-none"
+          className="w-20 rounded-md border border-lijn-2 bg-papier px-2 py-1 text-right font-serif text-lg font-bold tabular-nums text-krent focus:border-krent focus:outline-none focus:ring-2 focus:ring-krent/20"
           value={text}
           disabled={disabled}
           onChange={(e) => setText(e.target.value)}
@@ -273,25 +307,14 @@ function BakedInput({ label, value, ordered, disabled, onChange }: { label: stri
           aria-label={`Gebakken ${label.toLowerCase()}`}
         />
       </label>
-      <span className="text-xs text-stone-500">van {formatNumber(ordered)}</span>
+      <span className="text-xs text-muted">van {formatNumber(ordered)}</span>
       <div className="flex gap-1">
         {[10, 50].map((delta) => (
-          <button
-            key={delta}
-            type="button"
-            disabled={disabled}
-            onClick={() => onChange(value + delta)}
-            className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-40"
-          >
+          <button key={delta} type="button" disabled={disabled} onClick={() => onChange(value + delta)} className={quickButton}>
             +{delta}
           </button>
         ))}
-        <button
-          type="button"
-          disabled={disabled || value >= ordered}
-          onClick={() => onChange(ordered)}
-          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-40"
-        >
+        <button type="button" disabled={disabled || value >= ordered} onClick={() => onChange(ordered)} className={`${secondaryButton} min-h-[32px] px-2.5 py-1 text-xs`}>
           Alles
         </button>
       </div>
@@ -299,18 +322,23 @@ function BakedInput({ label, value, ordered, disabled, onChange }: { label: stri
   );
 }
 
-function Summary({ label, ordered, toBake, packed, strong }: { label: string; ordered: number; toBake: number; packed: number; strong?: boolean }) {
+/** "60 nog bakken · 120 ingepakt"; counts down visibly when the bakers fill in more. */
+function BakeLine({ toBake, packed }: { toBake: number; packed: number }) {
+  const [tick, setTick] = useState(0);
+  const prev = useRef(toBake);
+  useEffect(() => {
+    if (toBake < prev.current) setTick((t) => t + 1);
+    prev.current = toBake;
+  }, [toBake]);
   return (
-    <div className={strong ? "border-l border-stone-100 pl-3 sm:pl-4" : ""}>
-      <p className="text-xs font-medium text-stone-500">{label}</p>
-      <p className={`mt-0.5 font-semibold tabular-nums text-stone-900 ${strong ? "text-2xl sm:text-3xl" : "text-xl sm:text-2xl"}`}>{formatNumber(ordered)}</p>
-      <p className="mt-1 text-[11px] leading-snug text-stone-500 sm:text-xs">
-        <span className={toBake > 0 ? "font-semibold text-coby-700" : "text-emerald-700"}>{toBake > 0 ? `${formatNumber(toBake)} nog bakken` : "alles gebakken"}</span>
-        <span className="hidden sm:inline"> · </span>
-        <br className="sm:hidden" />
-        {formatNumber(packed)} ingepakt
-      </p>
-    </div>
+    <p className="text-muted">
+      <span key={tick} className={toBake > 0 ? `font-bold text-feest-ink ${tick ? "oc-tick inline-block" : ""}` : "font-bold text-kerst-ink"}>
+        {toBake > 0 ? `${formatNumber(toBake)} nog bakken` : "alles gebakken ✓"}
+      </span>
+      <span className="hidden sm:inline"> · </span>
+      <br className="sm:hidden" />
+      {formatNumber(packed)} ingepakt
+    </p>
   );
 }
 
@@ -321,12 +349,14 @@ interface PackingCardProps {
   packing: PackingState;
   session: Session;
   busy: string | null;
-  onAct: (key: string, change: () => Promise<unknown>) => Promise<void>;
+  onAct: (key: string, change: () => Promise<unknown>) => Promise<boolean>;
 }
 
 function PackingCard({ order, note, courier, packing, session, busy, onAct }: PackingCardProps) {
   // Ticks show immediately; the server answer (or an error) settles them afterwards.
   const [optimistic, setOptimistic] = useState<Partial<Record<PackingPart, boolean>>>({});
+  const [askReopen, setAskReopen] = useState(false);
+  const [justDone, setJustDone] = useState(false);
   const view = { ...packing, ...optimistic };
   const mine = packing.claimedBy === session.name;
   const claimedByOther = Boolean(packing.claimedBy) && !mine;
@@ -338,7 +368,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
   const parts: Array<{ part: PackingPart; label: string; count: number }> = [
     { part: "met", label: "Met", count: order.withRaisins },
     { part: "zonder", label: "Zonder", count: order.withoutRaisins },
-    { part: "totaal", label: "Geheel", count: order.withRaisins + order.withoutRaisins }
+    { part: "totaal", label: "Totaal", count: order.withRaisins + order.withoutRaisins }
   ];
 
   function toggle(part: PackingPart, value: boolean) {
@@ -360,34 +390,43 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
     flyers ? "met flyers" : ""
   ].filter(Boolean);
 
+  async function complete() {
+    const pieces = order.withRaisins + order.withoutRaisins;
+    if (await onAct(`${order.id}-complete`, () => backend.complete(session, order.id))) {
+      setJustDone(true);
+      toast(`Ingepakt! ${oudjesLine(pieces)}`);
+    }
+  }
+
   return (
     <article
-      className={`grid gap-3 rounded-xl border p-4 transition ${
-        done ? "border-stone-200 bg-stone-100/70" : mine ? "border-coby-400 bg-white ring-2 ring-coby-100" : "border-stone-200 bg-white"
+      className={`relative grid gap-3 rounded-kaart p-4 transition ${
+        done ? "bg-transparent" : mine ? "bg-gouwe-50 shadow-zacht ring-1 ring-gouwe/70" : "bg-papier shadow-zacht"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className={`truncate font-semibold ${done ? "text-stone-500" : "text-stone-900"}`}>{order.locationName || order.contactPerson}</p>
-          <p className="mt-0.5 text-xs text-stone-500">{meta.join(" · ")}</p>
+          <p className={`truncate font-bold ${done ? "text-muted" : "text-krent"}`}>{order.locationName || order.contactPerson}</p>
+          <p className="mt-0.5 text-xs text-muted">{meta.join(" · ")}</p>
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-1">
-          {order.customerType === "zakelijk" ? <Badge tone="blue">Zakelijk</Badge> : null}
-          {order.customerType === "barter" ? <Badge tone="blue">Barter</Badge> : null}
-          {done ? <Badge>✓ Klaar</Badge> : mine ? <Badge tone="coby">Jij</Badge> : claimedByOther ? <Badge tone="amber">{packing.claimedBy}</Badge> : null}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {order.customerType === "zakelijk" ? <Badge tone="zacht">Zakelijk</Badge> : null}
+          {order.customerType === "barter" ? <Badge tone="zacht">Barter</Badge> : null}
+          {mine && !done ? <Oval>Jij</Oval> : claimedByOther && !done ? <Badge tone="aandacht">{packing.claimedBy} is bezig</Badge> : null}
         </div>
       </div>
+      {done ? <Sticker tone="kerst" slap={justDone} className="pointer-events-none absolute -top-3 right-3">Ingepakt!</Sticker> : null}
 
       {note ? (
-        <p className="line-clamp-2 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900" title={note}>
-          {note}
-        </p>
+        <Note className="line-clamp-2">
+          <span title={note}>{note}</span>
+        </Note>
       ) : null}
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid grid-cols-3 gap-1.5 ${done ? "opacity-55" : ""}`}>
         {parts.map(({ part, label, count }) => {
           const checked = view[part];
-          // GEHEEL stays locked until MET and ZONDER are both ticked.
+          // TOTAAL stays locked until MET and ZONDER are both ticked.
           const locked = part === "totaal" && !(view.met && view.zonder);
           const disabled = !mine || done || isBusy || (locked && !checked);
           return (
@@ -399,45 +438,51 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
               aria-label={`${label.toUpperCase()} afgevinkt`}
               disabled={disabled}
               onClick={() => toggle(part, !checked)}
-              className={`flex flex-col items-center rounded-lg border px-2 py-2.5 transition ${
+              className={`flex min-h-[72px] flex-col items-center justify-center rounded-lg border px-2 py-2 transition active:scale-[0.97] ${
                 checked
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-900"
-                  : !mine || done
-                    ? "border-stone-200 bg-stone-50 text-stone-700"
-                    : locked
-                      ? "border-dashed border-stone-300 bg-white text-stone-400"
-                      : "border-stone-300 bg-white text-stone-900 hover:border-emerald-400 hover:bg-emerald-50/40"
+                  ? "border-transparent bg-kerst-50 text-kerst-ink"
+                  : locked && mine && !done
+                    ? "border-dashed border-lijn-2 bg-transparent text-muted"
+                    : mine && !done
+                      ? "border-transparent bg-vul text-krent hover:bg-vul-2"
+                      : "border-transparent bg-vul text-krent"
               } ${disabled ? "cursor-not-allowed" : ""}`}
             >
-              <span className="text-[11px] font-semibold uppercase tracking-wide">
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em]">
                 {checked ? "✓ " : ""}
                 {label}
               </span>
-              <span className="text-xl font-semibold tabular-nums">{count}</span>
-              {locked && mine && !done ? <span className="text-[10px] text-stone-400">na met + zonder</span> : null}
+              <span className="font-serif text-2xl font-bold tabular-nums">{count}</span>
+              {locked && mine && !done ? <span className="text-[10px] text-muted">na met + zonder</span> : null}
             </button>
           );
         })}
       </div>
 
       {done ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-stone-500">
-            Ingepakt door <span className="font-semibold text-stone-700">{packing.packedBy}</span> · {packing.packedAt.slice(11, 16) || packing.packedAt}
-          </p>
-          <button
-            type="button"
-            className="text-xs font-semibold text-stone-600 underline-offset-2 hover:text-stone-900 hover:underline disabled:opacity-40"
-            disabled={isBusy}
-            onClick={() => {
-              if (window.confirm("Deze order heropenen om iets aan te passen? Hij komt dan op jouw naam te staan.")) {
-                void onAct(`${order.id}-reopen`, () => backend.reopen(session, order.id));
-              }
+        askReopen ? (
+          <ConfirmPanel
+            confirmLabel="Heropenen"
+            busy={isBusy}
+            onCancel={() => setAskReopen(false)}
+            onConfirm={() => {
+              setAskReopen(false);
+              setJustDone(false);
+              void onAct(`${order.id}-reopen`, () => backend.reopen(session, order.id));
             }}
           >
-            Heropenen om aan te passen
-          </button>
-        </div>
+            <p>Deze order heropenen om iets aan te passen? Hij komt dan op jouw naam te staan.</p>
+          </ConfirmPanel>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted">
+              Ingepakt door <b className="text-krent">{packing.packedBy}</b> · {packing.packedAt.slice(11, 16) || packing.packedAt}
+            </p>
+            <button type="button" className={textAction} disabled={isBusy} onClick={() => setAskReopen(true)}>
+              Heropenen om aan te passen
+            </button>
+          </div>
+        )
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           {!packing.claimedBy ? (
@@ -447,17 +492,17 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
           ) : null}
           {mine ? (
             <>
-              <button type="button" className={primaryButton} disabled={!allChecked || isBusy} onClick={() => void onAct(`${order.id}-complete`, () => backend.complete(session, order.id))}>
+              <button type="button" className={primaryButton} disabled={!allChecked || isBusy} onClick={() => void complete()}>
                 Afronden
               </button>
-              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
+              <button type="button" className={ghostButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
                 Vrijgeven
               </button>
             </>
           ) : null}
-          {claimedByOther ? <p className="text-xs text-stone-500">{packing.claimedBy} is hiermee bezig.</p> : null}
+          {claimedByOther ? <p className="text-xs text-muted">{packing.claimedBy} pakt deze in.</p> : null}
           {claimedByOther && session.role === "beheer" ? (
-            <button type="button" className="text-xs font-semibold text-stone-600 hover:text-stone-900 hover:underline" disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
+            <button type="button" className={textAction} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
               Vrijgeven (beheer)
             </button>
           ) : null}

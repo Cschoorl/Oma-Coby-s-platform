@@ -7,15 +7,15 @@ const MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", 
 const WEEKDAYS = ["ma", "di", "wo", "do", "vr", "za", "zo"];
 
 const statusClass: Record<StaffingStatus, string> = {
-  weinig: "bg-red-100 text-red-800",
-  bijna: "bg-amber-100 text-amber-900",
-  genoeg: "bg-emerald-100 text-emerald-800"
+  weinig: "bg-feest-50 text-feest-ink",
+  bijna: "bg-gouwe-100 text-gouwe-ink",
+  genoeg: "bg-kerst-50 text-kerst-ink"
 };
 /** In the cells only the number is coloured, so a quiet season does not turn the calendar into a wall of red. */
 const statusText: Record<StaffingStatus, string> = {
-  weinig: "text-red-700",
-  bijna: "text-amber-700",
-  genoeg: "text-emerald-700"
+  weinig: "text-feest-ink",
+  bijna: "text-gouwe-ink",
+  genoeg: "text-kerst-ink"
 };
 const statusIcon: Record<StaffingStatus, string> = { weinig: "!", bijna: "~", genoeg: "✓" };
 
@@ -65,14 +65,14 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap gap-3 text-xs text-stone-700">
+      <div className="mb-2 flex flex-wrap gap-3 text-xs text-krent">
         {(["weinig", "bijna", "genoeg"] as StaffingStatus[]).map((s) => (
           <span key={s} className="inline-flex items-center gap-1">
             <span className={`inline-flex h-4 w-4 items-center justify-center rounded text-[10px] font-bold ${statusClass[s]}`}>{statusIcon[s]}</span>
             {statusLabel[s]}
           </span>
         ))}
-        <span className="text-stone-500">
+        <span className="text-muted">
           {Object.keys(OPTION_TARGETS).length > 0
             ? "Nodig per dag(deel): zoals in het tabblad Agenda."
             : `Nodig per dag(deel): inpakken ${STAFFING_TARGETS.inpakken}, fiets ${STAFFING_TARGETS.fietskoerier}, auto ${STAFFING_TARGETS.autokoerier}, bar ${STAFFING_TARGETS.oliebollenbar}`}
@@ -81,7 +81,7 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
       <div className="overflow-x-auto">
         <div className="grid min-w-[760px] grid-cols-7 gap-1">
           {WEEKDAYS.map((w) => (
-            <div key={w} className="px-1 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            <div key={w} className="px-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
               {w}
             </div>
           ))}
@@ -89,22 +89,23 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
             const active = inSeason.has(date.toDateString());
             const key = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
             return (
-              <div key={date.toISOString()} className={`min-h-[92px] rounded-lg border p-1.5 ${active ? "border-stone-200 bg-white" : "border-transparent bg-transparent"}`}>
-                <p className={`text-xs font-semibold ${active ? "text-stone-900" : "text-stone-400"}`}>
+              <div key={date.toISOString()} className={`min-h-[92px] rounded-md p-1.5 ${active ? "bg-meel/70" : "bg-transparent"}`}>
+                <p className={`text-xs font-bold ${active ? "text-krent" : "text-muted/50"}`}>
                   {date.getDate()} {date.getDate() === 1 || date === cells[0] ? MONTHS[date.getMonth()].slice(0, 3) : ""}
                 </p>
                 {active ? (
                   <div className="mt-1 grid gap-0.5">
                     {staffingForDay(counts, key).map(({ role, parts }) => (
                       <div key={role} className="flex flex-wrap items-center gap-1 text-[11px] leading-tight">
-                        <span className="w-[42px] shrink-0 text-stone-600">{volunteerRoleLabel[role].replace("koerier", "").slice(0, 6)}</span>
+                        <span className="w-[42px] shrink-0 text-muted">{volunteerRoleLabel[role].replace("koerier", "").slice(0, 6)}</span>
                         {parts.map((p) => (
                           <span
                             key={p.label || "dag"}
-                            className={`font-semibold tabular-nums ${statusText[p.status]}`}
+                            className={`font-bold tabular-nums ${statusText[p.status]}`}
                             title={`${volunteerRoleLabel[role]}${p.label ? ` ${p.label}` : ""}: ${p.count} van ${p.target} aangemeld (${statusLabel[p.status].toLowerCase()})`}
                           >
-                            {p.status === "weinig" ? "!" : p.status === "genoeg" ? "✓" : ""}
+                            {/* Vollkorn: in Arvo a "!" reads like a "1" at this size. */}
+                            {p.status !== "bijna" ? <span className="mr-px font-serif">{p.status === "weinig" ? "!" : "✓"}</span> : null}
                             {p.label ? `${p.label[0]}${p.count}` : p.count}
                           </span>
                         ))}
@@ -117,7 +118,7 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
           })}
         </div>
       </div>
-      <p className="mt-2 text-xs text-stone-500">o = ochtend, m = middag, a = avond. Telt aanmeldingen (beschikbaarheid), niet het definitieve rooster.</p>
+      <p className="mt-2 text-xs text-muted">o = ochtend, m = middag, a = avond. Telt aanmeldingen (beschikbaarheid), niet het definitieve rooster.</p>
     </div>
   );
 }

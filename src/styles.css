@@ -2,11 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fonts uit het design system, zelf gehost (geen Google Fonts). */
+@font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Bangers"; src: url("./assets/fonts/Bangers-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Vollkorn"; src: url("./assets/fonts/Vollkorn-Variable.woff2") format("woff2"); font-weight: 400 900; font-style: normal; font-display: swap; }
+
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-family: Arvo, Rockwell, Georgia, serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #1c1917;
+  color: #261f1f;
+  background: #f9f3d9;
+  color-scheme: light;
+  /* Vollkorn has old-style figures by default; dashboards need lining numbers. */
+  font-feature-settings: "lnum" 1;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,4 +31,52 @@
 body {
   margin: 0;
   min-height: 100vh;
+}
+
+:focus-visible {
+  outline: 2px solid #261f1f;
+  outline-offset: 2px;
+}
+
+/* Knipogen: kort, nooit blokkerend, uit bij "minder beweging". */
+/* No opacity in the keyframes: if the animation stalls (background tab), the text stays readable. */
+@keyframes oc-slap {
+  0% { transform: scale(2.3) rotate(-20deg); }
+  100% { transform: scale(1) rotate(-6deg); }
+}
+.oc-slap { animation: oc-slap 0.32s cubic-bezier(0.2, 1.6, 0.4, 1); }
+
+@keyframes oc-tick {
+  0% { color: #d05438; transform: translateY(-3px); }
+  100% { transform: none; }
+}
+.oc-tick { animation: oc-tick 0.45s ease; }
+
+@keyframes oc-skel {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.oc-skel {
+  background: linear-gradient(90deg, #ebe1bf 0%, #f6efd4 50%, #ebe1bf 100%);
+  background-size: 200% 100%;
+  animation: oc-skel 1.2s linear infinite;
+  border-radius: 4px;
+}
+
+/* Rollende oliebol bij iets bijzonders (zie rollOliebol in components/ui.tsx). */
+.oc-roll-lane { position: fixed; left: 0; right: 0; bottom: 0; height: 90px; overflow: hidden; pointer-events: none; z-index: 60; }
+.oc-roll { position: absolute; bottom: 14px; left: 0; width: 60px; height: 66px; animation: oc-roll 1.9s cubic-bezier(0.4, 0.1, 0.45, 1) forwards; }
+.oc-roll svg { width: 60px; height: 60px; display: block; animation: oc-spin 1.9s cubic-bezier(0.4, 0.1, 0.45, 1) forwards; }
+.oc-roll::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -2px; height: 6px; border-radius: 50%; background: rgba(38, 31, 31, 0.14); }
+@keyframes oc-roll {
+  0% { transform: translateX(-70px); }
+  45% { transform: translateX(calc(var(--w) * 0.45)) translateY(0); }
+  52% { transform: translateX(calc(var(--w) * 0.52)) translateY(-12px); }
+  60% { transform: translateX(calc(var(--w) * 0.6)) translateY(0); }
+  100% { transform: translateX(calc(var(--w) + 10px)); }
+}
+@keyframes oc-spin { to { transform: rotate(var(--deg)); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

@@ -12,9 +12,9 @@ export const statusLabel: Record<DeliveryStatus, string> = {
 };
 
 export const statusClasses: Record<DeliveryStatus, string> = {
-  open: "bg-sky-100 text-sky-800 border border-sky-300",
-  onderweg: "bg-amber-100 text-amber-900 border border-amber-300",
-  bezorgd: "bg-emerald-100 text-emerald-800 border border-emerald-300"
+  open: "bg-oliebol-50 text-oliebol",
+  onderweg: "bg-gouwe-100 text-gouwe-ink",
+  bezorgd: "bg-kerst-50 text-kerst-ink"
 };
 
 export function orderTotal(order: Order): number {

@@ -81,6 +81,13 @@ export const SIGNUP_HINTS = {
 };
 
 /**
+ * Goal of the action (omacobysoliebollenbar.nl): 25.000 oliebollen pay for 2.500 free entries to a Gouwe Ouwe-avond.
+ * Shown as the goal meter on Tussenstand; every 10 oliebollen is one "oudje".
+ */
+export const GOAL_OLIEBOLLEN = 25000;
+export const GOAL_MILESTONES = [5000, 10000, 25000];
+
+/**
  * How many volunteers are needed per role on each day (per dagdeel for couriers).
  * Below half of this a day shows as "weinig"; below the number as "bijna".
  */

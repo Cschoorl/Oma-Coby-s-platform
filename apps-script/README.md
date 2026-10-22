@@ -1,14 +1,17 @@
 # Google Sheet-koppeling (Apps Script)
 
-Het dashboard praat met de Google Sheets via één Apps Script (`Code.gs`). Zet het script in het
-**bestellingenbestand** ("Aanvraagformulier zakelijke bestelling (Antwoorden)"); het vrijwilligersbestand
-koppel je met een Script-eigenschap.
+Het dashboard praat met de Google Sheet via één Apps Script (`Code.gs`). Zet het script in het bestand
+**"oma coby's database"**: daar staan alle tabbladen bij elkaar (bestellingen, vrijwilligers en de tabbladen
+van het dashboard). Het tabblad `Uitleg` beschrijft per tabblad wat erin staat.
+
+Gebruik je toch losse bestanden (bijv. de formulierantwoorden in een eigen bestand), zet dan het script in het
+bestand met de bestellingen en koppel het vrijwilligersbestand met de Script-eigenschap `VOLUNTEERS_SPREADSHEET_ID`.
 
 Het script:
 
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier en barter; dat tabblad wordt nooit aangepast);
-- bewaart alles van het dashboard in eigen tabbladen, die het zelf aanmaakt:
-  `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`;
+- bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
+  `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`;
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
   zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
@@ -19,7 +22,7 @@ Het script:
 
 ## Installeren (± 15 minuten)
 
-1. Open het bestellingenbestand → **Extensies → Apps Script**.
+1. Open "oma coby's database" → **Extensies → Apps Script**.
 2. Vervang de inhoud van `Code.gs` door [`Code.gs`](./Code.gs) uit deze map.
 3. Pas bovenin `CONFIG` aan:
    - `ORDERS_SHEET`: naam van het tabblad met bestellingen (standaard `Totaal_lijst bestellingen`).
@@ -34,14 +37,17 @@ Het script:
    | `CODE_INPAKKER` | code voor inpakkers |
    | `CODE_BEZORGER` | code voor bezorgers |
    | `ANTHROPIC_API_KEY` | API-sleutel van console.anthropic.com (alleen nodig voor het uitlezen van bonnen) |
-   | `VOLUNTEERS_SPREADSHEET_ID` | ID van het bestand met de formulierantwoorden, als dat een ander bestand is dan waar het script in staat. Het ID is het lange stuk in de URL tussen `/d/` en `/edit`. Zet het hier en niet in de code: de repo is openbaar. |
+   | `VOLUNTEERS_SPREADSHEET_ID` | Alleen nodig als de formulierantwoorden in een **ander** bestand staan. Het ID is het lange stuk in de URL tussen `/d/` en `/edit`. Zet het hier en niet in de code: de repo is openbaar. |
 
-5. **Implementeren → Nieuwe implementatie → Web-app**
+5. Kies bovenin de editor de functie **`installeer`** en klik **Uitvoeren** (één keer; geef toestemming).
+   Daarmee komen ook nieuwe formulierinzendingen, ingevoegde/verwijderde rijen, sorteren en plakken
+   direct door in het platform. Nog eens uitvoeren kan geen kwaad.
+6. **Implementeren → Nieuwe implementatie → Web-app**
    - Uitvoeren als: **Ik**
    - Wie heeft toegang: **Iedereen**
    - Geef toestemming voor Sheets, Gmail (versturen), Drive, Maps en externe verzoeken.
-6. Kopieer de web-app-URL (eindigt op `/exec`).
-7. In GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
+7. Kopieer de web-app-URL (eindigt op `/exec`).
+8. In GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
    `VITE_APPS_SCRIPT_URL` = die URL. Push of start de deploy-workflow opnieuw.
 
 Lokaal testen kan met `VITE_APPS_SCRIPT_URL=... npm run dev` (of zet hem in `.env`).
@@ -94,7 +100,18 @@ in de plaats ervan delen.
 ## Realtime
 
 Elke wijziging verhoogt een versienummer. Het dashboard vraagt dat elke 3 seconden op en laadt alleen
-opnieuw als er iets veranderd is. Wijzigingen die je direct in de Sheet typt, komen via `onEdit` ook door.
+opnieuw als er iets veranderd is. Wijzigingen in de Sheet zelf verhogen het versienummer ook:
+
+| Wat er in de Sheet gebeurt | Trigger | Zichtbaar in het platform |
+|---|---|---|
+| Een cel typen of aanpassen (elk tabblad) | `onEdit` (werkt altijd) | binnen een paar seconden |
+| Rijen invoegen/verwijderen, sorteren, plakken | `bijWijziging` (na `installeer`) | binnen een paar seconden |
+| Nieuwe bestelling of aanmelding via Google Formulier | `bijFormulier` (na `installeer`) | binnen een paar seconden |
+| Iets anders (formules, import, ander script) | — | uiterlijk na 30 seconden (het dashboard laadt dan altijd opnieuw) |
+
+Je kunt dus in elk tabblad met de hand corrigeren: een bezorger in `Dashboard_Orders`, een claim in `Inpakken`,
+aantallen in `Gebakken`, de prijs in `Instellingen`. Pas alleen de kolomnamen in rij 1 niet aan.
+Order-ID's (de eerste kolom) houdt het script als tekst, zodat Sheets er geen datum van maakt.
 
 ## Privacy
 

@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { backend, type Session } from "../../data/backend";
-import type { DashboardState, ReceiptFields } from "../../types/dashboard";
-import { Card, Notice, SectionTitle, formatEuro, inputClass, primaryButton, secondaryButton, todayIso } from "../../components/ui";
+import { useMemo, useState } from "react";
+import { backend, isValidIban, normaliseIban, type Session } from "../../data/backend";
+import type { CostEntry, CostStatus, DashboardState, ReceiptFields } from "../../types/dashboard";
+import { costStatusLabel } from "../../types/dashboard";
+import { Badge, Card, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, secondaryButton, todayIso } from "../../components/ui";
 
 interface CostsPageProps {
   state: DashboardState;
@@ -39,9 +40,29 @@ interface Draft {
   supplier: string;
   description: string;
   photoUrl: string;
+  iban: string;
 }
 
-const emptyDraft = (): Draft => ({ date: todayIso(), amount: "", supplier: "", description: "", photoUrl: "" });
+const IBAN_KEY = "omacoby-iban";
+
+/** The IBAN is remembered on this device only, so the next declaration is quicker. */
+function rememberedIban(): string {
+  try {
+    return localStorage.getItem(IBAN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberIban(iban: string) {
+  try {
+    localStorage.setItem(IBAN_KEY, iban);
+  } catch {
+    // Private mode: nothing to remember.
+  }
+}
+
+const emptyDraft = (): Draft => ({ date: todayIso(), amount: "", supplier: "", description: "", photoUrl: "", iban: rememberedIban() });
 
 function fromFields(fields: ReceiptFields, photoUrl: string): Draft {
   return {
@@ -49,9 +70,17 @@ function fromFields(fields: ReceiptFields, photoUrl: string): Draft {
     amount: fields.amount !== null ? fields.amount.toFixed(2).replace(".", ",") : "",
     supplier: fields.supplier,
     description: fields.description,
-    photoUrl
+    photoUrl,
+    iban: rememberedIban()
   };
 }
+
+const statusTone: Record<CostStatus, "neutral" | "amber" | "green" | "blue" | "coby"> = {
+  ingediend: "amber",
+  goedgekeurd: "blue",
+  afgekeurd: "neutral",
+  uitbetaald: "green"
+};
 
 export function CostsPage({ state, session, run }: CostsPageProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -68,7 +97,7 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
       setPreview(img);
       const result = await backend.extractReceipt(session, base64, "image/jpeg");
       setDraft(fromFields(result.fields, result.photoUrl));
-      setMessage(result.warning ? { tone: "warning", text: result.warning } : { tone: "success", text: "Bon uitgelezen. Controleer de gegevens en sla op." });
+      setMessage(result.warning ? { tone: "warning", text: result.warning } : { tone: "success", text: "Bon uitgelezen. Controleer de gegevens en dien in." });
     } catch (err) {
       setDraft((d) => d ?? emptyDraft());
       setMessage({ tone: "error", text: err instanceof Error ? err.message : "Uitlezen mislukt. Vul de gegevens zelf in." });
@@ -80,13 +109,19 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
   async function save() {
     if (!draft) return;
     const amount = Number(draft.amount.replace(/\./g, "").replace(",", "."));
+    if (!isValidIban(draft.iban)) {
+      setMessage({ tone: "error", text: "Vul een geldig IBAN in, bijvoorbeeld NL91ABNA0417164300." });
+      return;
+    }
     setBusy("save");
     setMessage(null);
     try {
-      await run(() => backend.saveCost(session, { date: draft.date, amount, supplier: draft.supplier, description: draft.description, photoUrl: draft.photoUrl }));
+      const iban = normaliseIban(draft.iban);
+      await run(() => backend.saveCost(session, { date: draft.date, amount, supplier: draft.supplier, description: draft.description, photoUrl: draft.photoUrl, iban }));
+      rememberIban(iban);
       setDraft(null);
       setPreview(null);
-      setMessage({ tone: "success", text: "Opgeslagen in de Sheet. Bedankt!" });
+      setMessage({ tone: "success", text: "Declaratie ingediend. Je ziet hieronder wanneer hij is goedgekeurd en uitbetaald." });
     } catch (err) {
       setMessage({ tone: "error", text: err instanceof Error ? err.message : "Opslaan mislukt." });
     } finally {
@@ -94,12 +129,10 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
     }
   }
 
-  const total = state.costs.reduce((sum, c) => sum + c.amount, 0);
-
   return (
     <div className="grid gap-4">
       <Card>
-        <SectionTitle title="Kosten onderweg" subtitle="Maak een foto van je bon. Datum, bedrag, leverancier en omschrijving worden automatisch uitgelezen; jij controleert en slaat op." />
+        <SectionTitle title="Kosten declareren" subtitle="Maak een foto van je bon. Datum, bedrag, leverancier en omschrijving worden automatisch uitgelezen; jij controleert, vult je IBAN in en dient in." />
         <div className="flex flex-wrap gap-2">
           <label className={`${primaryButton} cursor-pointer ${busy ? "pointer-events-none opacity-50" : ""}`}>
             {busy === "read" ? "Bon wordt uitgelezen…" : "Foto van bon maken of kiezen"}
@@ -126,18 +159,20 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
 
       {draft ? (
         <Card>
-          <SectionTitle title="Controleer de gegevens" subtitle={`Wordt opgeslagen op naam van ${session.name}.`} />
+          <SectionTitle title="Controleer de gegevens" subtitle={`Wordt ingediend op naam van ${session.name}.`} />
           <div className="grid gap-4 md:grid-cols-[220px_1fr]">
             {preview ? <img src={preview} alt="Foto van de bon" className="max-h-80 w-full rounded-xl border border-stone-200 object-contain" /> : <div className="hidden md:block" />}
             <div className="grid gap-3">
-              <label className="grid gap-1 text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Datum</span>
-                <input type="date" className={inputClass} value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Bedrag (€)</span>
-                <input inputMode="decimal" className={inputClass} placeholder="0,00" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
-              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Datum</span>
+                  <input type="date" className={inputClass} value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Bedrag (€)</span>
+                  <input inputMode="decimal" className={inputClass} placeholder="0,00" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
+                </label>
+              </div>
               <label className="grid gap-1 text-sm">
                 <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Leverancier</span>
                 <input className={inputClass} value={draft.supplier} onChange={(e) => setDraft({ ...draft, supplier: e.target.value })} />
@@ -146,9 +181,14 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
                 <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Omschrijving</span>
                 <textarea className={`${inputClass} min-h-[70px]`} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
               </label>
+              <label className="grid gap-1 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">IBAN voor de terugbetaling</span>
+                <input className={`${inputClass} font-mono uppercase`} placeholder="NL00 BANK 0123 4567 89" value={draft.iban} onChange={(e) => setDraft({ ...draft, iban: e.target.value })} autoComplete="off" />
+                <span className="text-xs text-stone-500">Alleen beheer ziet je volledige IBAN. Dit apparaat onthoudt hem voor de volgende keer.</span>
+              </label>
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => void save()}>
-                  {busy === "save" ? "Opslaan…" : "Opslaan in Sheet"}
+                  {busy === "save" ? "Indienen…" : "Declaratie indienen"}
                 </button>
                 <button
                   type="button"
@@ -167,46 +207,237 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
         </Card>
       ) : null}
 
-      {session.role === "beheer" ? (
-        <Card>
-          <SectionTitle title="Ingevoerde kosten" subtitle={`${state.costs.length} bonnen · totaal ${formatEuro(total)}`} />
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-                  <th className="py-2 pr-3 font-semibold">Datum</th>
-                  <th className="py-2 pr-3 font-semibold">Leverancier</th>
-                  <th className="py-2 pr-3 font-semibold">Omschrijving</th>
-                  <th className="py-2 pr-3 font-semibold">Door</th>
-                  <th className="py-2 pr-3 text-right font-semibold">Bedrag</th>
-                  <th className="py-2 font-semibold">Bon</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...state.costs].reverse().map((c) => (
-                  <tr key={c.id} className="border-t border-stone-100">
-                    <td className="py-2 pr-3">{c.date}</td>
-                    <td className="py-2 pr-3">{c.supplier}</td>
-                    <td className="py-2 pr-3 text-stone-600">{c.description}</td>
-                    <td className="py-2 pr-3 text-stone-600">{c.createdBy}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{formatEuro(c.amount)}</td>
-                    <td className="py-2">
-                      {c.photoUrl ? (
-                        <a className="text-coby-700 underline" href={c.photoUrl} target="_blank" rel="noreferrer">
-                          foto
-                        </a>
-                      ) : (
-                        "–"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {state.costs.length === 0 ? <p className="py-3 text-sm text-stone-600">Nog geen kosten ingevoerd.</p> : null}
-          </div>
-        </Card>
-      ) : null}
+      {session.role === "beheer" ? <AdminCosts state={state} session={session} run={run} /> : <MyCosts costs={state.costs} />}
     </div>
+  );
+}
+
+function StatusLine({ cost }: { cost: CostEntry }) {
+  return (
+    <span className="grid gap-0.5">
+      <Badge tone={statusTone[cost.status]}>{costStatusLabel[cost.status]}</Badge>
+      {cost.status === "afgekeurd" && cost.reason ? <span className="text-xs text-stone-600">Reden: {cost.reason}</span> : null}
+      {cost.status === "uitbetaald" && cost.paidAt ? <span className="text-xs text-stone-500">op {cost.paidAt}</span> : null}
+    </span>
+  );
+}
+
+/** A volunteer sees only their own declarations and where they are in the process. */
+function MyCosts({ costs }: { costs: CostEntry[] }) {
+  const open = costs.filter((c) => c.status === "ingediend" || c.status === "goedgekeurd").reduce((sum, c) => sum + c.amount, 0);
+  return (
+    <Card>
+      <SectionTitle title="Mijn declaraties" subtitle={costs.length ? `${costs.length} ingediend · nog te ontvangen ${formatEuro(open)}` : undefined} />
+      {costs.length === 0 ? <p className="text-sm text-stone-600">Je hebt nog niets gedeclareerd.</p> : null}
+      <div className="grid gap-2">
+        {[...costs].reverse().map((c) => (
+          <div key={c.id} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-stone-200 p-3 text-sm">
+            <div className="min-w-0">
+              <p className="font-semibold text-stone-900">
+                {formatEuro(c.amount)} · {c.supplier}
+              </p>
+              <p className="text-xs text-stone-500">
+                {c.date}
+                {c.description ? ` · ${c.description}` : ""}
+                {c.iban ? ` · ${c.iban}` : ""}
+              </p>
+            </div>
+            <StatusLine cost={c} />
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+type AdminFilter = "ingediend" | "goedgekeurd" | "alles";
+
+function AdminCosts({ state, session, run }: CostsPageProps) {
+  const [filter, setFilter] = useState<AdminFilter>("ingediend");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const sum = (status: CostStatus) => state.costs.filter((c) => c.status === status).reduce((s, c) => s + c.amount, 0);
+  const count = (status: CostStatus) => state.costs.filter((c) => c.status === status).length;
+  const visible = [...state.costs].reverse().filter((c) => filter === "alles" || c.status === filter);
+  const n = (k: number) => `${k} ${k === 1 ? "declaratie" : "declaraties"}`;
+
+  async function act(id: string, change: () => Promise<unknown>) {
+    setBusy(id);
+    setError(null);
+    try {
+      await run(change);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Er ging iets mis.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function reject(c: CostEntry) {
+    const reason = window.prompt(`Waarom keur je de declaratie van ${c.createdBy} (${formatEuro(c.amount)}) af?`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Geef een reden, dan weet de vrijwilliger waarom.");
+      return;
+    }
+    void act(c.id, () => backend.reviewCost(session, c.id, "afgekeurd", reason));
+  }
+
+  function pay(c: CostEntry) {
+    const date = window.prompt(`Datum van uitbetaling aan ${c.createdBy} (${formatEuro(c.amount)}):`, todayIso());
+    if (date === null) return;
+    void act(c.id, () => backend.payCost(session, c.id, true, date.trim()));
+  }
+
+  return (
+    <>
+      <StatStrip
+        items={[
+          { label: "Te beoordelen", value: formatEuro(sum("ingediend")), hint: n(count("ingediend")) },
+          { label: "Nog uit te betalen", value: formatEuro(sum("goedgekeurd")), hint: `${count("goedgekeurd")} goedgekeurd` },
+          { label: "Uitbetaald", value: formatEuro(sum("uitbetaald")), hint: n(count("uitbetaald")) }
+        ]}
+      />
+      <Card>
+        <SectionTitle
+          title="Declaraties"
+          subtitle="Keur goed of af (met reden) en markeer als uitbetaald. Alleen beheer kan de status wijzigen."
+          action={
+            <Segmented
+              label="Filter"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                ["ingediend", `Te beoordelen (${count("ingediend")})`],
+                ["goedgekeurd", `Uit te betalen (${count("goedgekeurd")})`],
+                ["alles", `Alles (${state.costs.length})`]
+              ]}
+            />
+          }
+        />
+        {error ? (
+          <div className="mb-3">
+            <Notice tone="error">{error}</Notice>
+          </div>
+        ) : null}
+        <div className="grid gap-2">
+          {visible.map((c) => (
+            <div key={c.id} className="grid gap-2 rounded-lg border border-stone-200 p-3 text-sm sm:grid-cols-[1fr_auto]">
+              <div className="min-w-0">
+                <p className="font-semibold text-stone-900">
+                  {formatEuro(c.amount)} · {c.supplier} <span className="font-normal text-stone-500">door {c.createdBy || "–"}</span>
+                </p>
+                <p className="text-xs text-stone-500">
+                  {c.date}
+                  {c.description ? ` · ${c.description}` : ""}
+                </p>
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-stone-600">
+                  {c.iban ? (
+                    <button type="button" className="font-mono underline-offset-2 hover:underline" title="Kopieer IBAN" onClick={() => void navigator.clipboard?.writeText(c.iban)}>
+                      {c.iban}
+                    </button>
+                  ) : (
+                    <span className="text-amber-800">geen IBAN</span>
+                  )}
+                  {c.photoUrl ? (
+                    <a className="text-coby-700 underline" href={c.photoUrl} target="_blank" rel="noreferrer">
+                      bon bekijken
+                    </a>
+                  ) : null}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-start justify-start gap-2 sm:justify-end">
+                <StatusLine cost={c} />
+                {c.status === "ingediend" ? (
+                  <>
+                    <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => void act(c.id, () => backend.reviewCost(session, c.id, "goedgekeurd", ""))}>
+                      Goedkeuren
+                    </button>
+                    <button type="button" className={secondaryButton} disabled={busy !== null} onClick={() => reject(c)}>
+                      Afkeuren
+                    </button>
+                  </>
+                ) : null}
+                {c.status === "goedgekeurd" ? (
+                  <>
+                    <button type="button" className={primaryButton} disabled={busy !== null} onClick={() => pay(c)}>
+                      Uitbetaald
+                    </button>
+                    <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void act(c.id, () => backend.reviewCost(session, c.id, "ingediend", ""))}>
+                      Terug naar beoordelen
+                    </button>
+                  </>
+                ) : null}
+                {c.status === "afgekeurd" ? (
+                  <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void act(c.id, () => backend.reviewCost(session, c.id, "ingediend", ""))}>
+                    Opnieuw beoordelen
+                  </button>
+                ) : null}
+                {c.status === "uitbetaald" ? (
+                  <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void act(c.id, () => backend.payCost(session, c.id, false, ""))}>
+                    Uitbetaling ongedaan maken
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+          {visible.length === 0 ? <p className="text-sm text-stone-600">Niets in deze selectie.</p> : null}
+        </div>
+      </Card>
+      <MileageCard state={state} />
+    </>
+  );
+}
+
+/** Kilometres per courier from the computed routes, with the allowance when a rate is set in Instellingen. */
+function MileageCard({ state }: { state: DashboardState }) {
+  const rows = useMemo(() => {
+    const byCourier = new Map<string, { km: number; routes: number }>();
+    for (const r of Object.values(state.routes)) {
+      const row = byCourier.get(r.courier) ?? { km: 0, routes: 0 };
+      row.km += r.km;
+      row.routes += 1;
+      byCourier.set(r.courier, row);
+    }
+    return Array.from(byCourier.entries())
+      .map(([courier, v]) => ({ courier, km: Math.round(v.km * 10) / 10, routes: v.routes }))
+      .sort((a, b) => b.km - a.km);
+  }, [state.routes]);
+
+  return (
+    <Card>
+      <SectionTitle
+        title="Km-vergoeding"
+        subtitle={
+          state.kmRate
+            ? `Berekende routekilometers per bezorger × ${formatEuro(state.kmRate)} per km.`
+            : "Berekende routekilometers per bezorger. Zet km_vergoeding (bijv. 0,23) in het tabblad Instellingen om ook het bedrag te zien."
+        }
+      />
+      {rows.length === 0 ? <p className="text-sm text-stone-600">Nog geen routes berekend.</p> : null}
+      {rows.length > 0 ? (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+              <th className="py-2 pr-3 font-semibold">Bezorger</th>
+              <th className="py-2 pr-3 text-right font-semibold">Routes</th>
+              <th className="py-2 pr-3 text-right font-semibold">Km</th>
+              {state.kmRate ? <th className="py-2 text-right font-semibold">Vergoeding</th> : null}
+            </tr>
+          </thead>
+          <tbody className="tabular-nums">
+            {rows.map((r) => (
+              <tr key={r.courier} className="border-t border-stone-100">
+                <td className="py-2 pr-3 text-stone-900">{r.courier}</td>
+                <td className="py-2 pr-3 text-right">{r.routes}</td>
+                <td className="py-2 pr-3 text-right">{formatNumber(r.km)}</td>
+                {state.kmRate ? <td className="py-2 text-right">{formatEuro(r.km * state.kmRate)}</td> : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </Card>
   );
 }

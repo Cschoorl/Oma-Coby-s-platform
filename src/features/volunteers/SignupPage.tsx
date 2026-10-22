@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
-import { countFor, labelQuietOptions, shortOptions, staffingStatus, suggestOptions } from "../../utils/staffing";
+import { countFor, labelQuietOptions, optionKey, shortOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
 import type { RoleAvailability, VolunteerRole } from "../../types/dashboard";
 import { VOLUNTEER_ROLES } from "../../types/dashboard";
 import { Card, Notice, SectionTitle, inputClass, primaryButton, secondaryButton } from "../../components/ui";
-import { CONTACT_EMAIL, SIGNUP_HINTS, SIGNUP_OPTIONS, STAFFING_TARGETS } from "../../config";
+import { CONTACT_EMAIL, OPTION_TIMES, SIGNUP_HINTS, SIGNUP_OPTIONS, applyAgenda } from "../../config";
 import { volunteerRoleLabel } from "../../types/dashboard";
 
 const questions: Record<VolunteerRole, { ask: string; days: string }> = {
@@ -27,13 +27,22 @@ export function SignupPage() {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [counts, setCounts] = useState<SignupCounts | null>(null);
+  const [loaded, setLoaded] = useState(false);
   /** Suggested quiet options shown in the pop-up before sending; null = pop-up closed. */
   const [suggestions, setSuggestions] = useState<Array<{ role: VolunteerRole; option: string }> | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [suggested, setSuggested] = useState(false);
 
   useEffect(() => {
-    backend.getSignupCounts().then(setCounts).catch(() => setCounts(null));
+    // The agenda decides which days and dagdelen can be chosen; until it arrives the defaults show.
+    backend
+      .getSignupInfo()
+      .then((info) => {
+        applyAgenda(info.agenda);
+        setCounts(info.counts);
+      })
+      .catch(() => setCounts(null))
+      .finally(() => setLoaded(true));
   }, []);
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -183,10 +192,12 @@ export function SignupPage() {
                     : "We hebben op bijna alle momenten nog mensen nodig. Alles wat je kunt is welkom!"}
                 </p>
               ) : null}
+              {loaded && SIGNUP_OPTIONS[role].length === 0 ? <p className="text-sm text-stone-600">Hiervoor staan nog geen momenten in de agenda.</p> : null}
               <div className="flex flex-wrap gap-2">
                 {SIGNUP_OPTIONS[role].map((day) => {
                   const checked = roles[role].days.includes(day);
-                  const needed = counts ? labelQuietOptions(counts, role) && staffingStatus(countFor(counts, role, day), STAFFING_TARGETS[role]) === "weinig" : false;
+                  const needed = counts ? labelQuietOptions(counts, role) && staffingStatus(countFor(counts, role, day), targetFor(role, day)) === "weinig" : false;
+                  const time = OPTION_TIMES[optionKey(day)];
                   return (
                     <label
                       key={day}
@@ -194,6 +205,7 @@ export function SignupPage() {
                     >
                       <input type="checkbox" className="accent-coby-600" checked={checked} onChange={() => toggleDay(role, day)} />
                       {day}
+                      {time ? <span className="text-xs text-stone-500">{time}</span> : null}
                       {needed ? <span className="rounded bg-red-100 px-1.5 text-[10px] font-semibold text-red-800">nog nodig</span> : null}
                     </label>
                   );

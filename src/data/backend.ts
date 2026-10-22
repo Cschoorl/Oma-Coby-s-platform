@@ -1,6 +1,9 @@
 import type {
+  AgendaSlot,
   BakedCount,
   CostEntry,
+  CostStatus,
+  DeliveryState,
   DashboardState,
   OrderMeta,
   PackingPart,
@@ -27,6 +30,8 @@ export interface RouteRequest {
   date: string;
   courier: string;
   mode: "driving" | "bicycling";
+  /** Departure from the bakery, HH:mm. */
+  startTime: string;
   stops: Array<{ orderId: string; address: string }>;
 }
 
@@ -51,12 +56,26 @@ export interface ReceiptResult {
 /** Signups per role per form option (lowercased), without names. */
 export type SignupCounts = Record<VolunteerRole, Record<string, number>>;
 
+/** What the public signup page needs: counts per option (no names) and the agenda. */
+export interface SignupInfo {
+  counts: SignupCounts;
+  agenda: AgendaSlot[];
+}
+
 export interface CostInput {
   date: string;
   amount: number;
   supplier: string;
   description: string;
   photoUrl: string;
+  iban: string;
+}
+
+export interface AnonymizeResult {
+  volunteers: number;
+  orders: number;
+  costs: number;
+  receipts: number;
 }
 
 export interface Backend {
@@ -71,7 +90,7 @@ export interface Backend {
   checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<void>;
   complete(session: Session, orderId: string): Promise<void>;
   reopen(session: Session, orderId: string): Promise<void>;
-  getSignupCounts(): Promise<SignupCounts>;
+  getSignupInfo(): Promise<SignupInfo>;
   setBaked(session: Session, date: string, counts: BakedCount): Promise<void>;
   updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
@@ -81,6 +100,11 @@ export interface Backend {
   registerVolunteer(signup: VolunteerSignup): Promise<void>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
   saveCost(session: Session, cost: CostInput): Promise<void>;
+  setDelivered(session: Session, orderId: string, delivered: boolean): Promise<void>;
+  reviewCost(session: Session, id: string, status: Exclude<CostStatus, "uitbetaald">, reason: string): Promise<void>;
+  payCost(session: Session, id: string, paid: boolean, date: string): Promise<void>;
+  /** After the action: removes names, contact details and IBANs. */
+  anonymize(session: Session, confirm: string): Promise<AnonymizeResult>;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +164,16 @@ function createAppsScriptBackend(url: string): Backend {
     async getState(session) {
       const raw = await call<RawState>("state", withSession(session));
       const { rows, ...rest } = raw;
-      return { ...rest, orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate) };
+      // Older scripts lack the newer fields; fill them so the pages never see undefined.
+      return {
+        ...rest,
+        delivery: rest.delivery ?? {},
+        agenda: rest.agenda ?? [],
+        kmRate: rest.kmRate ?? null,
+        costs: (rest.costs ?? []).map(withCostDefaults),
+        routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
+        orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
+      };
     },
     async claim(session, orderId) {
       await call("claim", withSession(session, { orderId }));
@@ -157,9 +190,9 @@ function createAppsScriptBackend(url: string): Backend {
     async reopen(session, orderId) {
       await call("reopen", withSession(session, { orderId }));
     },
-    async getSignupCounts() {
-      const data = await call<{ counts: SignupCounts }>("signupStats", {});
-      return data.counts;
+    async getSignupInfo() {
+      const data = await call<{ counts: SignupCounts; agenda?: AgendaSlot[] }>("signupStats", {});
+      return { counts: data.counts, agenda: data.agenda ?? [] };
     },
     async setBaked(session, date, counts) {
       await call("setBaked", withSession(session, { date, ...counts }));
@@ -187,8 +220,48 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async saveCost(session, cost) {
       await call("saveCost", withSession(session, { ...cost }));
+    },
+    async setDelivered(session, orderId, delivered) {
+      await call("setDelivered", withSession(session, { orderId, delivered }));
+    },
+    async reviewCost(session, id, status, reason) {
+      await call("reviewCost", withSession(session, { id, status, reason }));
+    },
+    async payCost(session, id, paid, date) {
+      await call("payCost", withSession(session, { id, paid, date }));
+    },
+    async anonymize(session, confirm) {
+      return call<AnonymizeResult>("anonymize", withSession(session, { confirm }));
     }
   };
+}
+
+function withCostDefaults(c: Partial<CostEntry>): CostEntry {
+  return {
+    id: c.id ?? "",
+    createdAt: c.createdAt ?? "",
+    createdBy: c.createdBy ?? "",
+    date: c.date ?? "",
+    amount: c.amount ?? 0,
+    supplier: c.supplier ?? "",
+    description: c.description ?? "",
+    photoUrl: c.photoUrl ?? "",
+    iban: c.iban ?? "",
+    status: c.status ?? "ingediend",
+    reason: c.reason ?? "",
+    reviewedBy: c.reviewedBy ?? "",
+    reviewedAt: c.reviewedAt ?? "",
+    paidAt: c.paidAt ?? ""
+  };
+}
+
+/** Same check as the Apps Script: two letters, two digits, then 8-30 letters or digits. */
+export function normaliseIban(value: string): string {
+  return value.replace(/\s+/g, "").toUpperCase();
+}
+
+export function isValidIban(value: string): boolean {
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(normaliseIban(value));
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +269,7 @@ function createAppsScriptBackend(url: string): Backend {
 
 export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
 
-const DEMO_KEY = "omacoby-demo-v3";
+const DEMO_KEY = "omacoby-demo-v4";
 
 interface DemoStore {
   version: number;
@@ -206,6 +279,7 @@ interface DemoStore {
   routes: Record<string, RouteInfo>;
   volunteers: Volunteer[];
   costs: CostEntry[];
+  delivery: Record<string, DeliveryState>;
 }
 
 const none: RoleAvailability = { wants: false, days: [] };
@@ -244,7 +318,7 @@ function demoVolunteers(): Volunteer[] {
 }
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {} };
 }
 
 function readStore(): DemoStore {
@@ -338,9 +412,17 @@ function createDemoBackend(notice?: string): Backend {
         baked: store.baked,
         routes: store.routes,
         volunteers: admin ? store.volunteers : store.volunteers.map((v) => ({ ...v, phone: "", email: "", remark: "", address: "" })),
-        costs: admin ? store.costs : [],
+        costs: admin
+          ? store.costs
+          : store.costs
+              .filter((c) => c.createdBy.toLowerCase() === session.name.toLowerCase())
+              .map((c) => ({ ...c, iban: c.iban ? `•••• ${c.iban.slice(-4)}` : "" })),
         history: admin ? demoHistory() : [],
-        pricePerPiece: 0.95
+        pricePerPiece: 0.95,
+        kmRate: 0.23,
+        delivery: store.delivery,
+        // Demo uses the default agenda from config.ts.
+        agenda: []
       };
     },
     async claim(session, orderId) {
@@ -395,7 +477,7 @@ function createDemoBackend(notice?: string): Backend {
         p.claimedAt = nowStamp();
       });
     },
-    async getSignupCounts() {
+    async getSignupInfo() {
       const counts: SignupCounts = { inpakken: {}, fietskoerier: {}, autokoerier: {}, oliebollenbar: {} };
       for (const v of readStore().volunteers) {
         for (const role of Object.keys(counts) as VolunteerRole[]) {
@@ -406,7 +488,7 @@ function createDemoBackend(notice?: string): Backend {
           }
         }
       }
-      return counts;
+      return { counts, agenda: [] };
     },
     async setBaked(_session, date, counts) {
       mutate((store) => {
@@ -464,6 +546,13 @@ function createDemoBackend(notice?: string): Backend {
       // No Maps in demo mode: rough estimate of 3.5 km per stop by car, 2.5 km by bike.
       const perStop = request.mode === "bicycling" ? 2.5 : 3.5;
       const km = Math.round(request.stops.length * perStop * 10 + 25) / 10;
+      // Rough arrival times: first stop after 15 minutes, then the travel time per stop plus 5 minutes there.
+      const [h, m] = (/^\d{1,2}:\d{2}$/.test(request.startTime) ? request.startTime : "09:00").split(":").map(Number);
+      const legMinutes = Math.round(perStop * (request.mode === "bicycling" ? 4 : 2.2));
+      const stopTimes = request.stops.map((_, i) => {
+        const t = h * 60 + m + 15 + i * (legMinutes + 5);
+        return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+      });
       const info: RouteInfo = {
         key: `${request.date}|${request.courier}`,
         date: request.date,
@@ -473,7 +562,9 @@ function createDemoBackend(notice?: string): Backend {
         minutes: Math.round(km * (request.mode === "bicycling" ? 4 : 2.2) + request.stops.length * 5),
         orderIds: request.stops.map((s) => s.orderId),
         mapsUrl: "",
-        computedAt: nowStamp()
+        computedAt: nowStamp(),
+        startTime: request.startTime,
+        stopTimes
       };
       mutate((store) => {
         store.routes[info.key] = info;
@@ -514,9 +605,54 @@ function createDemoBackend(notice?: string): Backend {
       if (!cost.date) throw new Error("Vul de datum in.");
       if (!(cost.amount > 0)) throw new Error("Vul een geldig bedrag in.");
       if (!cost.supplier.trim()) throw new Error("Vul de leverancier in.");
+      if (!isValidIban(cost.iban)) throw new Error("Vul een geldig IBAN in, bijvoorbeeld NL91ABNA0417164300.");
       mutate((store) => {
-        store.costs.push({ id: `demo-${Date.now()}`, createdAt: nowStamp(), createdBy: session.name, ...cost });
+        store.costs.push(
+          withCostDefaults({ id: `demo-${Date.now()}`, createdAt: nowStamp(), createdBy: session.name, ...cost, iban: normaliseIban(cost.iban), status: "ingediend" })
+        );
       });
+    },
+    async setDelivered(session, orderId, delivered) {
+      await delay(150);
+      mutate((store) => {
+        if (delivered) store.delivery[orderId] = { deliveredBy: session.name, deliveredAt: nowStamp() };
+        else delete store.delivery[orderId];
+      });
+    },
+    async reviewCost(session, id, status, reason) {
+      await delay(150);
+      if (status === "afgekeurd" && !reason.trim()) throw new Error("Geef een reden waarom je de declaratie afkeurt.");
+      mutate((store) => {
+        const c = store.costs.find((x) => x.id === id);
+        if (!c) throw new Error("Niet gevonden.");
+        if (c.status === "uitbetaald") throw new Error("Deze declaratie is al uitbetaald.");
+        Object.assign(c, { status, reason: status === "afgekeurd" ? reason.trim() : "", reviewedBy: session.name, reviewedAt: status === "ingediend" ? "" : nowStamp() });
+      });
+    },
+    async payCost(_session, id, paid, date) {
+      await delay(150);
+      mutate((store) => {
+        const c = store.costs.find((x) => x.id === id);
+        if (!c) throw new Error("Niet gevonden.");
+        if (paid && c.status !== "goedgekeurd") throw new Error("Keur de declaratie eerst goed.");
+        if (!paid && c.status !== "uitbetaald") throw new Error("Deze declaratie is nog niet uitbetaald.");
+        Object.assign(c, paid ? { status: "uitbetaald", paidAt: date || nowStamp().slice(0, 10) } : { status: "goedgekeurd", paidAt: "" });
+      });
+    },
+    async anonymize(_session, confirm) {
+      await delay(300);
+      if (confirm !== "VERWIJDER") throw new Error("Typ VERWIJDER om te bevestigen.");
+      const store = readStore();
+      const result = { volunteers: store.volunteers.length, orders: 0, costs: store.costs.length, receipts: 0 };
+      mutate((s) => {
+        s.volunteers = [];
+        s.costs = s.costs.map((c) => ({ ...c, createdBy: "", iban: "", reviewedBy: "" }));
+        s.routes = {};
+        for (const m of Object.values(s.meta)) Object.assign(m, { noteOverride: "", confirmationText: "", courier: "", updatedBy: "" });
+        for (const p of Object.values(s.packing)) Object.assign(p, { claimedBy: "", packedBy: "" });
+        for (const d of Object.values(s.delivery)) d.deliveredBy = "";
+      });
+      return result;
     }
   };
 }

@@ -6,15 +6,16 @@ via een Apps Script.
 
 | Pagina | Voor | Wat |
 |---|---|---|
-| Inpakken | inpakker, beheer | totalen MET/ZONDER, gebakken en nog te bakken, particulier/B2B; orders claimen, afvinken en afronden (live) |
-| Opmerkingen & bevestiging | beheer | opmerkingen beoordelen en aanpassen; bevestiging per order controleren en versturen |
-| Routes | beheer | snelste volgorde en kilometers per bezorger; route via WhatsApp sturen |
-| Bezorgers (`#/bezorger`) | bezorger, beheer | mobiele pagina met stops, aantallen, opmerkingen en Maps-route |
-| Tussenstand | beheer | bestellingen, oliebollen en omzet vergeleken met eerdere jaren |
-| Kosten | iedereen met code | foto van bon → automatisch uitgelezen → controleren → opslaan in de Sheet |
-| Vrijwilligers | beheer | overzicht van aanmeldingen uit het Google Formulier en de aanmeldpagina |
-| Aanmelden (`#/aanmelden`) | openbaar | zelfde vragen als het Google Formulier, komt in hetzelfde tabblad |
+| Inpakken | inpakker, beheer | totalen MET/ZONDER, gebakken invullen en nog te bakken, filter particulier/zakelijk/barter; orders claimen, afvinken en afronden (live); pakbonnen printen |
+| Bestellingen | beheer | opmerkingen beoordelen en aanpassen; bevestiging per order controleren en versturen |
+| Routes | beheer | bezorgers indelen (beschikbaar in dat dagdeel bovenaan), snelste volgorde, km en aankomsttijd per stop; melding bij verouderde routes; route via WhatsApp |
+| Bezorgen (`#/bezorger`) | bezorger, beheer | mobiele pagina met stops, verwachte tijd, aantallen en Maps-route; stop afvinken als afgeleverd |
+| Tussenstand | beheer | besteld, ingepakt, bezorgd, omzet min kosten, vrijwilligers per dagdeel, en vergelijking met eerdere jaren |
+| Kosten | iedereen met code | bon → automatisch uitgelezen → met IBAN indienen; status volgen. Beheer keurt goed/af en betaalt uit; km-vergoeding per bezorger |
+| Vrijwilligers | beheer | aanmeldingen en bezettingskalender; na de actie persoonsgegevens verwijderen |
+| Aanmelden (`#/aanmelden`) | openbaar | momenten uit het tabblad Agenda (dag, dagdeel, tijd, locatie); komt in hetzelfde tabblad als het Google Formulier |
 | Agenda | iedereen met code | wie wanneer beschikbaar is, uit de aanmeldingen |
+| Pakbonnen (`#/pakbonnen`) | inpakker, beheer | printbare pakbon per order, in routevolgorde |
 
 ## Starten
 

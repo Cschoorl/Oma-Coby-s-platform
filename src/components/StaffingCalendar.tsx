@@ -1,6 +1,6 @@
 import type { SignupCounts } from "../data/backend";
 import { volunteerRoleLabel } from "../types/dashboard";
-import { SIGNUP_OPTIONS, STAFFING_TARGETS } from "../config";
+import { OPTION_TARGETS, SIGNUP_OPTIONS, STAFFING_TARGETS } from "../config";
 import { dayKey, staffingForDay, statusLabel, type StaffingStatus } from "../utils/staffing";
 
 const MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
@@ -22,7 +22,7 @@ const statusIcon: Record<StaffingStatus, string> = { weinig: "!", bijna: "~", ge
 /** Season year from the configured options, e.g. "Dinsdag 15 december". */
 function seasonDates(): Date[] {
   const year = Number(import.meta.env.VITE_SEASON_YEAR) || inferYear();
-  const keys = Array.from(new Set(SIGNUP_OPTIONS.inpakken.concat(SIGNUP_OPTIONS.fietskoerier).map(dayKey)));
+  const keys = Array.from(new Set(Object.values(SIGNUP_OPTIONS).flat().map(dayKey)));
   return keys
     .map((k) => {
       const [d, m] = k.split(" ");
@@ -36,7 +36,7 @@ function seasonDates(): Date[] {
 /** The weekday names in the options pin down the year (e.g. "Dinsdag 15 december" → 2026). */
 function inferYear(): number {
   const names = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
-  const sample = SIGNUP_OPTIONS.inpakken[0]?.toLowerCase().match(/^([a-z]+)\s+(\d{1,2})\s+([a-z]+)/);
+  const sample = Object.values(SIGNUP_OPTIONS).flat()[0]?.toLowerCase().match(/^([a-z]+)\s+(\d{1,2})\s+([a-z]+)/);
   const now = new Date().getFullYear();
   if (!sample) return now;
   for (let y = now - 1; y <= now + 2; y++) {
@@ -73,8 +73,9 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
           </span>
         ))}
         <span className="text-stone-500">
-          Nodig per dag(deel): inpakken {STAFFING_TARGETS.inpakken}, fiets {STAFFING_TARGETS.fietskoerier}, auto {STAFFING_TARGETS.autokoerier}, bar{" "}
-          {STAFFING_TARGETS.oliebollenbar}
+          {Object.keys(OPTION_TARGETS).length > 0
+            ? "Nodig per dag(deel): zoals in het tabblad Agenda."
+            : `Nodig per dag(deel): inpakken ${STAFFING_TARGETS.inpakken}, fiets ${STAFFING_TARGETS.fietskoerier}, auto ${STAFFING_TARGETS.autokoerier}, bar ${STAFFING_TARGETS.oliebollenbar}`}
         </span>
       </div>
       <div className="overflow-x-auto">
@@ -101,7 +102,7 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
                           <span
                             key={p.label || "dag"}
                             className={`font-semibold tabular-nums ${statusText[p.status]}`}
-                            title={`${volunteerRoleLabel[role]}${p.label ? ` ${p.label}` : ""}: ${p.count} aangemeld (${statusLabel[p.status].toLowerCase()})`}
+                            title={`${volunteerRoleLabel[role]}${p.label ? ` ${p.label}` : ""}: ${p.count} van ${p.target} aangemeld (${statusLabel[p.status].toLowerCase()})`}
                           >
                             {p.status === "weinig" ? "!" : p.status === "genoeg" ? "✓" : ""}
                             {p.label ? `${p.label[0]}${p.count}` : p.count}
@@ -116,7 +117,7 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
           })}
         </div>
       </div>
-      <p className="mt-2 text-xs text-stone-500">o = ochtend, m = middag. Telt aanmeldingen (beschikbaarheid), niet het definitieve rooster.</p>
+      <p className="mt-2 text-xs text-stone-500">o = ochtend, m = middag, a = avond. Telt aanmeldingen (beschikbaarheid), niet het definitieve rooster.</p>
     </div>
   );
 }

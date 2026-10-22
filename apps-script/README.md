@@ -11,13 +11,17 @@ Het script:
 
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier en barter; dat tabblad wordt nooit aangepast);
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
-  `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`;
+  `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
+  `Bezorgstatus` en `Agenda`;
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
   zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
 - logt elke afgeronde en heropende order met naam en tijd in het tabblad `Inpaklog`;
 - berekent routes en kilometers met de ingebouwde Google Maps-dienst (geen API-sleutel nodig);
+- berekent per stop de verwachte aankomsttijd (vertrektijd + rijtijd + 5 minuten per stop);
+- houdt bij welke stops de bezorgers als afgeleverd hebben afgevinkt (`Bezorgstatus`);
 - verstuurt klantbevestigingen vanuit het Google-account van de Sheet (`MailApp`);
+- beheert declaraties: ingediend → goedgekeurd of afgekeurd (met reden) → uitbetaald (met datum);
 - laat bonnen uitlezen door Claude en bewaart de foto's in Google Drive.
 
 ## Installeren (± 15 minuten)
@@ -93,9 +97,45 @@ in de plaats ervan delen.
 
 ## Tabbladen die je zelf vult
 
+- **Agenda**: de momenten waarop vrijwilligers zich kunnen aanmelden. Eén regel per dag, taak en dagdeel:
+
+  | datum | taak | dagdeel | tijd | locatie | nodig |
+  |---|---|---|---|---|---|
+  | 2026-12-29 | inpakken | ochtend | 07:30–12:00 | | 4 |
+  | 2026-12-30 | fietskoerier | middag | 12:00–16:00 | | 3 |
+  | 2026-12-26 | oliebollenbar | | 14:00–18:00 | Pick-up Schaatsbaan | 6 |
+
+  - `taak` is `inpakken`, `fietskoerier`, `autokoerier` of `oliebollenbar`.
+  - `dagdeel` is `ochtend`, `middag`, `avond` of leeg (hele dag).
+  - `datum` mag ook "26 december" zijn.
+  - `nodig` leeg = standaard (4).
+  - Het script vult de agenda de eerste keer met 15–24 en 27–31 december. Pas hem daarna gewoon in de Sheet aan: de aanmeldpagina en de bezettingskalender volgen direct.
+  - Aanmeldingen bewaren de gekozen tekst ("Woensdag 30 december: middag"). Verander je een moment waarvoor al mensen zijn aangemeld, dan tellen die niet meer mee voor het nieuwe moment.
 - **Historie**: één regel per dag van eerdere jaren: `jaar`, `datum` (JJJJ-MM-DD), `bestellingen`, `oliebollen`, `omzet`.
   Totalen per week of per seizoen mogen ook (zet dan de laatste dag van die periode als datum).
-- **Instellingen**: `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft.
+- **Instellingen** (`sleutel`, `waarde`):
+  - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
+  - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers.
+
+## Kosten en declaraties
+
+Een vrijwilliger dient een declaratie in met bon, bedrag en IBAN. Daarna:
+
+- de vrijwilliger ziet onder **Mijn declaraties** alleen zijn eigen declaraties, op naam waarmee hij inlogt, met de status en het IBAN afgeschermd (`•••• 4300`);
+- beheer keurt goed of af (afkeuren vraagt een reden) en markeert als uitbetaald met de datum;
+- alleen beheer ziet de volledige IBANs en kan de status wijzigen.
+
+De tabel `Kosten` krijgt daarvoor de kolommen `iban`, `status`, `reden`, `beoordeeld_door`, `beoordeeld_op` en `uitbetaald_op`; het script voegt ze zelf toe. Bestaande regels zonder status tellen als "ingediend".
+
+## Na de actie: persoonsgegevens verwijderen
+
+Onder **Vrijwilligers → Na de actie** kan beheer met één knop (na het typen van VERWIJDER) alles wissen wat de toestemmingstekst belooft:
+
+- alle aanmeldingen in `Formulierreacties 1`;
+- in `Totaal_lijst bestellingen`: contactpersoon, telefoon, e-mail (`Info`), adres (`Bezorglocatie`) en opmerkingen (`Comments`);
+- namen in de dashboardtabbladen, IBANs in `Kosten`, de routes, en de bonfoto's in de Drive-map.
+
+Aantallen, bedragen en datums blijven staan, zodat de tussenstand van volgend jaar kan vergelijken. Maak eventueel eerst een kopie van de Sheet.
 
 ## Realtime
 

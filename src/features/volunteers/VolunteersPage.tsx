@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { backend, type AnonymizeResult, type Session } from "../../data/backend";
 import type { DashboardState, VolunteerRole } from "../../types/dashboard";
 import { VOLUNTEER_ROLES, volunteerRoleLabel } from "../../types/dashboard";
-import { Badge, Card, SectionTitle, StatStrip, inputClass, secondaryButton } from "../../components/ui";
+import { Badge, Card, Notice, SectionTitle, StatStrip, inputClass, secondaryButton } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { whatsappNumber } from "../routes/routeUtils";
 import { StaffingCalendar } from "../../components/StaffingCalendar";
@@ -15,7 +16,13 @@ function dayKey(option: string): string {
 
 const MONTH_ORDER = ["november", "december", "januari"];
 
-export function VolunteersPage({ state }: { state: DashboardState }) {
+interface VolunteersPageProps {
+  state: DashboardState;
+  session: Session;
+  run: (change: () => Promise<unknown>) => Promise<void>;
+}
+
+export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState<VolunteerRole | "alle">("alle");
   const [day, setDay] = useState("alle");
@@ -135,6 +142,70 @@ export function VolunteersPage({ state }: { state: DashboardState }) {
           {filtered.length === 0 ? <p className="text-sm text-stone-600">Geen aanmeldingen in deze selectie.</p> : null}
         </div>
       </Card>
+      <PrivacyCard session={session} run={run} />
     </div>
+  );
+}
+
+/** After the action: remove personal data as promised in the consent text. Asks to type a word first. */
+function PrivacyCard({ session, run }: { session: Session; run: (change: () => Promise<unknown>) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<AnonymizeResult | null>(null);
+
+  async function go() {
+    setBusy(true);
+    setError(null);
+    try {
+      let out: AnonymizeResult | null = null;
+      await run(async () => {
+        out = await backend.anonymize(session, confirm.trim());
+      });
+      setResult(out);
+      setOpen(false);
+      setConfirm("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verwijderen mislukt.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border-red-200">
+      <SectionTitle
+        title="Na de actie: persoonsgegevens verwijderen (AVG)"
+        subtitle="Wist alle aanmeldingen van vrijwilligers, de namen, telefoonnummers, e-mailadressen, adressen en opmerkingen van klanten, IBANs, routes en de bonfoto's in Drive. Aantallen en bedragen blijven staan voor de cijfers van volgend jaar."
+      />
+      {result ? (
+        <Notice tone="success">
+          Klaar: {result.volunteers} aanmeldingen verwijderd, {result.orders} bestellingen geanonimiseerd, {result.costs} declaraties zonder naam en IBAN, {result.receipts} bonfoto's naar de prullenbak.
+        </Notice>
+      ) : null}
+      {!open ? (
+        <button type="button" className={`${secondaryButton} border-red-300 text-red-700 hover:bg-red-50`} onClick={() => setOpen(true)}>
+          Persoonsgegevens verwijderen…
+        </button>
+      ) : (
+        <div className="grid gap-2">
+          <Notice tone="warning">Dit kan niet ongedaan worden gemaakt. Doe dit pas als alles is bezorgd en uitbetaald. Maak eventueel eerst een kopie van de Sheet.</Notice>
+          <label className="grid gap-1 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">Typ VERWIJDER om te bevestigen</span>
+            <input className={`${inputClass} max-w-xs`} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="off" />
+          </label>
+          {error ? <Notice tone="error">{error}</Notice> : null}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-40" disabled={busy || confirm.trim() !== "VERWIJDER"} onClick={() => void go()}>
+              {busy ? "Bezig…" : "Definitief verwijderen"}
+            </button>
+            <button type="button" className={secondaryButton} disabled={busy} onClick={() => setOpen(false)}>
+              Annuleren
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

@@ -329,7 +329,14 @@ const iconPaths: Record<string, ReactNode> = {
       <path d="M3 10h18M8 3v4M16 3v4" />
     </>
   ),
-  check: <path d="m5 12 5 5 9-10" />
+  check: <path d="m5 12 5 5 9-10" />,
+  download: <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" />,
+  share: (
+    <>
+      <path d="M12 15V4m0 0L8 8m4-4 4 4" />
+      <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
+    </>
+  )
 };
 
 export function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof iconPaths | string; className?: string }) {
@@ -434,7 +441,7 @@ export function Segmented<T extends string>({
   label
 }: {
   value: T;
-  options: Array<[T, string] | [T, string, number]>;
+  options: Array<[T, ReactNode] | [T, ReactNode, number]>;
   onChange: (value: T) => void;
   label: string;
 }) {

@@ -52,7 +52,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
   const signupLink = appLink("/aanmelden");
 
   return (
-    <div className="grid gap-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <Card>
         <SectionTitle
           title="Waar is nog plek?"

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Notice, SectionTitle, Segmented, StatStrip, Sticker, fieldLabel, formatEuro, formatNumber, rollOliebol, toast, todayIso, type Delta } from "../../components/ui";
-import { GOAL_MILESTONES, GOAL_OLIEBOLLEN } from "../../config";
-import dansenUrl from "../../assets/gouwe-ouwe-dansen.jpg";
+import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, todayIso, type Delta } from "../../components/ui";
+import { DiscoBallIcon, Discozaal, oudjesFor } from "./Discozaal";
+import { OLIEBOLLEN_PER_OUDJE } from "../../config";
+import { ShareStand } from "./ShareStand";
+import type { StandData } from "./exportStand";
 
 type Metric = "oliebollen" | "orders" | "revenue";
 
@@ -45,6 +47,11 @@ function cumulativeUpTo(season: Season, cutoff: number, metric: Metric): number 
 
 export function StatsPage({ state }: { state: DashboardState }) {
   const [metric, setMetric] = useState<Metric>("oliebollen");
+  // The chart choice leads; "Discozaal" is one more option in it and turns the chart into the disco hall.
+  const [disco, setDisco] = useState(false);
+  // The chart card shows the cumulative chart, or the disco hall behind the disco-ball button.
+  const view: "grafiek" | "disco" = disco ? "disco" : "grafiek";
+  const [sharing, setSharing] = useState<StandData | null>(null);
 
   const { seasons, revenueSource, currentYear, cutoff } = useMemo(() => {
     const byYear = new Map<number, Map<number, DayPoint>>();
@@ -118,10 +125,21 @@ export function StatsPage({ state }: { state: DashboardState }) {
     return cutoff > 0 && whole !== previous ? `${base} · hele seizoen ${format(whole)}` : base;
   };
 
+  const seasonOliebollen = thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0;
+
+  const oudjes = oudjesFor(seasonOliebollen);
+
+  function openShare() {
+    // The season so far, added up per day: the line on the card.
+    let running = 0;
+    const curve = (thisSeason?.days ?? []).filter((d) => d.daysBefore >= cutoff).map((d) => (running += d.oliebollen));
+    setSharing({ date: todayIso(), oliebollen: seasonOliebollen, curve: [0, ...curve] });
+  }
+
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <p className="-mt-2 text-sm text-muted">
         Seizoen {currentYear}, {periodLabel}. Telt op besteldatum (of leverdatum als die ontbreekt).
       </p>
@@ -130,8 +148,6 @@ export function StatsPage({ state }: { state: DashboardState }) {
           Er zijn nog geen cijfers van voorgaande jaren. Vul het tabblad <code>Historie</code> in de Sheet (jaar, datum, bestellingen, oliebollen, omzet) om te vergelijken.
         </Notice>
       ) : null}
-
-      <GoalMeter oliebollen={thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0} />
 
       <StatStrip
         items={[
@@ -157,19 +173,46 @@ export function StatsPage({ state }: { state: DashboardState }) {
 
       <Card>
         <SectionTitle
-          title={`${metricLabel[metric]} opgeteld per dag`}
-          subtitle="Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
+          title={view === "disco" ? "Discozaal" : `${metricLabel[metric]} opgeteld per dag`}
+          subtitle={
+            view === "disco"
+              ? `Per ${OLIEBOLLEN_PER_OUDJE} verkochte oliebollen danst er een oudje bij.`
+              : "Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
+          }
           action={
             <Segmented
-              label="Metriek"
-              value={metric}
-              onChange={setMetric}
-              options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
+              label="Weergave"
+              value={view === "disco" ? "disco" : metric}
+              onChange={(v) => {
+                if (v === "disco") return setDisco(true);
+                setDisco(false);
+                setMetric(v);
+              }}
+              options={[
+                ...(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string]),
+                [
+                  "disco",
+                  <span key="disco" className="inline-flex items-center gap-1.5" title={`${formatNumber(oudjes)} oudjes op de dansvloer`}>
+                    <DiscoBallIcon />
+                    Discozaal
+                  </span>,
+                  oudjes
+                ] as ["disco", ReactNode, number]
+              ]}
             />
           }
         />
-        <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />
+        {view === "disco" ? <Discozaal oliebollen={seasonOliebollen} /> : <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />}
+        {/* Sharing closes the card: one clear action, in feest at 24px so the light text stays readable. */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-lijn pt-4">
+          <p className="text-sm text-muted">Deel de stand van vandaag als kaartje, voor de groepsapp of Instagram.</p>
+          <button type="button" className="inline-flex min-h-[48px] items-center gap-2 rounded-md bg-feest px-5 font-display text-2xl uppercase leading-none tracking-wide text-meel transition hover:bg-feest-hover active:translate-y-px" onClick={openShare}>
+            <Icon name="share" className="h-5 w-5" />
+            Deel stand
+          </button>
+        </div>
       </Card>
+      {sharing ? <ShareStand data={sharing} onClose={() => setSharing(null)} /> : null}
 
       <Card>
         <SectionTitle title="Per seizoen" subtitle={`Zelfde periode (${periodLabel}) naast het hele seizoen t/m 31 december.`} />
@@ -226,20 +269,18 @@ function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardS
   const pending = state.costs.filter((c) => c.status === "ingediend").reduce((sum, c) => sum + c.amount, 0);
 
   return (
-    <>
-      <StatStrip
-        items={[
-          { label: "Besteld", value: formatNumber(orders.length), hint: `${formatNumber(piecesTotal)} oliebollen` },
-          { label: "Ingepakt", value: `${packed} / ${orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
-          { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
-          {
-            label: "Omzet min kosten",
-            value: revenue === null ? "n.v.t." : formatEuro(revenue - approved),
-            hint: `${revenue === null ? "omzet onbekend" : `omzet ${formatEuro(revenue)}${revenueIsEstimate ? " (schatting)" : ""}`} · kosten ${formatEuro(approved)}${pending ? ` (+ ${formatEuro(pending)} te beoordelen)` : ""}`
-          }
-        ]}
-      />
-    </>
+    <StatStrip
+      items={[
+        { label: "Besteld", value: formatNumber(orders.length), hint: `${formatNumber(piecesTotal)} oliebollen` },
+        { label: "Ingepakt", value: `${packed} / ${orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
+        { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
+        {
+          label: "Omzet min kosten",
+          value: revenue === null ? "n.v.t." : formatEuro(revenue - approved),
+          hint: `${revenue === null ? "omzet onbekend" : `omzet ${formatEuro(revenue)}${revenueIsEstimate ? " (schatting)" : ""}`} · kosten ${formatEuro(approved)}${pending ? ` (+ ${formatEuro(pending)} te beoordelen)` : ""}`
+        }
+      ]}
+    />
   );
 }
 
@@ -400,60 +441,4 @@ function xTicks(maxX: number): number[] {
   const ticks: number[] = [];
   for (let t = 0; t <= maxX; t += step) ticks.push(t);
   return ticks;
-}
-
-const MILESTONE_KEY = "omacoby-mijlpaal";
-
-/** The goal of the action, in oudjes. A milestone passed since this device last looked gets a sticker and a rolling oliebol. */
-function GoalMeter({ oliebollen }: { oliebollen: number }) {
-  const pct = Math.min(100, (oliebollen / GOAL_OLIEBOLLEN) * 100);
-  const reached = GOAL_MILESTONES.filter((m) => oliebollen >= m);
-  const top = reached[reached.length - 1] ?? 0;
-
-  useEffect(() => {
-    let seen = 0;
-    try {
-      seen = Number(localStorage.getItem(MILESTONE_KEY) ?? "0");
-    } catch {
-      return;
-    }
-    if (top > seen) {
-      // Only celebrate milestones passed while this device was watching; the first visit just records them.
-      if (seen > 0) {
-        rollOliebol();
-        toast(`${formatNumber(top)} oliebollen: ${formatNumber(top / 10)} oudjes aan het rock-'n-rollen!`);
-      }
-      try {
-        localStorage.setItem(MILESTONE_KEY, String(top));
-      } catch {
-        // Private mode: no memory, no celebration.
-      }
-    }
-  }, [top]);
-
-  return (
-    <Card className="grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_150px]">
-      <div>
-        <p className="font-serif text-xl font-bold text-krent">Op weg naar {formatNumber(GOAL_OLIEBOLLEN)} oliebollen</p>
-        <p className="text-sm text-muted">
-          Dat zijn {formatNumber(GOAL_OLIEBOLLEN / 10)} gratis entrees voor een Gouwe Ouwe-avond. Nu: <b className="tabular-nums text-krent">{formatNumber(oliebollen)}</b> oliebollen, goed voor{" "}
-          <b className="tabular-nums text-krent">{formatNumber(Math.floor(oliebollen / 10))}</b> oudjes.
-        </p>
-        <div className="relative mb-7 mt-11 h-3.5 rounded-full bg-vul">
-          <div className="h-full rounded-full bg-gradient-to-r from-gouwe to-feest transition-all duration-1000" style={{ width: `${pct}%` }} />
-          {GOAL_MILESTONES.map((m) => (
-            <span key={m} className="absolute -bottom-1.5 -top-1.5 w-0.5 bg-krent" style={{ left: `${(m / GOAL_OLIEBOLLEN) * 100}%` }}>
-              {oliebollen >= m ? (
-                <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2">
-                  <Sticker tone="gouwe" className="px-2.5 py-1 text-base">Gehaald!</Sticker>
-                </span>
-              ) : null}
-              <span className={`absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap ${fieldLabel} tracking-normal`}>{formatNumber(m)}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-      <img src={dansenUrl} alt="Dansende ouderen op een Gouwe Ouwe-avond" className="hidden h-[150px] w-[150px] rounded-kaart object-cover sm:block" />
-    </Card>
-  );
 }

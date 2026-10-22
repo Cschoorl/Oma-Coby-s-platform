@@ -85,6 +85,7 @@ export const SIGNUP_HINTS = {
  * Shown as the goal meter on Tussenstand; every 10 oliebollen is one "oudje".
  */
 export const GOAL_OLIEBOLLEN = 25000;
+export const OLIEBOLLEN_PER_OUDJE = 10;
 export const GOAL_MILESTONES = [5000, 10000, 25000];
 
 /**

@@ -5,7 +5,7 @@ import { VOLUNTEER_ROLES, volunteerRoleLabel } from "../../types/dashboard";
 import { Badge, Card, CopyButton, EmptyState, Icon, Notice, SectionTitle, StatStrip, dangerButton, fieldLabel, ghostButton, inputClass, taskClass, textAction } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { whatsappNumber } from "../routes/routeUtils";
-import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { StaffingOverview } from "../../components/StaffingOverview";
 import { countSignups } from "../../utils/staffing";
 
 /** "Vrijdag 19 december: middag" → "19 december"; used to filter on a day regardless of role or dagdeel. */
@@ -59,7 +59,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
           subtitle="Hoeveel vrijwilligers zich per taak hebben aangemeld, tegenover wat er nodig is."
           action={<CopyButton text={signupLink} label="Kopieer aanmeldlink" done="Aanmeldlink gekopieerd" />}
         />
-        <StaffingCalendar counts={countSignups(state.volunteers)} />
+        <StaffingOverview counts={countSignups(state.volunteers)} />
         <p className="mt-3 text-xs text-muted">
           Aanmeldlink (geen code nodig): <span className="break-all text-krent">{signupLink}</span>
         </p>

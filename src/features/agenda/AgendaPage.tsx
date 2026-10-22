@@ -3,7 +3,7 @@ import type { Order } from "../../types/order";
 import type { AgendaShift } from "../../types/agenda";
 import { parseAgendaShifts, parseVolunteerShifts, seasonMonth } from "../../utils/agendaParser";
 import type { Volunteer } from "../../types/dashboard";
-import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { StaffingOverview } from "../../components/StaffingOverview";
 import { countSignups } from "../../utils/staffing";
 import { Card, CopyButton, EmptyState, Icon, SectionTitle, inputClass, taskClass, textAction } from "../../components/ui";
 
@@ -96,7 +96,7 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
       {volunteers.length > 0 ? (
         <Card>
           <SectionTitle title="Waar is nog plek?" subtitle="Met een ! zijn er die dag nog weinig mensen. Kun je dan? Laat het de planning weten." />
-          <StaffingCalendar counts={countSignups(volunteers)} />
+          <StaffingOverview counts={countSignups(volunteers)} />
         </Card>
       ) : null}
       {shifts.length === 0 ? (

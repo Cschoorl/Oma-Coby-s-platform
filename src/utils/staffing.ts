@@ -1,7 +1,7 @@
 import type { SignupCounts } from "../data/backend";
 import type { Volunteer, VolunteerRole } from "../types/dashboard";
 import { VOLUNTEER_ROLES } from "../types/dashboard";
-import { SIGNUP_OPTIONS, STAFFING_TARGETS } from "../config";
+import { OPTION_TARGETS, SIGNUP_OPTIONS, STAFFING_TARGETS } from "../config";
 
 export type StaffingStatus = "weinig" | "bijna" | "genoeg";
 
@@ -15,6 +15,11 @@ export function optionKey(option: string): string {
 export function dayKey(option: string): string {
   const match = option.toLowerCase().match(/(\d{1,2})\s+([a-zà-ÿ]+)/);
   return match ? `${Number(match[1])} ${match[2]}` : optionKey(option);
+}
+
+/** People needed for one option: from the agenda when set, else the default for the task. */
+export function targetFor(role: VolunteerRole, option: string): number {
+  return OPTION_TARGETS[optionKey(option)] ?? STAFFING_TARGETS[role];
 }
 
 export function staffingStatus(count: number, target: number): StaffingStatus {
@@ -43,15 +48,15 @@ export function countFor(counts: SignupCounts, role: VolunteerRole, option: stri
 export function shortOptions(counts: SignupCounts, role: VolunteerRole, statuses: StaffingStatus[] = ["weinig"]): string[] {
   return SIGNUP_OPTIONS[role]
     .map((option) => ({ option, count: countFor(counts, role, option) }))
-    .filter(({ count }) => statuses.includes(staffingStatus(count, STAFFING_TARGETS[role])))
+    .filter(({ option, count }) => statuses.includes(staffingStatus(count, targetFor(role, option))))
     .sort((a, b) => a.count - b.count)
     .map(({ option }) => option);
 }
 
 export interface DayStaffing {
   role: VolunteerRole;
-  /** One entry per dagdeel for couriers ("ochtend"/"middag"), a single entry otherwise. */
-  parts: Array<{ label: string; count: number; status: StaffingStatus }>;
+  /** One entry per dagdeel ("ochtend"/"middag"/"avond"), a single entry for a whole day. */
+  parts: Array<{ label: string; count: number; target: number; status: StaffingStatus }>;
 }
 
 /** Staffing per role for one season day, built from the form options of that day. */
@@ -62,8 +67,9 @@ export function staffingForDay(counts: SignupCounts, day: string): DayStaffing[]
       role,
       parts: options.map((o) => {
         const count = countFor(counts, role, o);
-        const part = o.match(/:\s*(ochtend|middag)/i)?.[1] ?? "";
-        return { label: part, count, status: staffingStatus(count, STAFFING_TARGETS[role]) };
+        const part = o.match(/:\s*(ochtend|middag|avond)/i)?.[1] ?? "";
+        const target = targetFor(role, o);
+        return { label: part, count, target, status: staffingStatus(count, target) };
       })
     };
   }).filter((d) => d.parts.length > 0);

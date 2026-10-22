@@ -1,3 +1,5 @@
+import type { AgendaSlot, VolunteerRole } from "./types/dashboard";
+
 /*
  * Options on the volunteer signup page. They are written to the sheet exactly as shown here,
  * in the same format as the Google Form ("Vrijdag 18 december: middag"), so the agenda can read them.
@@ -16,13 +18,60 @@ function dayLabel(year: number, month: number, day: number): string {
 const SEASON_YEAR = 2026;
 const SEASON_DAYS = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31].map((d) => dayLabel(SEASON_YEAR, 12, d));
 
-export const SIGNUP_OPTIONS = {
+const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
   inpakken: SEASON_DAYS,
   fietskoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
   autokoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
-  /** Events with location, e.g. "Zaterdag 26 december (Pick-up Schaatsbaan)". Fill in once the 2026 events are known. */
+  /** Events with location, e.g. "Zaterdag 26 december (Pick-up Schaatsbaan)". */
   oliebollenbar: SEASON_DAYS
 };
+
+/**
+ * The signup options per task. Filled from the Agenda tab of the Sheet (see applyAgenda);
+ * the defaults above are used until it has rows. Read it at render time, never copy it.
+ */
+export const SIGNUP_OPTIONS: Record<VolunteerRole, string[]> = { ...DEFAULT_OPTIONS };
+
+/** Time per option ("7:30–12:00"), keyed by the lowercased option. */
+export const OPTION_TIMES: Record<string, string> = {};
+
+/** People needed per option when the agenda says so, keyed by the lowercased option; else STAFFING_TARGETS. */
+export const OPTION_TARGETS: Record<string, number> = {};
+
+const PART_ORDER = ["", "ochtend", "middag", "avond"];
+
+/** "2026-12-30" + "ochtend" + "" → "Woensdag 30 december: ochtend"; with a location: "… (Pick-up Schaatsbaan)". */
+export function agendaLabel(slot: Pick<AgendaSlot, "date" | "part" | "location">): string {
+  const [y, m, d] = slot.date.split("-").map(Number);
+  return `${dayLabel(y, m, d)}${slot.part ? `: ${slot.part}` : ""}${slot.location ? ` (${slot.location})` : ""}`;
+}
+
+let appliedKey = "";
+
+/** Uses the Agenda tab for the signup options, times and targets. An empty agenda keeps the defaults. */
+export function applyAgenda(slots: AgendaSlot[]): void {
+  const key = JSON.stringify(slots);
+  if (key === appliedKey) return;
+  appliedKey = key;
+  for (const k of Object.keys(OPTION_TIMES)) delete OPTION_TIMES[k];
+  for (const k of Object.keys(OPTION_TARGETS)) delete OPTION_TARGETS[k];
+  if (slots.length === 0) {
+    Object.assign(SIGNUP_OPTIONS, DEFAULT_OPTIONS);
+    return;
+  }
+  const sorted = [...slots].sort((a, b) => a.date.localeCompare(b.date) || PART_ORDER.indexOf(a.part) - PART_ORDER.indexOf(b.part));
+  for (const role of Object.keys(DEFAULT_OPTIONS) as VolunteerRole[]) {
+    const options: string[] = [];
+    for (const slot of sorted.filter((s) => s.role === role)) {
+      const label = agendaLabel(slot);
+      if (options.includes(label)) continue;
+      options.push(label);
+      if (slot.time) OPTION_TIMES[label.toLowerCase()] = slot.time;
+      if (slot.needed) OPTION_TARGETS[label.toLowerCase()] = slot.needed;
+    }
+    SIGNUP_OPTIONS[role] = options;
+  }
+}
 
 export const SIGNUP_HINTS = {
   inpakken: "Inpakken start rond 07:30 in Aalsmeer.",
@@ -35,11 +84,20 @@ export const SIGNUP_HINTS = {
  * How many volunteers are needed per role on each day (per dagdeel for couriers).
  * Below half of this a day shows as "weinig"; below the number as "bijna".
  */
-export const STAFFING_TARGETS = {
+export const STAFFING_TARGETS: Record<VolunteerRole, number> = {
   inpakken: 4,
   fietskoerier: 4,
   autokoerier: 4,
   oliebollenbar: 4
 };
+
+/**
+ * Above this many oliebollen on one bike route the routes page warns that a car may be needed.
+ * Rough guess; adjust once the team knows what fits on a (bak)fiets.
+ */
+export const BIKE_MAX_PIECES = 300;
+
+/** Departure time per dagdeel when a route has none yet. */
+export const ROUTE_START_TIMES: Record<string, string> = { ochtend: "09:00", middag: "12:00", avond: "17:00", "": "09:00" };
 
 export const CONTACT_EMAIL = "planning@omacobysoliebollenbar.nl";

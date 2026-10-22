@@ -53,6 +53,24 @@ const CONFIG = {
   START_ADDRESS: 'Aalsmeerderweg 85, Aalsmeer',
   /** Route eindigt weer bij de baklocatie. */
   ROUND_TRIP: true,
+  /** Vertrektijd als er bij de route geen is opgegeven, en minuten per stop voor uitladen en afgeven. */
+  ROUTE_START_TIME: '09:00',
+  MINUTES_PER_STOP: 5,
+  /**
+   * Startinhoud van het tabblad Agenda (alleen als het nog leeg is). Daarna past Mark de agenda in de
+   * Sheet aan: één regel per dag, taak en dagdeel, met tijd, locatie en hoeveel mensen nodig zijn.
+   */
+  AGENDA_DEFAULT: {
+    days: ['2026-12-15', '2026-12-16', '2026-12-17', '2026-12-18', '2026-12-19', '2026-12-20', '2026-12-21', '2026-12-22',
+      '2026-12-23', '2026-12-24', '2026-12-27', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31'],
+    slots: [
+      ['inpakken', '', '07:30'],
+      ['fietskoerier', 'ochtend', '09:00–12:00'], ['fietskoerier', 'middag', '12:00–16:00'],
+      ['autokoerier', 'ochtend', '09:00–12:00'], ['autokoerier', 'middag', '12:00–16:00'],
+      ['oliebollenbar', '', '']
+    ],
+    needed: 4
+  },
   /** Afzendernaam van de klantbevestiging. */
   MAIL_SENDER_NAME: "Oma Coby's Oliebollenbar",
   /** Map in Google Drive voor foto's van bonnen. */
@@ -107,8 +125,10 @@ const TABS = {
   meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op']],
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
-  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op']],
-  costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url']],
+  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden']],
+  costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url', 'iban', 'status', 'reden', 'beoordeeld_door', 'beoordeeld_op', 'uitbetaald_op']],
+  delivery: ['Bezorgstatus', ['order_id', 'afgeleverd_door', 'afgeleverd_op']],
+  agenda: ['Agenda', ['datum', 'taak', 'dagdeel', 'tijd', 'locatie', 'nodig']],
   history: ['Historie', ['jaar', 'datum', 'bestellingen', 'oliebollen', 'omzet']],
   settings: ['Instellingen', ['sleutel', 'waarde']],
   packlog: ['Inpaklog', ['tijd', 'order_id', 'klant', 'actie', 'door', 'met_krenten', 'zonder_krenten']]
@@ -132,7 +152,11 @@ const PERMISSIONS = {
   extractReceipt: ['beheer', 'inpakker', 'bezorger'],
   saveCost: ['beheer', 'inpakker', 'bezorger'],
   registerVolunteer: ['public'],
-  login: ['public']
+  login: ['public'],
+  setDelivered: ['beheer', 'bezorger'],
+  reviewCost: ['beheer'],
+  payCost: ['beheer'],
+  anonymize: ['beheer']
 };
 
 // ---------------------------------------------------------------------------
@@ -195,7 +219,50 @@ const HANDLERS = {
     return { version: getVersion_() };
   },
   state: function (body, role) {
-    return buildState_(role);
+    return buildState_(role, String(body.name || '').trim());
+  },
+  setDelivered: function (body) {
+    return withLock_(function () {
+      const name = requireName_(body.name);
+      if (!findOrder_(body.orderId)) throw new Error('Order niet gevonden.');
+      const row = findOrCreate_('delivery', body.orderId);
+      row.set(body.delivered ? { afgeleverd_door: name, afgeleverd_op: now_() } : { afgeleverd_door: '', afgeleverd_op: '' });
+      return bump_();
+    });
+  },
+  reviewCost: function (body) {
+    const status = String(body.status || '');
+    if (['goedgekeurd', 'afgekeurd', 'ingediend'].indexOf(status) === -1) throw new Error('Onbekende status.');
+    const reason = String(body.reason || '').trim();
+    if (status === 'afgekeurd' && !reason) throw new Error('Geef een reden waarom je de declaratie afkeurt.');
+    return withLock_(function () {
+      const row = findRow_('costs', body.id);
+      if (row.values.status === 'uitbetaald') throw new Error('Deze declaratie is al uitbetaald.');
+      row.set({ status: status, reden: status === 'afgekeurd' ? reason : '', beoordeeld_door: String(body.name || ''), beoordeeld_op: status === 'ingediend' ? '' : now_() });
+      return bump_();
+    });
+  },
+  payCost: function (body) {
+    return withLock_(function () {
+      const row = findRow_('costs', body.id);
+      const current = row.values.status || 'ingediend';
+      if (body.paid) {
+        if (current !== 'goedgekeurd') throw new Error('Keur de declaratie eerst goed.');
+        row.set({ status: 'uitbetaald', uitbetaald_op: String(body.date || '').trim() || now_().slice(0, 10) });
+      } else {
+        if (current !== 'uitbetaald') throw new Error('Deze declaratie is nog niet uitbetaald.');
+        row.set({ status: 'goedgekeurd', uitbetaald_op: '' });
+      }
+      return bump_();
+    });
+  },
+  anonymize: function (body) {
+    if (String(body.confirm || '') !== 'VERWIJDER') throw new Error('Typ VERWIJDER om te bevestigen.');
+    return withLock_(function () {
+      const result = anonymize_();
+      bump_();
+      return result;
+    });
   },
   claim: function (body) {
     return withLock_(function () {
@@ -279,7 +346,7 @@ const HANDLERS = {
         });
       });
     });
-    return { counts: counts };
+    return { counts: counts, agenda: readAgenda_() };
   },
   setBaked: function (body) {
     return withLock_(function () {
@@ -384,6 +451,15 @@ const HANDLERS = {
     const order = (route.waypoint_order || waypoints.map(function (_, i) { return i; })).map(function (i) { return waypoints[i]; });
     if (!CONFIG.ROUND_TRIP) order.push(stops[stops.length - 1]);
 
+    // Expected arrival per stop: departure + driving time of each leg + time spent at earlier stops.
+    const startTime = /^\d{1,2}:\d{2}$/.test(String(body.startTime || '')) ? String(body.startTime) : CONFIG.ROUTE_START_TIME;
+    let clock = Number(startTime.split(':')[0]) * 60 + Number(startTime.split(':')[1]);
+    const stopTimes = order.map(function (_, i) {
+      clock += Math.round(route.legs[i].duration.value / 60) + (i > 0 ? CONFIG.MINUTES_PER_STOP : 0);
+      return hhmm_(clock);
+    });
+    seconds += order.length * CONFIG.MINUTES_PER_STOP * 60;
+
     const travelmode = mode === 'bicycling' ? 'bicycling' : 'driving';
     const enc = encodeURIComponent;
     const mapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=' + enc(CONFIG.START_ADDRESS) +
@@ -400,7 +476,9 @@ const HANDLERS = {
       minutes: Math.round(seconds / 60),
       orderIds: order.map(function (s) { return String(s.orderId); }),
       mapsUrl: mapsUrl,
-      computedAt: now_()
+      computedAt: now_(),
+      startTime: startTime,
+      stopTimes: stopTimes
     };
     withLock_(function () {
       findOrCreate_('routes', info.key).set({
@@ -411,7 +489,9 @@ const HANDLERS = {
         minuten: info.minutes,
         volgorde: info.orderIds.join(','),
         maps_url: info.mapsUrl,
-        berekend_op: info.computedAt
+        berekend_op: info.computedAt,
+        starttijd: info.startTime,
+        tijden: info.stopTimes.join(',')
       });
       bump_();
     });
@@ -481,11 +561,14 @@ const HANDLERS = {
     if (!body.date) throw new Error('Vul de datum in.');
     if (!isFinite(amount) || amount <= 0) throw new Error('Vul een geldig bedrag in.');
     if (!String(body.supplier || '').trim()) throw new Error('Vul de leverancier in.');
+    const iban = String(body.iban || '').replace(/\s+/g, '').toUpperCase();
+    if (!/^[A-Z]{2}\d{2}[A-Z0-9]{8,30}$/.test(iban)) throw new Error('Vul een geldig IBAN in, bijvoorbeeld NL91ABNA0417164300.');
     return withLock_(function () {
-      sheet_('costs').appendRow([
-        Utilities.getUuid(), now_(), String(body.name || ''), String(body.date), amount,
-        String(body.supplier).trim(), String(body.description || '').trim(), String(body.photoUrl || '')
-      ]);
+      appendObject_('costs', {
+        id: Utilities.getUuid(), ingevoerd_op: now_(), ingevoerd_door: String(body.name || ''), datum: String(body.date), bedrag: amount,
+        leverancier: String(body.supplier).trim(), omschrijving: String(body.description || '').trim(), foto_url: String(body.photoUrl || ''),
+        iban: iban, status: 'ingediend'
+      });
       bump_();
       return { saved: true };
     });
@@ -495,7 +578,7 @@ const HANDLERS = {
 // ---------------------------------------------------------------------------
 // State
 
-function buildState_(role) {
+function buildState_(role, name) {
   const isAdmin = role === 'beheer';
   const state = {
     version: getVersion_(),
@@ -507,7 +590,10 @@ function buildState_(role) {
     volunteers: [],
     costs: [],
     history: [],
-    pricePerPiece: null
+    pricePerPiece: null,
+    kmRate: null,
+    delivery: {},
+    agenda: readAgenda_()
   };
 
   readTab_('meta').forEach(function (r) {
@@ -541,8 +627,12 @@ function buildState_(role) {
       key: r.sleutel, date: isoDate_(r.leverdatum), courier: String(r.bezorger), mode: r.vervoer,
       km: num_(r.km), minutes: num_(r.minuten),
       orderIds: String(r.volgorde || '').split(',').filter(String), mapsUrl: String(r.maps_url || ''),
-      computedAt: String(r.berekend_op || '')
+      computedAt: String(r.berekend_op || ''),
+      startTime: String(r.starttijd || ''), stopTimes: String(r.tijden || '').split(',').filter(String)
     };
+  });
+  readTab_('delivery').forEach(function (r) {
+    if (r.afgeleverd_door) state.delivery[r.order_id] = { deliveredBy: String(r.afgeleverd_door), deliveredAt: String(r.afgeleverd_op || '') };
   });
 
   // Everyone sees who is available when (agenda); contact details only for beheer.
@@ -553,15 +643,25 @@ function buildState_(role) {
 
   const price = num_(getSetting_('prijs_per_oliebol'));
   state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
+  const kmRate = num_(getSetting_('km_vergoeding'));
+  state.kmRate = kmRate > 0 ? kmRate : null;
+
+  // Beheer sees every declaration; a volunteer only their own, with the IBAN masked.
+  state.costs = readTab_('costs').map(function (r) {
+    const iban = String(r.iban || '');
+    return {
+      id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
+      date: isoDate_(r.datum), amount: num_(r.bedrag), supplier: String(r.leverancier || ''),
+      description: String(r.omschrijving || ''), photoUrl: String(r.foto_url || ''),
+      iban: isAdmin || !iban ? iban : '•••• ' + iban.slice(-4),
+      status: String(r.status || 'ingediend'), reason: String(r.reden || ''),
+      reviewedBy: String(r.beoordeeld_door || ''), reviewedAt: String(r.beoordeeld_op || ''), paidAt: isoDate_(r.uitbetaald_op)
+    };
+  }).filter(function (c) {
+    return isAdmin || (name && c.createdBy.toLowerCase() === name.toLowerCase());
+  });
 
   if (isAdmin) {
-    state.costs = readTab_('costs').map(function (r) {
-      return {
-        id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
-        date: isoDate_(r.datum), amount: num_(r.bedrag), supplier: String(r.leverancier || ''),
-        description: String(r.omschrijving || ''), photoUrl: String(r.foto_url || '')
-      };
-    });
     state.history = readTab_('history').map(function (r) {
       const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
       return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
@@ -794,6 +894,7 @@ function sheet_(tab) {
     sheet.getRange('A:A').setNumberFormat('@');
     sheet.appendRow(def[1]);
     sheet.setFrozenRows(1);
+    if (tab === 'agenda') defaultAgendaRows_().forEach(function (row) { sheet.appendRow(row); });
   } else {
     textKeys_(tab, sheet);
     // Add columns introduced by a newer script version to an existing tab.
@@ -915,6 +1016,111 @@ function bijWijziging() {
 /** Installable trigger (onFormSubmit): nieuwe bestelling of aanmelding via een Google Formulier. */
 function bijFormulier() {
   bump_();
+}
+
+/** Appends a row to a dashboard tab, matching values to the columns by header name. */
+function appendObject_(tab, obj) {
+  const sheet = sheet_(tab);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  sheet.appendRow(headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; }));
+}
+
+/** Like findOrCreate_, but the row must exist. Call inside withLock_. */
+function findRow_(tab, key) {
+  const id = String(key || '').trim();
+  const sheet = sheet_(tab);
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) if (keyOf_(values[i][0]) === id) return findOrCreate_(tab, id);
+  throw new Error('Niet gevonden: ' + id);
+}
+
+function defaultAgendaRows_() {
+  const rows = [];
+  CONFIG.AGENDA_DEFAULT.days.forEach(function (day) {
+    CONFIG.AGENDA_DEFAULT.slots.forEach(function (slot) {
+      rows.push([day, slot[0], slot[1], slot[2], '', CONFIG.AGENDA_DEFAULT.needed]);
+    });
+  });
+  return rows;
+}
+
+/** The signup moments from the Agenda tab; rows with an unknown task or date are skipped. */
+function readAgenda_() {
+  return readTab_('agenda').map(function (r) {
+    const needed = num_(r.nodig);
+    return {
+      date: dutchDate_(isoDate_(r.datum), CONFIG.SEASON_YEAR),
+      role: String(r.taak || '').trim().toLowerCase(),
+      part: String(r.dagdeel || '').trim().toLowerCase(),
+      time: r.tijd instanceof Date ? hhmm_(r.tijd.getHours() * 60 + r.tijd.getMinutes()) : String(r.tijd || '').trim(),
+      location: String(r.locatie || '').trim(),
+      needed: needed > 0 ? needed : null
+    };
+  }).filter(function (a) { return a.date && VOLUNTEER_ROLES.indexOf(a.role) !== -1; });
+}
+
+/** Clears names, contact details and IBANs after the action. Order numbers and amounts stay for the figures. */
+function anonymize_() {
+  const out = { volunteers: 0, orders: 0, costs: 0, receipts: 0 };
+  // Volunteer form answers: remove the rows, keep the header.
+  const vs = volunteerSheet_();
+  out.volunteers = clearRows_(vs);
+
+  // Orders: blank the personal columns.
+  const os = SpreadsheetApp.getActive().getSheetByName(CONFIG.ORDERS_SHEET);
+  if (os && os.getLastRow() > 1) {
+    const headers = os.getRange(1, 1, 1, os.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    ['contactpersoon', 'telefoon', 'email', 'adres', 'extra_notities'].forEach(function (field) {
+      CONFIG.COLUMNS[field].forEach(function (name) {
+        const col = headers.indexOf(name.toLowerCase());
+        if (col !== -1) os.getRange(2, col + 1, os.getLastRow() - 1, 1).clearContent();
+      });
+    });
+    out.orders = os.getLastRow() - 1;
+  }
+
+  // Dashboard tabs: names and texts with personal data.
+  const blank = function (tab, columns) {
+    const sheet = sheet_(tab);
+    if (sheet.getLastRow() < 2) return 0;
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    columns.forEach(function (c) {
+      const col = headers.indexOf(c);
+      if (col !== -1) sheet.getRange(2, col + 1, sheet.getLastRow() - 1, 1).clearContent();
+    });
+    return sheet.getLastRow() - 1;
+  };
+  blank('meta', ['opmerking_aangepast', 'bevestiging_tekst', 'bezorger', 'bijgewerkt_door']);
+  blank('packing', ['geclaimd_door', 'ingepakt_door']);
+  blank('packlog', ['klant', 'door']);
+  blank('delivery', ['afgeleverd_door']);
+  out.costs = blank('costs', ['ingevoerd_door', 'iban', 'beoordeeld_door']);
+  clearRows_(sheet_('routes'));
+
+  // Receipt photos in Drive.
+  const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
+  while (folders.hasNext()) {
+    const files = folders.next().getFiles();
+    while (files.hasNext()) { files.next().setTrashed(true); out.receipts++; }
+  }
+  return out;
+}
+
+/**
+ * Empties everything below the header. Sheets refuses to delete all rows under a frozen header,
+ * so row 2 is cleared instead of deleted. Returns the number of rows that had data.
+ */
+function clearRows_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return 0;
+  if (last > 2) sheet.deleteRows(3, last - 2);
+  sheet.getRange(2, 1, 1, Math.max(1, sheet.getLastColumn())).clearContent();
+  return last - 1;
+}
+
+function hhmm_(minutes) {
+  const m = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  return (m < 600 ? '0' : '') + Math.floor(m / 60) + ':' + (m % 60 < 10 ? '0' : '') + (m % 60);
 }
 
 /** Key cell → text. Sheets may turn "2026-11-15 10:12:00" into a date; keep the time if it has one. */

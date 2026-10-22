@@ -70,6 +70,15 @@ export interface Volunteer {
   remark: string;
 }
 
+export type CostStatus = "ingediend" | "goedgekeurd" | "afgekeurd" | "uitbetaald";
+
+export const costStatusLabel: Record<CostStatus, string> = {
+  ingediend: "Ingediend",
+  goedgekeurd: "Goedgekeurd",
+  afgekeurd: "Afgekeurd",
+  uitbetaald: "Uitbetaald"
+};
+
 export interface CostEntry {
   id: string;
   createdAt: string;
@@ -79,6 +88,38 @@ export interface CostEntry {
   supplier: string;
   description: string;
   photoUrl: string;
+  /** Account number for the refund; only beheer sees it in full. */
+  iban: string;
+  status: CostStatus;
+  /** Why beheer rejected it. */
+  reason: string;
+  reviewedBy: string;
+  reviewedAt: string;
+  paidAt: string;
+}
+
+/** A stop marked as delivered by the courier (tab "Bezorgstatus"). */
+export interface DeliveryState {
+  deliveredBy: string;
+  deliveredAt: string;
+}
+
+/**
+ * One moment volunteers can sign up for (tab "Agenda"): a day, a task and optionally a dagdeel,
+ * time and location. The signup options are built from these rows.
+ */
+export interface AgendaSlot {
+  /** YYYY-MM-DD */
+  date: string;
+  role: VolunteerRole;
+  /** "ochtend", "middag", "avond" or "" for the whole day. */
+  part: string;
+  /** E.g. "7:30–12:00". */
+  time: string;
+  /** E.g. "Pick-up Schaatsbaan" for the Oliebollenbar. */
+  location: string;
+  /** People needed; null = the default for the task. */
+  needed: number | null;
 }
 
 export interface ReceiptFields {
@@ -106,6 +147,9 @@ export interface RouteInfo {
   minutes: number;
   /** Order ids in the optimised driving order. */
   orderIds: string[];
+  /** Departure from the bakery (HH:mm) and the expected arrival per stop, same order as orderIds. */
+  startTime: string;
+  stopTimes: string[];
   mapsUrl: string;
   computedAt: string;
 }
@@ -121,9 +165,14 @@ export interface DashboardState {
   routes: Record<string, RouteInfo>;
   /** Everyone gets names and availability; phone, e-mail and remarks only for beheer. */
   volunteers: Volunteer[];
+  /** Beheer gets all costs; others only their own (IBAN masked). */
   costs: CostEntry[];
   history: HistoryRow[];
   pricePerPiece: number | null;
+  /** Euro per kilometre for the mileage allowance (tab Instellingen, km_vergoeding); null when not set. */
+  kmRate: number | null;
+  delivery: Record<string, DeliveryState>;
+  agenda: AgendaSlot[];
 }
 
 export const emptyMeta: OrderMeta = {

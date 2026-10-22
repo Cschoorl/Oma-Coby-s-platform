@@ -7,7 +7,11 @@ export function routeKey(date: string, courier: string): string {
 }
 
 /** Bike when the courier only signed up as fietskoerier (or the old remarks say so); otherwise car. */
-export function guessMode(orders: Order[], volunteer?: Volunteer): "driving" | "bicycling" {
+export function guessMode(orders: Order[], volunteer?: Volunteer, isoDate?: string): "driving" | "bicycling" {
+  if (volunteer && isoDate) {
+    const on = transportOn(volunteer, isoDate);
+    if (on.length === 1) return on[0] === "fiets" ? "bicycling" : "driving";
+  }
   if (volunteer) return volunteer.roles.fietskoerier.wants && !volunteer.roles.autokoerier.wants ? "bicycling" : "driving";
   return orders.some((o) => /fietskoerier:\s*ja/i.test(o.extras ?? "")) ? "bicycling" : "driving";
 }
@@ -25,11 +29,39 @@ function mentionsDay(option: string, day: string): boolean {
   return match ? `${Number(match[1])} ${match[2]}` === day : false;
 }
 
-/** Courier volunteers for a day: first who signed up for that day, then the other couriers. */
-export function courierCandidates(volunteers: Volunteer[], isoDate: string): { available: Volunteer[]; others: Volunteer[] } {
+/** "ochtend", "middag" or "avond" from the order's time slot ("tussen 9:00 en 12:30") or planned time; "" when unknown. */
+export function orderPart(order: Order): string {
+  const named = (order.deliveryMoment ?? "").toLowerCase().match(/ochtend|middag|avond/)?.[0];
+  if (named) return named;
+  const time = (order.deliveryMoment ?? "").match(/(\d{1,2})[:.](\d{2})/) ?? order.plannedTime.match(/^(\d{1,2}):(\d{2})/);
+  if (!time) return "";
+  const hour = Number(time[1]);
+  return hour < 12 ? "ochtend" : hour < 17 ? "middag" : "avond";
+}
+
+function optionPart(option: string): string {
+  return option.toLowerCase().match(/:\s*(ochtend|middag|avond)/)?.[1] ?? "";
+}
+
+export type Transport = "fiets" | "auto";
+
+/** What a volunteer signed up with on this day (and dagdeel, when known). */
+export function transportOn(v: Volunteer, isoDate: string, part = ""): Transport[] {
   const day = formDay(isoDate);
+  const fits = (o: string) => mentionsDay(o, day) && (!part || !optionPart(o) || optionPart(o) === part);
+  const out: Transport[] = [];
+  if (v.roles.fietskoerier.wants && v.roles.fietskoerier.days.some(fits)) out.push("fiets");
+  if (v.roles.autokoerier.wants && v.roles.autokoerier.days.some(fits)) out.push("auto");
+  return out;
+}
+
+/**
+ * Courier volunteers for a delivery: first who signed up for that day and dagdeel (when the order
+ * has one), then the other couriers.
+ */
+export function courierCandidates(volunteers: Volunteer[], isoDate: string, part = ""): { available: Volunteer[]; others: Volunteer[] } {
   const couriers = volunteers.filter((v) => v.roles.fietskoerier.wants || v.roles.autokoerier.wants);
-  const isAvailable = (v: Volunteer) => [...v.roles.fietskoerier.days, ...v.roles.autokoerier.days].some((o) => mentionsDay(o, day));
+  const isAvailable = (v: Volunteer) => transportOn(v, isoDate, part).length > 0;
   const byName = (a: Volunteer, b: Volunteer) => a.name.localeCompare(b.name);
   return { available: couriers.filter(isAvailable).sort(byName), others: couriers.filter((v) => !isAvailable(v)).sort(byName) };
 }

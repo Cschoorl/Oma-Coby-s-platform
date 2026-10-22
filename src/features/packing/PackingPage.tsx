@@ -4,7 +4,8 @@ import type { DashboardState, PackingPart, PackingState } from "../../types/dash
 import { emptyPacking } from "../../types/dashboard";
 import type { CustomerType, Order } from "../../types/order";
 import { OrderFilters } from "../orders/OrderFilters";
-import { Badge, Notice, Segmented, cardClass, formatNumber, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
+import { Badge, Notice, Segmented, cardClass, formatNumber, ghostButton, pickInitialDate, primaryButton, secondaryButton } from "../../components/ui";
+import { appLink } from "../../lib/router";
 import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 
 interface PackingPageProps {
@@ -14,7 +15,7 @@ interface PackingPageProps {
 }
 
 type Filter = "open" | "mine" | "done" | "all";
-type TypeFilter = "alle" | "particulier" | "zakelijk";
+type TypeFilter = "alle" | "particulier" | "zakelijk" | "barter";
 
 const customerLabel: Record<CustomerType, string> = { particulier: "Particulier", zakelijk: "Zakelijk (B2B)", barter: "Barter", onbekend: "Onbekend" };
 
@@ -70,9 +71,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 
   const visibleOrders = dayOrders.filter((order) => {
     const p = packingOf(state, order.id);
-    // Barter goes with zakelijk: those are business deliveries too.
-    if (typeFilter === "particulier" && order.customerType !== "particulier") return false;
-    if (typeFilter === "zakelijk" && order.customerType !== "zakelijk" && order.customerType !== "barter") return false;
+    if (typeFilter !== "alle" && order.customerType !== typeFilter) return false;
     if (filter === "open") return !p.packedBy;
     if (filter === "mine") return p.claimedBy === session.name && !p.packedBy;
     if (filter === "done") return Boolean(p.packedBy);
@@ -91,8 +90,9 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     }
   }
 
-  function adjustBaked(field: "withRaisins" | "withoutRaisins", delta: number) {
-    const next = { ...baked, [field]: Math.max(0, baked[field] + delta) };
+  function setBakedValue(field: "withRaisins" | "withoutRaisins", value: number) {
+    const next = { ...baked, [field]: Math.max(0, Math.round(value)) };
+    if (next[field] === baked[field]) return;
     void act(`baked-${field}`, () => backend.setBaked(session, date, next));
   }
 
@@ -100,7 +100,8 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 
   const orderedTotal = totals.met + totals.zonder;
   const packedTotal = totals.packedMet + totals.packedZonder;
-  const packedPct = orderedTotal ? Math.round((packedTotal / orderedTotal) * 100) : 0;
+  // Progress counts orders: that is what the packers work through. Oliebollen are shown per column above.
+  const packedPct = dayOrders.length ? Math.round((totals.packedOrders / dayOrders.length) * 100) : 0;
   const counts = {
     open: dayOrders.filter((o) => !packingOf(state, o.id).packedBy).length,
     mine: dayOrders.filter((o) => packingOf(state, o.id).claimedBy === session.name && !packingOf(state, o.id).packedBy).length,
@@ -121,45 +122,41 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
         <div className="mt-4">
           <div className="flex items-center justify-between text-xs text-stone-500">
             <span>
-              {totals.packedOrders} van {dayOrders.length} orders ingepakt
+              Orders ingepakt: <span className="font-semibold text-stone-700">{totals.packedOrders} van {dayOrders.length}</span>
             </span>
-            <span className="tabular-nums">{packedPct}%</span>
+            <span className="tabular-nums">{packedPct}% van de orders</span>
           </div>
-          <div className="mt-1 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-valuenow={packedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Ingepakt">
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-valuenow={packedPct} aria-valuemin={0} aria-valuemax={100} aria-label="Orders ingepakt">
             <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${packedPct}%` }} />
+          </div>
+        </div>
+
+        {/* Baking is tracked here; "nog bakken" above only goes down once this is filled in. */}
+        <div className="mt-4 grid gap-2 rounded-lg bg-coby-50 p-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-semibold text-stone-900">Gebakken op deze leverdag</p>
+            <p className="text-xs text-stone-600">Bakkers: vul hier in hoeveel er klaar ligt. Dan daalt "nog bakken" hierboven.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(["withRaisins", "withoutRaisins"] as const).map((field) => (
+              <BakedInput
+                key={`${date}-${field}`}
+                label={field === "withRaisins" ? "Met krenten" : "Zonder krenten"}
+                value={baked[field]}
+                ordered={field === "withRaisins" ? totals.met : totals.zonder}
+                disabled={busy !== null}
+                onChange={(v) => setBakedValue(field, v)}
+              />
+            ))}
           </div>
         </div>
 
         <details className="group mt-4 border-t border-stone-100 pt-3">
           <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium text-stone-700 hover:text-stone-900">
-            <span>Bakken en verdeling particulier / zakelijk</span>
+            <span>Verdeling particulier / zakelijk / barter</span>
             <span className="text-stone-400 transition group-open:rotate-180">▾</span>
           </summary>
           <div className="mt-4 grid gap-5 lg:grid-cols-2">
-            <div>
-              <p className="mb-2 text-xs font-medium text-stone-500">Gebakken (bijhouden door de bakkers)</p>
-              <div className="grid gap-2">
-                {(["withRaisins", "withoutRaisins"] as const).map((field) => (
-                  <div key={field} className="flex flex-wrap items-center gap-2">
-                    <span className="w-16 text-sm text-stone-700">{field === "withRaisins" ? "Met" : "Zonder"}</span>
-                    <span className="w-14 text-right text-lg font-semibold tabular-nums text-stone-900">{formatNumber(baked[field])}</span>
-                    <div className="flex gap-1">
-                      {[-10, 10, 50, 100].map((delta) => (
-                        <button
-                          key={delta}
-                          type="button"
-                          disabled={busy !== null}
-                          onClick={() => adjustBaked(field, delta)}
-                          className="rounded-md border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-40"
-                        >
-                          {delta > 0 ? `+${delta}` : delta}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
             <div>
               <p className="mb-2 text-xs font-medium text-stone-500">Besteld per klanttype</p>
               {!hasTypes ? (
@@ -211,16 +208,22 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
               ["all", "Alles"]
             ]}
           />
-          <Segmented
-            label="Klanttype"
-            value={typeFilter}
-            onChange={setTypeFilter}
-            options={[
-              ["alle", "Alle klanten"],
-              ["particulier", "Particulier"],
-              ["zakelijk", "Zakelijk"]
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented
+              label="Klanttype"
+              value={typeFilter}
+              onChange={setTypeFilter}
+              options={[
+                ["alle", "Alle klanten"],
+                ["particulier", "Particulier"],
+                ["zakelijk", "Zakelijk"],
+                ["barter", "Barter"]
+              ]}
+            />
+            <a className={ghostButton} href={appLink(`/pakbonnen?datum=${date}`)} target="_blank" rel="noreferrer">
+              Pakbonnen printen
+            </a>
+          </div>
         </div>
 
         {error ? <Notice tone="error">{error}</Notice> : null}
@@ -241,6 +244,57 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
         </div>
         {visibleOrders.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 p-6 text-center text-sm text-stone-500">Geen orders in deze selectie.</p> : null}
       </section>
+    </div>
+  );
+}
+
+/** Number field plus quick buttons; saves when you leave the field or press a button. */
+function BakedInput({ label, value, ordered, disabled, onChange }: { label: string; value: number; ordered: number; disabled: boolean; onChange: (v: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const n = Number(text.replace(/\D/g, ""));
+    if (Number.isFinite(n)) onChange(n);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="flex items-center gap-2 text-sm text-stone-700">
+        <span className="w-28">{label}</span>
+        <input
+          inputMode="numeric"
+          className="w-20 rounded-md border border-stone-300 bg-white px-2 py-1 text-right text-base font-semibold tabular-nums text-stone-900 focus:border-coby-500 focus:outline-none"
+          value={text}
+          disabled={disabled}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          aria-label={`Gebakken ${label.toLowerCase()}`}
+        />
+      </label>
+      <span className="text-xs text-stone-500">van {formatNumber(ordered)}</span>
+      <div className="flex gap-1">
+        {[10, 50].map((delta) => (
+          <button
+            key={delta}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(value + delta)}
+            className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+          >
+            +{delta}
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={disabled || value >= ordered}
+          onClick={() => onChange(ordered)}
+          className="rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-semibold text-stone-600 hover:bg-stone-50 disabled:opacity-40"
+        >
+          Alles
+        </button>
+      </div>
     </div>
   );
 }

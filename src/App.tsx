@@ -6,13 +6,14 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { CostsPage } from "./features/costs/CostsPage";
 import { OrdersAdminPage } from "./features/orders/OrdersAdminPage";
 import { PackingPage } from "./features/packing/PackingPage";
+import { PackingSlipsPage } from "./features/packing/PackingSlipsPage";
 import { CourierPage } from "./features/routes/CourierPage";
 import { RoutesPage } from "./features/routes/RoutesPage";
 import { StatsPage } from "./features/stats/StatsPage";
 import { SignupPage } from "./features/volunteers/SignupPage";
 import { VolunteersPage } from "./features/volunteers/VolunteersPage";
 import { Notice } from "./components/ui";
-import { CONTACT_EMAIL } from "./config";
+import { CONTACT_EMAIL, applyAgenda } from "./config";
 import { navigate, useRoute } from "./lib/router";
 import { loadSession, saveSession } from "./lib/session";
 import { useDashboard } from "./lib/useDashboard";
@@ -23,6 +24,8 @@ interface NavItem {
   /** One line under the page title. */
   description: string;
   roles: Role[];
+  /** Reachable by link only (not in the menu). */
+  hidden?: boolean;
 }
 
 const NAV: NavItem[] = [
@@ -33,7 +36,8 @@ const NAV: NavItem[] = [
   { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Aanmeldingen en bezetting per dag.", roles: ["beheer"] },
   { path: "/agenda", label: "Agenda", description: "Wie wanneer beschikbaar is.", roles: ["beheer", "inpakker", "bezorger"] },
-  { path: "/kosten", label: "Kosten", description: "Foto van een bon uploaden en controleren.", roles: ["beheer", "inpakker", "bezorger"] }
+  { path: "/kosten", label: "Kosten", description: "Bon declareren en de status volgen; beheer keurt goed en betaalt uit.", roles: ["beheer", "inpakker", "bezorger"] },
+  { path: "/pakbonnen", label: "Pakbonnen", description: "Per order een pakbon om te printen en bij de doos te leggen.", roles: ["beheer", "inpakker"], hidden: true }
 ];
 
 const HOME: Record<Role, string> = { beheer: "/inpakken", inpakker: "/inpakken", bezorger: "/bezorger" };
@@ -102,6 +106,8 @@ function App() {
   const { state, error, lastSync, run } = dashboard;
 
   let page: React.ReactNode = null;
+  // The signup options and targets follow the Agenda tab of the Sheet.
+  if (state) applyAgenda(state.agenda);
   if (state) {
     switch (current?.path) {
       case "/inpakken":
@@ -114,7 +120,7 @@ function App() {
         page = <RoutesPage state={state} session={session} run={run} isDemo={backend.kind === "demo"} />;
         break;
       case "/bezorger":
-        page = <CourierPage state={state} name={route.params.get("naam")} date={route.params.get("datum")} />;
+        page = <CourierPage state={state} session={session} run={run} name={route.params.get("naam")} date={route.params.get("datum")} />;
         break;
       case "/tussenstand":
         page = <StatsPage state={state} />;
@@ -123,7 +129,10 @@ function App() {
         page = <CostsPage state={state} session={session} run={run} />;
         break;
       case "/vrijwilligers":
-        page = <VolunteersPage state={state} />;
+        page = <VolunteersPage state={state} session={session} run={run} />;
+        break;
+      case "/pakbonnen":
+        page = <PackingSlipsPage state={state} date={route.params.get("datum")} />;
         break;
       case "/agenda":
         page = <AgendaPage orders={state.orders} volunteers={state.volunteers} contactEmail={CONTACT_EMAIL} />;
@@ -133,7 +142,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur print:hidden">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
           <Brand />
           <div className="flex items-center gap-3 text-xs text-stone-600">
@@ -153,7 +162,7 @@ function App() {
           </div>
         </div>
         <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2 sm:px-4" aria-label="Hoofdmenu">
-          {allowed.map((item) => (
+          {allowed.filter((item) => !item.hidden).map((item) => (
             <a
               key={item.path}
               href={`#${item.path}`}
@@ -170,7 +179,7 @@ function App() {
 
       <main className="mx-auto grid max-w-6xl gap-5 px-4 py-6">
         {current ? (
-          <div>
+          <div className="print:hidden">
             <h1 className="text-xl font-semibold text-stone-900 sm:text-2xl">{current.label}</h1>
             <p className="mt-0.5 text-sm text-stone-600">{current.description}</p>
           </div>

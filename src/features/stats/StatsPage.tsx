@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import type { DashboardState } from "../../types/dashboard";
 import { Card, Notice, SectionTitle, StatStrip, formatEuro, formatNumber, todayIso } from "../../components/ui";
+import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { countSignups } from "../../utils/staffing";
 
 type Metric = "oliebollen" | "orders" | "revenue";
 
@@ -139,6 +141,8 @@ export function StatsPage({ state }: { state: DashboardState }) {
         ]}
       />
 
+      <ProgressCard state={state} revenue={revenueSource === "none" ? null : now.revenue} revenueIsEstimate={revenueSource === "estimate"} />
+
       <Card>
         <SectionTitle
           title={`${metricLabel[metric]} opgeteld per dag`}
@@ -195,6 +199,40 @@ export function StatsPage({ state }: { state: DashboardState }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+/** Where the action stands now: packed, delivered, and revenue against approved costs. */
+function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardState; revenue: number | null; revenueIsEstimate: boolean }) {
+  const orders = state.orders;
+  const packed = orders.filter((o) => state.packing[o.id]?.packedBy).length;
+  const piecesTotal = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
+  const piecesPacked = orders.filter((o) => state.packing[o.id]?.packedBy).reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
+  const deliveries = orders.filter((o) => o.fulfilment === "bezorgen");
+  const delivered = deliveries.filter((o) => state.delivery[o.id]).length;
+  const approved = state.costs.filter((c) => c.status === "goedgekeurd" || c.status === "uitbetaald").reduce((sum, c) => sum + c.amount, 0);
+  const pending = state.costs.filter((c) => c.status === "ingediend").reduce((sum, c) => sum + c.amount, 0);
+  const counts = countSignups(state.volunteers);
+
+  return (
+    <>
+      <StatStrip
+        items={[
+          { label: "Besteld", value: formatNumber(orders.length), hint: `${formatNumber(piecesTotal)} oliebollen` },
+          { label: "Ingepakt", value: `${packed} / ${orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
+          { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
+          {
+            label: "Omzet min kosten",
+            value: revenue === null ? "n.v.t." : formatEuro(revenue - approved),
+            hint: `${revenue === null ? "omzet onbekend" : `omzet ${formatEuro(revenue)}${revenueIsEstimate ? " (schatting)" : ""}`} · kosten ${formatEuro(approved)}${pending ? ` (+ ${formatEuro(pending)} te beoordelen)` : ""}`
+          }
+        ]}
+      />
+      <Card>
+        <SectionTitle title="Vrijwilligers per dag(deel)" subtitle={`${state.volunteers.length} aanmeldingen. Per dag hoeveel mensen zich per taak hebben aangemeld, tegenover wat nodig is.`} />
+        <StaffingCalendar counts={counts} />
+      </Card>
+    </>
   );
 }
 

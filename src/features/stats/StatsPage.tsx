@@ -112,7 +112,13 @@ export function StatsPage({ state }: { state: DashboardState }) {
     const pct = Math.round(((current - previous) / previous) * 100);
     return { tone: pct > 0 ? "up" : pct < 0 ? "down" : "flat", text: `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct)}%` };
   };
-  const lastHint = (previous: number, format: (n: number) => string = formatNumber) => (pastSeasons[0] ? `${pastSeasons[0].year}: ${format(previous)}` : undefined);
+  // Before the season starts, "same period" last year is often 0; then also show the whole season.
+  const lastHint = (previous: number, metric: Metric, format: (n: number) => string = formatNumber) => {
+    if (!pastSeasons[0]) return undefined;
+    const whole = cumulativeUpTo(pastSeasons[0], 0, metric);
+    const base = `${pastSeasons[0].year}: ${format(previous)}`;
+    return cutoff > 0 && whole !== previous ? `${base} · hele seizoen ${format(whole)}` : base;
+  };
 
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
 
@@ -131,8 +137,8 @@ export function StatsPage({ state }: { state: DashboardState }) {
 
       <StatStrip
         items={[
-          { label: "Bestellingen", value: formatNumber(now.orders), hint: lastHint(last.orders), delta: delta(now.orders, last.orders) },
-          { label: "Oliebollen verkocht", value: formatNumber(now.oliebollen), hint: lastHint(last.oliebollen), delta: delta(now.oliebollen, last.oliebollen) },
+          { label: "Bestellingen", value: formatNumber(now.orders), hint: lastHint(last.orders, "orders"), delta: delta(now.orders, last.orders) },
+          { label: "Oliebollen verkocht", value: formatNumber(now.oliebollen), hint: lastHint(last.oliebollen, "oliebollen"), delta: delta(now.oliebollen, last.oliebollen) },
           {
             label: revenueSource === "estimate" ? "Omzet (schatting)" : "Omzet",
             value: revenueSource === "none" ? "—" : formatEuro(now.revenue),
@@ -140,9 +146,9 @@ export function StatsPage({ state }: { state: DashboardState }) {
               revenueSource === "none"
                 ? "Geen bedragen of prijs in de Sheet"
                 : revenueSource === "estimate"
-                  ? `Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}`
+                  ? `Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}${last.hasRevenue ? ` · ${lastHint(last.revenue, "revenue", formatEuro)}` : ""}`
                   : last.hasRevenue
-                    ? lastHint(last.revenue, formatEuro)
+                    ? lastHint(last.revenue, "revenue", formatEuro)
                     : undefined,
             delta: revenueSource !== "none" && last.hasRevenue ? delta(now.revenue, last.revenue) : undefined
           }
@@ -168,16 +174,23 @@ export function StatsPage({ state }: { state: DashboardState }) {
       </Card>
 
       <Card>
-        <SectionTitle title="Per seizoen" subtitle={`Zelfde periode (${periodLabel}) en het hele seizoen.`} />
+        <SectionTitle title="Per seizoen" subtitle={`Zelfde periode (${periodLabel}) naast het hele seizoen t/m 31 december.`} />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
+              <tr className="text-left text-[11px] uppercase tracking-[0.12em] text-muted">
+                <th className="pt-1 pr-3" />
+                <th colSpan={3} className="pt-1 pr-3 text-right font-bold">Zelfde periode</th>
+                <th colSpan={3} className="border-l border-lijn-2 pt-1 pl-3 text-right font-bold">Hele seizoen</th>
+              </tr>
               <tr className="border-b border-lijn-2 text-left text-[11px] uppercase tracking-[0.12em] text-muted">
                 <th className="py-2 pr-3 font-bold">Seizoen</th>
                 <th className="py-2 pr-3 text-right font-bold">Bestellingen</th>
                 <th className="py-2 pr-3 text-right font-bold">Oliebollen</th>
                 <th className="py-2 pr-3 text-right font-bold">Omzet</th>
-                <th className="py-2 pr-3 text-right font-bold">Oliebollen hele seizoen</th>
+                <th className="border-l border-lijn-2 py-2 pl-3 pr-3 text-right font-bold">Bestellingen</th>
+                <th className="py-2 pr-3 text-right font-bold">Oliebollen</th>
+                <th className="py-2 pr-3 text-right font-bold">Omzet</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
@@ -189,7 +202,9 @@ export function StatsPage({ state }: { state: DashboardState }) {
                     <td className="py-2 pr-3 text-right">{formatNumber(t.orders)}</td>
                     <td className="py-2 pr-3 text-right">{formatNumber(t.oliebollen)}</td>
                     <td className="py-2 pr-3 text-right">{t.hasRevenue ? formatEuro(t.revenue) : "–"}</td>
+                    <td className="border-l border-lijn-2 py-2 pl-3 pr-3 text-right">{formatNumber(cumulativeUpTo(season, 0, "orders"))}</td>
                     <td className="py-2 pr-3 text-right">{formatNumber(cumulativeUpTo(season, 0, "oliebollen"))}</td>
+                    <td className="py-2 pr-3 text-right font-semibold">{t.hasRevenue ? formatEuro(cumulativeUpTo(season, 0, "revenue")) : "–"}</td>
                   </tr>
                 );
               })}

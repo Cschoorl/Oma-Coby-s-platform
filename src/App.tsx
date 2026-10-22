@@ -34,7 +34,7 @@ const NAV: NavItem[] = [
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["beheer", "bezorger"] },
-  { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren.", roles: ["beheer"] },
+  { path: "/tussenstand", label: "Tussenstand", description: "De discozaal: per tien verkochte oliebollen danst er een oudje bij. Met de cijfers tegenover eerdere jaren.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Aanmeldingen en bezetting per dag.", roles: ["beheer"] },
   { path: "/agenda", label: "Agenda", description: "Wie wanneer beschikbaar is.", roles: ["beheer", "inpakker", "bezorger"] },
   { path: "/kosten", label: "Kosten", description: "Bon declareren en de status volgen; beheer keurt goed en betaalt uit.", roles: ["beheer", "inpakker", "bezorger"] },
@@ -108,7 +108,7 @@ function App() {
           <DemoPill />
         </div>
       </header>
-      <main className="mx-auto grid max-w-3xl gap-4 px-4 py-6">{content}</main>
+      <main className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6">{content}</main>
       <Toaster />
     </div>
   );
@@ -225,7 +225,8 @@ function App() {
         ) : null}
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-5 px-4 py-6">
+      {/* minmax(0, 1fr): wide tables scroll inside their card instead of widening the page on phones. */}
+      <main className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6">
         {current ? (
           <div className="grid gap-1 print:hidden">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">#{current.path}</p>

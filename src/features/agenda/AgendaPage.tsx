@@ -92,7 +92,7 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
   }
 
   return (
-    <section className="grid gap-4">
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-4">
       {volunteers.length > 0 ? (
         <Card>
           <SectionTitle title="Waar is nog plek?" subtitle="Met een ! zijn er die dag nog weinig mensen. Kun je dan? Laat het de planning weten." />

@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Notice, SectionTitle, Segmented, StatStrip, Sticker, fieldLabel, formatEuro, formatNumber, rollOliebol, toast, todayIso, type Delta } from "../../components/ui";
-import { GOAL_MILESTONES, GOAL_OLIEBOLLEN } from "../../config";
-import dansenUrl from "../../assets/gouwe-ouwe-dansen.jpg";
-import { StaffingCalendar } from "../../components/StaffingCalendar";
-import { countSignups } from "../../utils/staffing";
+import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, secondaryButton, toast, todayIso, type Delta } from "../../components/ui";
+import { Discozaal, Rollatorbalk, Verkoopteller } from "./Discozaal";
+import { exportStand } from "./exportStand";
 
 type Metric = "oliebollen" | "orders" | "revenue";
 
@@ -47,6 +45,7 @@ function cumulativeUpTo(season: Season, cutoff: number, metric: Metric): number 
 
 export function StatsPage({ state }: { state: DashboardState }) {
   const [metric, setMetric] = useState<Metric>("oliebollen");
+  const [exporting, setExporting] = useState(false);
 
   const { seasons, revenueSource, currentYear, cutoff } = useMemo(() => {
     const byYear = new Map<number, Map<number, DayPoint>>();
@@ -114,10 +113,32 @@ export function StatsPage({ state }: { state: DashboardState }) {
   };
   const lastHint = (previous: number, format: (n: number) => string = formatNumber) => (pastSeasons[0] ? `${pastSeasons[0].year}: ${format(previous)}` : undefined);
 
+  const seasonOliebollen = thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0;
+
+  async function onExport() {
+    setExporting(true);
+    try {
+      const comparison = delta(now.oliebollen, last.oliebollen);
+      await exportStand({
+        date: todayIso(),
+        oliebollen: seasonOliebollen,
+        orders: thisSeason ? cumulativeUpTo(thisSeason, 0, "orders") : 0,
+        revenue: revenueSource === "none" || !thisSeason ? null : cumulativeUpTo(thisSeason, 0, "revenue"),
+        revenueIsEstimate: revenueSource === "estimate",
+        comparison: comparison && pastSeasons[0] ? `${comparison.text}` : undefined
+      });
+      toast("De stand van vandaag staat in je downloads.");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Exporteren lukte niet.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
 
   return (
-    <div className="grid gap-4">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <p className="-mt-2 text-sm text-muted">
         Seizoen {currentYear}, {periodLabel}. Telt op besteldatum (of leverdatum als die ontbreekt).
       </p>
@@ -127,7 +148,10 @@ export function StatsPage({ state }: { state: DashboardState }) {
         </Notice>
       ) : null}
 
-      <GoalMeter oliebollen={thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0} />
+      {/* The stand as a disco: one oudje per ten oliebollen sold this season. */}
+      <Verkoopteller oliebollen={seasonOliebollen} />
+      <Rollatorbalk oliebollen={seasonOliebollen} />
+      <Discozaal oliebollen={seasonOliebollen} />
 
       <StatStrip
         items={[
@@ -156,12 +180,18 @@ export function StatsPage({ state }: { state: DashboardState }) {
           title={`${metricLabel[metric]} opgeteld per dag`}
           subtitle="Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
           action={
-            <Segmented
-              label="Metriek"
-              value={metric}
-              onChange={setMetric}
-              options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                label="Metriek"
+                value={metric}
+                onChange={setMetric}
+                options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
+              />
+              <button type="button" className={secondaryButton} disabled={exporting} onClick={() => void onExport()} title="Bewaar de stand van vandaag als afbeelding">
+                <Icon name="download" />
+                {exporting ? "Bezig…" : "Exporteer stand"}
+              </button>
+            </div>
           }
         />
         <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />
@@ -211,27 +241,20 @@ function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardS
   const delivered = deliveries.filter((o) => state.delivery[o.id]).length;
   const approved = state.costs.filter((c) => c.status === "goedgekeurd" || c.status === "uitbetaald").reduce((sum, c) => sum + c.amount, 0);
   const pending = state.costs.filter((c) => c.status === "ingediend").reduce((sum, c) => sum + c.amount, 0);
-  const counts = countSignups(state.volunteers);
 
   return (
-    <>
-      <StatStrip
-        items={[
-          { label: "Besteld", value: formatNumber(orders.length), hint: `${formatNumber(piecesTotal)} oliebollen` },
-          { label: "Ingepakt", value: `${packed} / ${orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
-          { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
-          {
-            label: "Omzet min kosten",
-            value: revenue === null ? "n.v.t." : formatEuro(revenue - approved),
-            hint: `${revenue === null ? "omzet onbekend" : `omzet ${formatEuro(revenue)}${revenueIsEstimate ? " (schatting)" : ""}`} · kosten ${formatEuro(approved)}${pending ? ` (+ ${formatEuro(pending)} te beoordelen)` : ""}`
-          }
-        ]}
-      />
-      <Card>
-        <SectionTitle title="Vrijwilligers per dag(deel)" subtitle={`${state.volunteers.length} aanmeldingen. Per dag hoeveel mensen zich per taak hebben aangemeld, tegenover wat nodig is.`} />
-        <StaffingCalendar counts={counts} />
-      </Card>
-    </>
+    <StatStrip
+      items={[
+        { label: "Besteld", value: formatNumber(orders.length), hint: `${formatNumber(piecesTotal)} oliebollen` },
+        { label: "Ingepakt", value: `${packed} / ${orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
+        { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
+        {
+          label: "Omzet min kosten",
+          value: revenue === null ? "n.v.t." : formatEuro(revenue - approved),
+          hint: `${revenue === null ? "omzet onbekend" : `omzet ${formatEuro(revenue)}${revenueIsEstimate ? " (schatting)" : ""}`} · kosten ${formatEuro(approved)}${pending ? ` (+ ${formatEuro(pending)} te beoordelen)` : ""}`
+        }
+      ]}
+    />
   );
 }
 
@@ -392,60 +415,4 @@ function xTicks(maxX: number): number[] {
   const ticks: number[] = [];
   for (let t = 0; t <= maxX; t += step) ticks.push(t);
   return ticks;
-}
-
-const MILESTONE_KEY = "omacoby-mijlpaal";
-
-/** The goal of the action, in oudjes. A milestone passed since this device last looked gets a sticker and a rolling oliebol. */
-function GoalMeter({ oliebollen }: { oliebollen: number }) {
-  const pct = Math.min(100, (oliebollen / GOAL_OLIEBOLLEN) * 100);
-  const reached = GOAL_MILESTONES.filter((m) => oliebollen >= m);
-  const top = reached[reached.length - 1] ?? 0;
-
-  useEffect(() => {
-    let seen = 0;
-    try {
-      seen = Number(localStorage.getItem(MILESTONE_KEY) ?? "0");
-    } catch {
-      return;
-    }
-    if (top > seen) {
-      // Only celebrate milestones passed while this device was watching; the first visit just records them.
-      if (seen > 0) {
-        rollOliebol();
-        toast(`${formatNumber(top)} oliebollen: ${formatNumber(top / 10)} oudjes aan het rock-'n-rollen!`);
-      }
-      try {
-        localStorage.setItem(MILESTONE_KEY, String(top));
-      } catch {
-        // Private mode: no memory, no celebration.
-      }
-    }
-  }, [top]);
-
-  return (
-    <Card className="grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_150px]">
-      <div>
-        <p className="font-serif text-xl font-bold text-krent">Op weg naar {formatNumber(GOAL_OLIEBOLLEN)} oliebollen</p>
-        <p className="text-sm text-muted">
-          Dat zijn {formatNumber(GOAL_OLIEBOLLEN / 10)} gratis entrees voor een Gouwe Ouwe-avond. Nu: <b className="tabular-nums text-krent">{formatNumber(oliebollen)}</b> oliebollen, goed voor{" "}
-          <b className="tabular-nums text-krent">{formatNumber(Math.floor(oliebollen / 10))}</b> oudjes.
-        </p>
-        <div className="relative mb-7 mt-11 h-3.5 rounded-full bg-vul">
-          <div className="h-full rounded-full bg-gradient-to-r from-gouwe to-feest transition-all duration-1000" style={{ width: `${pct}%` }} />
-          {GOAL_MILESTONES.map((m) => (
-            <span key={m} className="absolute -bottom-1.5 -top-1.5 w-0.5 bg-krent" style={{ left: `${(m / GOAL_OLIEBOLLEN) * 100}%` }}>
-              {oliebollen >= m ? (
-                <span className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2">
-                  <Sticker tone="gouwe" className="px-2.5 py-1 text-base">Gehaald!</Sticker>
-                </span>
-              ) : null}
-              <span className={`absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap ${fieldLabel} tracking-normal`}>{formatNumber(m)}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-      <img src={dansenUrl} alt="Dansende ouderen op een Gouwe Ouwe-avond" className="hidden h-[150px] w-[150px] rounded-kaart object-cover sm:block" />
-    </Card>
-  );
 }

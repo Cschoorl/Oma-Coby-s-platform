@@ -116,10 +116,13 @@ export function SignupPage() {
 
   if (done) {
     return (
-      <section className="overflow-hidden rounded-kaart bg-papier shadow-zacht">
-        <img src={omaUrl} alt="Oma Coby met een bord oliebollen" className="h-60 w-full object-cover object-[50%_35%]" />
-        <div className="relative grid gap-2 p-5">
-          <Sticker slap className="absolute -top-7 right-4">Bedankt!</Sticker>
+      <section className="grid overflow-hidden rounded-kaart bg-papier shadow-zacht sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
+        {/* Portrait card: the photo of Oma Coby is 4:5, so the card follows it instead of cropping her to a strip. */}
+        <div className="relative">
+          <img src={omaUrl} alt="Oma Coby met een bord oliebollen" className="aspect-[4/5] h-full w-full object-cover object-top" />
+          <Sticker slap className="absolute bottom-4 right-4">Bedankt!</Sticker>
+        </div>
+        <div className="grid content-center gap-2 p-5 sm:p-7">
           <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Bedankt, {name.split(" ")[0]}!</h1>
           <p className="text-krent">Je bent nu officieel Oma's hulpje. We delen je in waar we je het hardst nodig hebben en sturen je een berichtje.</p>
           <p className="text-sm text-muted">

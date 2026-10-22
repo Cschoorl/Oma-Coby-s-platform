@@ -61,8 +61,9 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 1. Alleen na een gelukte actie, bij voortgang, in lege staten en bij laden dat langer dan een seconde duurt.
 2. Eén per actie, korter dan 400 ms, nooit blokkerend (`toast`, `Sticker slap`).
 3. Bij iets bijzonders rolt er een getekende oliebol over het scherm (`rollOliebol`): alles ingepakt, laatste stop afgeleverd, mijlpaal gehaald, aanmelding binnen. Nooit vaker dan één keer per moment.
-4. Oudjes rekenen we eerlijk: oliebollen gedeeld door 10, naar beneden afgerond (`oudjesLine`).
-5. Alles staat uit bij "minder beweging" (`prefers-reduced-motion`).
+4. Oudjes rekenen we eerlijk: oliebollen gedeeld door 10, naar beneden afgerond (`oudjesLine`, `OLIEBOLLEN_PER_OUDJE`).
+5. De Tussenstand is een discozaal (`src/features/stats/Discozaal.tsx`): één dansend oudje per tien verkochte oliebollen, tot 36 op de vloer en de rest in de polonaise met het aantal erbij. De schakelaar "Lichtgevende krenten" zet de disco aan; de keuze wordt per apparaat onthouden. De rollatorbalk laat een oudje met rollator meelopen naar het doel.
+6. Alles staat uit bij "minder beweging" (`prefers-reduced-motion`).
 
 ## Vaste teksten
 

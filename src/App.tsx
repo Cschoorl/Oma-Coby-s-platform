@@ -34,7 +34,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren. Achter de discobal-knop: de discozaal.", roles: ["beheer"] },
-  { path: "/agenda", label: "Agenda", description: "Wie wanneer beschikbaar is.", roles: ["beheer", "inpakker"] },
+  { path: "/agenda", label: "Agenda", description: "Wie wanneer beschikbaar is.", roles: ["beheer"] },
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Aanmeldingen en bezetting per dag.", roles: ["beheer"] },
@@ -43,7 +43,7 @@ const NAV: NavItem[] = [
     path: "/kosten",
     label: "Kosten",
     description: "Bon declareren en de status volgen; beheer keurt goed en betaalt uit.",
-    roles: ["beheer", "inpakker", "bezorger"],
+    roles: ["beheer", "bezorger"],
     // Volunteers only hand in receipts; beheer also approves and pays.
     asVolunteer: { label: "Kosten indienen", description: "Maak een foto van je bon, dien hem in en volg de status." }
   },

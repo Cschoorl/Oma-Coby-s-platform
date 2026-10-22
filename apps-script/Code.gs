@@ -53,9 +53,9 @@ const CONFIG = {
   START_ADDRESS: 'Aalsmeerderweg 85, Aalsmeer',
   /** Route eindigt weer bij de baklocatie. */
   ROUND_TRIP: true,
-  /** Vertrektijd als er bij de route geen is opgegeven, en minuten per stop voor uitladen en afgeven. */
+  /** Vertrektijd als er bij de route geen is opgegeven, en minuten per stop (parkeren, praatje, afgeven). */
   ROUTE_START_TIME: '09:00',
-  MINUTES_PER_STOP: 5,
+  MINUTES_PER_STOP: 15,
   /**
    * Startinhoud van het tabblad Agenda (alleen als het nog leeg is). Daarna past Mark de agenda in de
    * Sheet aan: één regel per dag, taak en dagdeel, met tijd, locatie en hoeveel mensen nodig zijn.
@@ -125,13 +125,15 @@ const TABS = {
   meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op']],
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
-  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden']],
+  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden', 'dagdeel', 'eindpunt', 'maps_url_zonder_eindpunt']],
   costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url', 'iban', 'status', 'reden', 'beoordeeld_door', 'beoordeeld_op', 'uitbetaald_op']],
   delivery: ['Bezorgstatus', ['order_id', 'afgeleverd_door', 'afgeleverd_op']],
   agenda: ['Agenda', ['datum', 'taak', 'dagdeel', 'tijd', 'locatie', 'nodig']],
   history: ['Historie', ['jaar', 'datum', 'bestellingen', 'oliebollen', 'omzet']],
   settings: ['Instellingen', ['sleutel', 'waarde']],
-  packlog: ['Inpaklog', ['tijd', 'order_id', 'klant', 'actie', 'door', 'met_krenten', 'zonder_krenten']]
+  packlog: ['Inpaklog', ['tijd', 'order_id', 'klant', 'actie', 'door', 'met_krenten', 'zonder_krenten']],
+  // Coordinates per address for the automatic planning, so each address is looked up only once.
+  places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']]
 };
 
 const PERMISSIONS = {
@@ -149,6 +151,8 @@ const PERMISSIONS = {
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
   assignCourier: ['beheer'],
+  assignCouriers: ['beheer'],
+  geocode: ['beheer'],
   extractReceipt: ['beheer', 'inpakker', 'bezorger'],
   saveCost: ['beheer', 'inpakker', 'bezorger'],
   registerVolunteer: ['public'],
@@ -415,11 +419,66 @@ const HANDLERS = {
       return bump_();
     });
   },
+  assignCouriers: function (body) {
+    const list = (body.assignments || []).filter(function (a) { return a && a.orderId; });
+    if (list.length === 0) throw new Error('Niets om in te delen.');
+    return withLock_(function () {
+      list.forEach(function (a) {
+        findOrCreate_('meta', a.orderId).set({
+          bezorger: String(a.courier || '').trim(),
+          bijgewerkt_door: String(body.name || ''),
+          bijgewerkt_op: now_()
+        });
+      });
+      return bump_();
+    });
+  },
+  /** Coordinates for the automatic planning. Looked up once per address and kept in the tab Locaties. */
+  geocode: function (body) {
+    const wanted = [CONFIG.START_ADDRESS].concat((body.addresses || []).map(function (a) { return String(a || '').trim(); }).filter(String));
+    const known = {};
+    readTab_('places').forEach(function (r) {
+      const lat = num_(r.lat);
+      const lng = num_(r.lng);
+      known[String(r.adres).trim().toLowerCase()] = lat && lng ? { lat: lat, lng: lng } : null;
+    });
+    const geocoder = Maps.newGeocoder().setRegion('nl').setLanguage('nl');
+    const points = {};
+    const fresh = [];
+    wanted.slice(0, 300).forEach(function (address) {
+      const key = address.toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(known, key)) { points[address] = known[key]; return; }
+      let point = null;
+      try {
+        const res = geocoder.geocode(address);
+        if (res.status === 'OK' && res.results && res.results.length) {
+          const loc = res.results[0].geometry.location;
+          point = { lat: loc.lat, lng: loc.lng };
+        }
+      } catch (err) {
+        point = null;
+      }
+      known[key] = point;
+      points[address] = point;
+      fresh.push([address, point ? point.lat : '', point ? point.lng : '', now_()]);
+    });
+    if (fresh.length) {
+      withLock_(function () {
+        const sheet = sheet_('places');
+        sheet.getRange(sheet.getLastRow() + 1, 1, fresh.length, 4).setValues(fresh);
+      });
+    }
+    return { start: { address: CONFIG.START_ADDRESS, point: points[CONFIG.START_ADDRESS] || null }, points: points };
+  },
   computeRoute: function (body) {
     const stops = (body.stops || []).filter(function (s) { return s && s.address; });
     if (stops.length === 0) throw new Error('Geen adressen voor deze route.');
     if (stops.length > 23) throw new Error('Maximaal 23 stops per route.');
     const mode = body.mode === 'bicycling' ? 'bicycling' : 'driving';
+    const part = String(body.part || '').trim();
+    // The last trip of the day may end at the courier's home: then the last stop is the one nearest home.
+    const endAddress = String(body.endAddress || '').trim();
+    const perStop = Number(body.minutesPerStop) > 0 ? Number(body.minutesPerStop) : CONFIG.MINUTES_PER_STOP;
 
     const finder = Maps.newDirectionFinder()
       .setOrigin(CONFIG.START_ADDRESS)
@@ -429,12 +488,15 @@ const HANDLERS = {
 
     let waypoints = stops;
     let destination;
-    if (CONFIG.ROUND_TRIP) {
+    if (endAddress) {
+      destination = endAddress;
+    } else if (CONFIG.ROUND_TRIP) {
       destination = CONFIG.START_ADDRESS;
     } else {
       destination = stops[stops.length - 1].address;
       waypoints = stops.slice(0, -1);
     }
+    const lastIsStop = !endAddress && !CONFIG.ROUND_TRIP;
     finder.setDestination(destination);
     waypoints.forEach(function (s) { finder.addWaypoint(s.address); });
     if (waypoints.length > 1) finder.setOptimizeWaypoints(true);
@@ -449,26 +511,35 @@ const HANDLERS = {
       seconds += leg.duration.value;
     });
     const order = (route.waypoint_order || waypoints.map(function (_, i) { return i; })).map(function (i) { return waypoints[i]; });
-    if (!CONFIG.ROUND_TRIP) order.push(stops[stops.length - 1]);
+    if (lastIsStop) order.push(stops[stops.length - 1]);
 
     // Expected arrival per stop: departure + driving time of each leg + time spent at earlier stops.
     const startTime = /^\d{1,2}:\d{2}$/.test(String(body.startTime || '')) ? String(body.startTime) : CONFIG.ROUTE_START_TIME;
     let clock = Number(startTime.split(':')[0]) * 60 + Number(startTime.split(':')[1]);
     const stopTimes = order.map(function (_, i) {
-      clock += Math.round(route.legs[i].duration.value / 60) + (i > 0 ? CONFIG.MINUTES_PER_STOP : 0);
+      clock += Math.round(route.legs[i].duration.value / 60) + (i > 0 ? perStop : 0);
       return hhmm_(clock);
     });
-    seconds += order.length * CONFIG.MINUTES_PER_STOP * 60;
+    seconds += order.length * perStop * 60;
+    // The way home after the last stop is not work time.
+    if (endAddress) seconds -= route.legs[route.legs.length - 1].duration.value;
 
     const travelmode = mode === 'bicycling' ? 'bicycling' : 'driving';
     const enc = encodeURIComponent;
     const mapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=' + enc(CONFIG.START_ADDRESS) +
       '&destination=' + enc(destination) +
-      '&waypoints=' + order.slice(0, CONFIG.ROUND_TRIP ? order.length : -1).map(function (s) { return enc(s.address); }).join('%7C') +
+      '&waypoints=' + order.slice(0, lastIsStop ? -1 : order.length).map(function (s) { return enc(s.address); }).join('%7C') +
+      '&travelmode=' + travelmode;
+    // Other volunteers see the route without the home address: it then ends at the last stop.
+    const publicUrl = !endAddress ? mapsUrl : 'https://www.google.com/maps/dir/?api=1&origin=' + enc(CONFIG.START_ADDRESS) +
+      '&destination=' + enc(order[order.length - 1].address) +
+      '&waypoints=' + order.slice(0, -1).map(function (s) { return enc(s.address); }).join('%7C') +
       '&travelmode=' + travelmode;
 
     const info = {
-      key: body.date + '|' + body.courier,
+      key: body.date + '|' + body.courier + (part ? '|' + part : ''),
+      part: part,
+      endAddress: endAddress,
       date: String(body.date),
       courier: String(body.courier),
       mode: mode,
@@ -491,7 +562,10 @@ const HANDLERS = {
         maps_url: info.mapsUrl,
         berekend_op: info.computedAt,
         starttijd: info.startTime,
-        tijden: info.stopTimes.join(',')
+        tijden: info.stopTimes.join(','),
+        dagdeel: part,
+        eindpunt: endAddress,
+        maps_url_zonder_eindpunt: publicUrl
       });
       bump_();
     });
@@ -626,9 +700,11 @@ function buildState_(role, name) {
     state.routes[r.sleutel] = {
       key: r.sleutel, date: isoDate_(r.leverdatum), courier: String(r.bezorger), mode: r.vervoer,
       km: num_(r.km), minutes: num_(r.minuten),
-      orderIds: String(r.volgorde || '').split(',').filter(String), mapsUrl: String(r.maps_url || ''),
+      orderIds: String(r.volgorde || '').split(',').filter(String),
+      mapsUrl: String((isAdmin ? r.maps_url : r.maps_url_zonder_eindpunt || (r.eindpunt ? '' : r.maps_url)) || ''),
       computedAt: String(r.berekend_op || ''),
-      startTime: String(r.starttijd || ''), stopTimes: String(r.tijden || '').split(',').filter(String)
+      startTime: String(r.starttijd || ''), stopTimes: String(r.tijden || '').split(',').filter(String),
+      part: String(r.dagdeel || ''), endAddress: isAdmin ? String(r.eindpunt || '') : ''
     };
   });
   readTab_('delivery').forEach(function (r) {
@@ -1096,6 +1172,8 @@ function anonymize_() {
   blank('delivery', ['afgeleverd_door']);
   out.costs = blank('costs', ['ingevoerd_door', 'iban', 'beoordeeld_door']);
   clearRows_(sheet_('routes'));
+  // Looked-up addresses include volunteers' home addresses.
+  clearRows_(sheet_('places'));
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);

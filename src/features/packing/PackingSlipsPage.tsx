@@ -6,7 +6,7 @@ import logoUrl from "../../assets/logo-oliebollenbar.svg";
 import { OrderFilters } from "../orders/OrderFilters";
 import { navigate } from "../../lib/router";
 import { effectiveCourier, effectiveNote, stopAddress } from "../../utils/orderUtils";
-import { routeKey } from "../routes/routeUtils";
+import { PARTS } from "../routes/routeUtils";
 
 const typeLabel: Record<Order["customerType"], string> = { particulier: "Particulier", zakelijk: "Zakelijk", barter: "Barter", onbekend: "" };
 
@@ -18,9 +18,11 @@ export function PackingSlipsPage({ state, date: dateParam }: { state: DashboardS
   const slips = useMemo(() => {
     const rank = (o: Order) => {
       const courier = effectiveCourier(o, state.meta[o.id]);
-      const route = courier ? state.routes[routeKey(date, courier)] : undefined;
-      const stop = route ? route.orderIds.indexOf(o.id) : -1;
-      return { courier, stop: stop === -1 ? 999 : stop, eta: route && stop !== -1 ? route.stopTimes[stop] ?? "" : "" };
+      // The courier's trip (dagdeel) that has this stop; morning trips first.
+      const route = courier ? Object.values(state.routes).find((r) => r.date === date && r.courier === courier && r.orderIds.includes(o.id)) : undefined;
+      const index = route ? route.orderIds.indexOf(o.id) : -1;
+      const tripRank = Math.max(0, PARTS.indexOf((route?.part ?? "") as (typeof PARTS)[number]));
+      return { courier, stop: index === -1 ? 999 : tripRank * 100 + index, eta: route && index !== -1 ? route.stopTimes[index] ?? "" : "" };
     };
     return state.orders
       .filter((o) => o.deliveryDate === date)

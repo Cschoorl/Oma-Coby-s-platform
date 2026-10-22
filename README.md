@@ -9,7 +9,7 @@ via een Apps Script.
 | Inpakken | inpakker, beheer | totalen MET/ZONDER, gebakken invullen en nog te bakken, filter particulier/zakelijk/barter; orders claimen, afvinken en afronden (live); pakbonnen printen |
 | Bestellingen | beheer | opmerkingen beoordelen en aanpassen; bevestiging per order controleren en versturen |
 | Routes | beheer | bezorgers indelen (beschikbaar in dat dagdeel bovenaan), snelste volgorde, km en aankomsttijd per stop; melding bij verouderde routes; route via WhatsApp |
-| Bezorgen (`#/bezorger`) | bezorger, beheer | mobiele pagina met stops, verwachte tijd, aantallen en Maps-route; stop afvinken als afgeleverd |
+| Bezorgen (`#/bezorger`) | bezorger | mobiele pagina met stops, verwachte tijd, aantallen en Maps-route; stop afvinken als afgeleverd |
 | Tussenstand | beheer | de discozaal (één dansend oudje per tien verkochte oliebollen), verkoopteller en rollatorbalk naar het doel; besteld, ingepakt, bezorgd, omzet min kosten en vergelijking met eerdere jaren; de stand van de dag exporteren als afbeelding |
 | Kosten | iedereen met code | bon → automatisch uitgelezen → met IBAN indienen; status volgen. Beheer keurt goed/af en betaalt uit; km-vergoeding per bezorger |
 | Vrijwilligers | beheer | aanmeldingen en bezettingskalender; na de actie persoonsgegevens verwijderen |

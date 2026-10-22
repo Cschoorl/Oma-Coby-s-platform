@@ -1,147 +1,296 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Sticker, fieldLabel, formatNumber, rollOliebol, toast } from "../../components/ui";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { fieldLabel, formatNumber, rollOliebol, toast } from "../../components/ui";
 import { GOAL_MILESTONES, GOAL_OLIEBOLLEN, OLIEBOLLEN_PER_OUDJE } from "../../config";
 import "./discozaal.css";
 
-// De tussenstand als discozaal: per tien verkochte oliebollen danst er een oudje bij.
-// Drie losse componenten: Verkoopteller, Rollatorbalk en Discozaal.
+// De Tussenstand als discozaal, achter de discobal-knop bij de grafiek:
+// per tien verkochte oliebollen danst er een oudje bij.
 
-/** Above this many oudjes the rest joins the polonaise instead of the dance floor. */
-const FLOOR_CAPACITY = 36;
-const DISCO_KEY = "omacoby-disco";
+/** From this many oudjes a polonaise walks past in front. */
+const POLONAISE_FROM = 60;
 
 export function oudjesFor(oliebollen: number): number {
   return Math.floor(oliebollen / OLIEBOLLEN_PER_OUDJE);
 }
 
-/** Small seeded random, so every oudje keeps the same look and spot between renders. */
-function seeded(seed: number): () => number {
-  let s = seed | 0;
-  return () => {
-    s = (s + 0x6d2b79f5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ---------- tekeningen ----------
+// The drawings are fixed SVG markup built from constants below (no user input), so they are injected as HTML.
+
+const K = "#3a2f2c";
+const BOL = "M36 26c8 0 12 4 17 7 6 4 10 10 9 18 0 9-3 15-8 20-6 6-13 9-21 8-8-1-15-4-20-10C8 63 7 56 9 49c2-8 7-13 13-18 4-3 9-5 14-5z";
+
+/** The oliebol as a disco ball: mirror facets that keep turning. */
+function discoBallSvg(id: string): string {
+  return `<svg viewBox="0 0 70 92" aria-hidden="true"><defs><clipPath id="${id}c"><path d="${BOL}"/></clipPath><pattern id="${id}f" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" fill="#c08446"/><rect x=".6" y=".6" width="5.8" height="5.8" fill="#dca666"/><rect x=".6" y=".6" width="2.4" height="2.4" fill="#f4d79c"/><animate attributeName="x" from="0" to="7" dur="1.2s" repeatCount="indefinite"/></pattern></defs><path d="M35 0v26" stroke="#a89889" stroke-width="1.6"/><g class="spin"><path d="${BOL}" fill="url(#${id}f)"/><g clip-path="url(#${id}c)"><path d="M8 66 Q35 86 64 62 L64 90 L8 90z" fill="#5c3416" opacity=".25"/></g><path d="${BOL}" fill="none" stroke="${K}" stroke-width="1.6"/><g fill="#fffdf6"><circle cx="27" cy="34" r="1.7"/><circle cx="35" cy="31" r="1.4"/><circle cx="42" cy="35" r="1.7"/></g></g><path class="dz-glint" d="M17 46l1.2 3 3 1.2-3 1.2L17 54.4l-1.2-3-3-1.2 3-1.2z" fill="#fff"/><path class="dz-glint" style="animation-delay:-.8s" d="M53 42l1 2.4 2.4 1-2.4 1L53 48.8l-1-2.4-2.4-1 2.4-1z" fill="#fff"/></svg>`;
+}
+
+const SLINGER_COLORS = ["#d05438", "#dcc05d", "#69873c", "#f1d9cd"];
+const SLINGER_SVG =
+  Array.from({ length: 26 }, (_, i) => {
+    const t = i / 25;
+    const x = t * 1000;
+    const y = 2 + 26 * 4 * t * (1 - t);
+    return `<path d="M${x - 9} ${y} L${x + 9} ${y} L${x} ${y + 13}z" fill="${SLINGER_COLORS[i % SLINGER_COLORS.length]}" opacity=".85"/>`;
+  }).join("") + `<path d="M0 2 Q500 54 1000 2" stroke="#a89889" stroke-width="1" fill="none"/>`;
+
+interface Character {
+  move: "wave" | "cane" | "pump" | "hat" | "hop" | "fever" | "twist" | "clap";
+  skin: string;
+  hair: [style: "perm" | "bun" | "short" | "side" | "bald", color: string];
+  dress?: string;
+  jacket?: string;
+  shirt?: string;
+  trousers?: string;
+  braces?: string;
+  hat?: [style: "cap" | "trilby", color: string];
+  glasses?: boolean;
+  cane?: boolean;
+  bag?: string;
+}
+
+/** The eight front-row dancers, each with a look and a dance of their own. */
+const CAST: Character[] = [
+  { move: "wave", skin: "#f1d3b3", hair: ["perm", "#ddd4ea"], dress: "#d05438", glasses: true },
+  { move: "cane", skin: "#e7bf98", hair: ["side", "#d9d5cc"], hat: ["cap", "#6b4d3a"], jacket: "#8a6a4f", trousers: "#4a3d38", cane: true, glasses: true },
+  { move: "pump", skin: "#c99168", hair: ["bun", "#ece8df"], dress: "#dcc05d", bag: "#5c4238" },
+  { move: "hat", skin: "#f1d3b3", hair: ["side", "#cfc9be"], hat: ["trilby", "#3a2f2c"], jacket: "#69873c", trousers: "#3d4a35", glasses: true },
+  { move: "hop", skin: "#9c6644", hair: ["short", "#f5f2ea"], dress: "#4f7a9a", glasses: true },
+  { move: "fever", skin: "#e7bf98", hair: ["short", "#bfb9ae"], shirt: "#fff3d6", trousers: "#5c4238", braces: "#d05438" },
+  { move: "twist", skin: "#f1d3b3", hair: ["bun", "#e8e4dc"], dress: "#c46b8c", glasses: true },
+  { move: "clap", skin: "#6e4630", hair: ["bald", "#d9d5cc"], jacket: "#e0894a", trousers: "#4a3d38", glasses: true }
+];
+
+function hairSvg([style, c]: Character["hair"]): string {
+  switch (style) {
+    case "perm":
+      return `<g fill="${c}"><circle cx="21" cy="17" r="5"/><circle cx="26.5" cy="12.5" r="5.5"/><circle cx="33.5" cy="12.5" r="5.5"/><circle cx="39" cy="17" r="5"/></g>`;
+    case "bun":
+      return `<g fill="${c}"><circle cx="30" cy="10" r="4.6"/><path d="M19 22 Q18 12 30 12 Q42 12 41 22 Q37 17 30 17 Q23 17 19 22z"/></g>`;
+    case "short":
+      return `<path d="M19 21 Q19 11 30 11 Q41 11 41 21 Q37 15.5 30 15.5 Q23 15.5 19 21z" fill="${c}"/>`;
+    case "side":
+      return `<g fill="${c}"><path d="M19 26 Q17 19 21 16 Q21 21 22.5 24z"/><path d="M41 26 Q43 19 39 16 Q39 21 37.5 24z"/></g>`;
+    case "bald":
+      return `<g stroke="${c}" stroke-width="2.4" fill="none" stroke-linecap="round"><path d="M19.5 26 Q18 21 21 18"/><path d="M40.5 26 Q42 21 39 18"/></g>`;
+  }
+}
+
+function hatSvg([style, c]: NonNullable<Character["hat"]>): string {
+  if (style === "cap") return `<g class="hat"><path d="M18.5 17.5 Q30 7 41.5 15 L45 18 Q31 15.5 18.5 19z" fill="${c}"/></g>`;
+  return `<g class="hat"><ellipse cx="30" cy="14.5" rx="14" ry="2.6" fill="${c}"/><path d="M23 14.5 Q22.5 5 30 5 Q37.5 5 37 14.5z" fill="${c}"/><rect x="23" y="10.8" width="14" height="2" fill="#d05438"/></g>`;
+}
+
+function oudjeSvg(f: Character): string {
+  const sleeve = f.dress ?? f.jacket ?? f.shirt ?? "#5c4238";
+  let body: string;
+  if (f.dress) {
+    body = `<path d="M20 39 Q30 35 40 39 L44.5 70 Q30 74 15.5 70z" fill="${f.dress}"/><rect x="23.5" y="70" width="4.5" height="16" rx="2" fill="${f.skin}"/><rect x="32" y="70" width="4.5" height="16" rx="2" fill="${f.skin}"/>`;
+  } else {
+    body = `<rect x="23" y="62" width="6" height="24" rx="2.5" fill="${f.trousers}"/><rect x="31" y="62" width="6" height="24" rx="2.5" fill="${f.trousers}"/><path d="M19 38.5 Q30 34.5 41 38.5 L41.5 65 L18.5 65z" fill="${sleeve}"/>`;
+    if (f.jacket) body += `<path d="M27 37 L30 45 L33 37z" fill="#fff3d6"/>`;
+    if (f.braces) body += `<path d="M23.5 38 L24 64 M36.5 38 L36 64" stroke="${f.braces}" stroke-width="2"/>`;
+  }
+  const shoes = `<ellipse cx="25.5" cy="87.5" rx="4.8" ry="2.4" fill="${K}"/><ellipse cx="34.5" cy="87.5" rx="4.8" ry="2.4" fill="${K}"/>`;
+  const arm = (side: "l" | "r") => {
+    const x = side === "l" ? 20 : 40;
+    const hx = side === "l" ? 13 : 47;
+    let extra = "";
+    if (side === "r" && f.cane) extra = `<path d="M${hx} 58 L${hx + 2} 86 M${hx} 58 q0 -4 -4 -3.5" stroke="#6b4d3a" stroke-width="2.2" stroke-linecap="round" fill="none"/>`;
+    if (side === "l" && f.bag) extra = `<rect x="${hx - 4.5}" y="58" width="9" height="7" rx="2" fill="${f.bag}"/>`;
+    return `<g class="arm-${side}"><path d="M${x} 41 L${hx} 58" stroke="${sleeve}" stroke-width="5" stroke-linecap="round"/><circle cx="${hx}" cy="58.5" r="2.8" fill="${f.skin}"/>${extra}</g>`;
   };
+  const glasses = f.glasses
+    ? `<g fill="none" stroke="${K}" stroke-width=".9" opacity=".8"><circle cx="26.2" cy="24.5" r="3"/><circle cx="33.8" cy="24.5" r="3"/><path d="M29.2 24.5h1.6"/></g>`
+    : "";
+  const face = `<rect x="27.5" y="31" width="5" height="7" fill="${f.skin}"/><circle cx="30" cy="24" r="10.5" fill="${f.skin}"/>${hairSvg(f.hair)}<circle cx="26.2" cy="24.5" r="1.1" fill="${K}"/><circle cx="33.8" cy="24.5" r="1.1" fill="${K}"/>${glasses}<path d="M26.5 29.5 Q30 32 33.5 29.5" stroke="${K}" stroke-width="1.1" fill="none" stroke-linecap="round"/><circle cx="23" cy="28" r="1.6" fill="#e88a7a" opacity=".45"/><circle cx="37" cy="28" r="1.6" fill="#e88a7a" opacity=".45"/>`;
+  return `<svg viewBox="0 0 60 92"><ellipse cx="30" cy="89.5" rx="14" ry="2.2" fill="#5c4238" opacity=".18"/><g class="sway"><g class="jump">${body}${shoes}${arm("l")}${arm("r")}${face}${f.hat ? hatSvg(f.hat) : ""}</g></g></svg>`;
+}
+const CAST_SVG = CAST.map(oudjeSvg);
+
+const CROWD_COLORS = ["#d9826c", "#d6b75a", "#8fa868", "#c98aa3", "#7f9fb8", "#e0a070"];
+const CROWD_HAIR = ["#efebe3", "#dcd6cb", "#f7f4ee"];
+function crowdSvg(i: number): string {
+  const c = CROWD_COLORS[(i * 5) % CROWD_COLORS.length];
+  const arms = i % 4 === 0 ? `<path d="M4 15 L2 7 M14 15 L16 7" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/>` : "";
+  return `<svg viewBox="0 0 18 24">${arms}<path d="M2 24 Q2 14 9 14 Q16 14 16 24z" fill="${c}"/><circle cx="9" cy="9" r="4.6" fill="#e7c3a0"/><path d="M4.4 8.4 Q4.8 3.8 9 3.8 Q13.2 3.8 13.6 8.4 Q11.5 6.3 9 6.3 Q6.5 6.3 4.4 8.4z" fill="${CROWD_HAIR[i % CROWD_HAIR.length]}"/></svg>`;
 }
 
-function useReducedMotion(): boolean {
-  return useMemo(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches, []);
-}
+const WALKER_SVG = `<svg viewBox="0 0 46 42" aria-hidden="true"><g class="step"><circle cx="14" cy="8" r="5.5" fill="#f1d3b3"/><path d="M8.5 8 Q8.5 2.5 14 2.5 Q19.5 2.5 19.5 8 Q17 5.5 14 5.5 Q11 5.5 8.5 8z" fill="#e5e0d6"/><circle cx="10" cy="3" r="2.4" fill="#e5e0d6"/><path d="M8.5 14h11l2 15H7z" fill="#d05438"/><rect x="9" y="28" width="3.4" height="11" rx="1.5" fill="#f1d3b3"/><rect x="15" y="28" width="3.4" height="11" rx="1.5" fill="#f1d3b3"/><path d="M19 17 L27 20" stroke="#d05438" stroke-width="3" stroke-linecap="round"/></g><path d="M27 19 L29 19 L30 38 M29 19 L41 20 L42 38 M30 28 L41.5 28" stroke="${K}" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="31" y="22" width="9" height="5" rx="1" fill="#dcc05d"/><circle cx="30" cy="38.5" r="2.5" fill="${K}"/><circle cx="42" cy="38.5" r="2.5" fill="${K}"/></svg>`;
+const FLAME_SVG = `<svg viewBox="0 0 34 18" aria-hidden="true"><defs><linearGradient id="dz-flame-g" x1="1" x2="0" y1="0" y2="0"><stop offset="0" stop-color="#fff3b0"/><stop offset=".35" stop-color="#ffc23d"/><stop offset=".7" stop-color="#f07a2a"/><stop offset="1" stop-color="#d05438" stop-opacity="0"/></linearGradient></defs><path d="M34 9 C26 1 12 2 0 9 C12 16 26 17 34 9z" fill="url(#dz-flame-g)"/><path d="M34 9 C29 5 22 5.5 16 9 C22 12.5 29 13 34 9z" fill="#fffbe0"/></svg>`;
 
-/** Tweens a number towards its new value, so the counter visibly counts up. */
-function useCountUp(value: number): number {
-  const reduce = useReducedMotion();
-  const [shown, setShown] = useState(value);
-  const shownRef = useRef(value);
-  useEffect(() => {
-    if (reduce) {
-      shownRef.current = value;
-      setShown(value);
-      return;
-    }
-    const from = shownRef.current;
-    const start = performance.now();
-    const duration = Math.min(900, 200 + Math.abs(value - from) / 10);
-    let frame = 0;
-    const step = (now: number) => {
-      const k = Math.min(1, (now - start) / duration);
-      shownRef.current = Math.round(from + (value - from) * (1 - Math.pow(1 - k, 3)));
-      setShown(shownRef.current);
-      if (k < 1) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [value, reduce]);
-  return shown;
-}
+// ---------- discobal-knop ----------
 
-// ---------- Verkoopteller ----------
-
-/** Big sales counter: oliebollen sold, the oudjes they pay for, and how far the next oudje is. */
-export function Verkoopteller({ oliebollen }: { oliebollen: number }) {
-  const shown = useCountUp(oliebollen);
-  const oudjes = oudjesFor(oliebollen);
-  const rest = oliebollen % OLIEBOLLEN_PER_OUDJE;
-  const toGo = OLIEBOLLEN_PER_OUDJE - rest;
+/** Small disco-ball oliebol for the button that opens the disco hall. */
+export function DiscoBallIcon() {
   return (
-    <section className="grid gap-x-7 gap-y-4 rounded-kaart bg-papier p-5 shadow-zacht sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] sm:items-end">
-      <div>
-        <p className={fieldLabel}>Oliebollen verkocht</p>
-        <p className="font-serif text-[64px] font-bold leading-[0.95] tracking-tight tabular-nums text-krent sm:text-[88px]">{formatNumber(shown)}</p>
-        <p className="mt-1.5 text-oliebol">dit seizoen, tot en met vandaag</p>
-      </div>
-      <div className="grid gap-2">
-        <p className="font-display text-[32px] uppercase leading-none tracking-wide text-krent">
-          = <span className="text-feest">{formatNumber(oudjes)}</span> {oudjes === 1 ? "oudje" : "oudjes"} op de dansvloer
-        </p>
-        <div className="dz-dots" aria-hidden="true">
-          {Array.from({ length: OLIEBOLLEN_PER_OUDJE }, (_, i) => (
-            <span key={i} className={`dz-dot ${i < rest ? "on" : ""}`} />
-          ))}
-        </div>
-        <p className="text-xs text-muted">
-          {oliebollen >= GOAL_OLIEBOLLEN
-            ? "Doel gehaald. Iedereen mag mee naar de Gouwe Ouwe-avond!"
-            : `Nog ${toGo} ${toGo === 1 ? "oliebol" : "oliebollen"} tot ${oudjes === 0 ? "het eerste oudje" : `oudje ${formatNumber(oudjes + 1)}`}.`}
-        </p>
-      </div>
-    </section>
-  );
-}
-
-// ---------- Rollatorbalk ----------
-
-const MILESTONE_KEY = "omacoby-mijlpaal";
-
-function RollatorOudje() {
-  return (
-    <svg viewBox="0 0 74 74" aria-hidden="true">
-      <ellipse cx="38" cy="72" rx="26" ry="2.4" fill="#261f1f" opacity=".15" />
-      <g className="bob">
-        <g className="leg-b">
-          <path d="M27 44 L25 62" stroke="#5c4238" strokeWidth="4" strokeLinecap="round" />
-          <path d="M22 63h6" stroke="#261f1f" strokeWidth="3" strokeLinecap="round" />
-        </g>
-        <g className="leg-a">
-          <path d="M27 44 L29 62" stroke="#5c4238" strokeWidth="4" strokeLinecap="round" />
-          <path d="M27 63h6" stroke="#261f1f" strokeWidth="3" strokeLinecap="round" />
-        </g>
-        <path d="M19 26 Q26 22 33 27 L33 46 Q26 48 20 46 Z" fill="#d05438" stroke="#261f1f" strokeWidth="1.2" />
-        <path d="M31 29 L44 35" stroke="#d05438" strokeWidth="3.6" strokeLinecap="round" />
-        <circle cx="45" cy="35.5" r="2.2" fill="#f1d3b3" />
-        <circle cx="29" cy="16" r="7" fill="#f1d3b3" stroke="#261f1f" strokeWidth="1.1" />
-        <path d="M22 16c0-6 3.5-8.5 7-8.5s7.5 2.5 7 8c-2-3-4.5-4-7-4s-5 1-7 4.5z" fill="#eceae4" />
-        <circle cx="24" cy="10" r="3.4" fill="#eceae4" />
-        <g fill="none" stroke="#261f1f" strokeWidth=".9">
-          <circle cx="32.5" cy="16" r="2.1" />
-          <path d="M34.6 16h1.4" />
-        </g>
-        <path d="M31 20 Q33 21.5 35 20" stroke="#261f1f" strokeWidth="1" fill="none" strokeLinecap="round" />
+    <svg className="dz-btn-ball" viewBox="6 24 58 58" aria-hidden="true">
+      <g className="spin">
+        <path d={BOL} fill="#dca666" stroke={K} strokeWidth="3" />
+        <path d="M14 40h44M10 50h52M12 60h48M22 30v46M34 26v54M46 28v50" stroke="#a8743c" strokeWidth="2" opacity=".55" />
+        <circle cx="27" cy="36" r="3" fill="#fffdf6" />
       </g>
-      <g stroke="#261f1f" strokeWidth="2.4" strokeLinecap="round" fill="none">
-        <path d="M44 34 L48 34 L50 62 M48 34 L64 36 L66 62 M50 50 L65 50" />
-      </g>
-      <rect x="51" y="40" width="12" height="8" rx="1.5" fill="#dcc05d" stroke="#261f1f" strokeWidth="1.2" />
-      <circle className="wheel" cx="50" cy="65" r="4" fill="#fffdf6" stroke="#261f1f" strokeWidth="2" />
-      <circle className="wheel" cx="66" cy="65" r="4" fill="#fffdf6" stroke="#261f1f" strokeWidth="2" />
     </svg>
   );
 }
 
-/** Big progress bar to the goal; an oudje with a rollator walks along as the fill grows. */
+// ---------- de discozaal ----------
+
+/** Positions (in %) for the front row, filled from the middle outwards. */
+function frontSlots(cap: number): number[] {
+  const order = [3, 4, 2, 5, 1, 6, 0, 7].filter((s) => s < cap);
+  return order.map((s) => 6 + ((s + 0.5) / cap) * 88);
+}
+
+/** KPI strip, the disco hall and the rollator bar, as shown behind the disco-ball button. */
+export function Discozaal({ oliebollen }: { oliebollen: number }) {
+  const oudjes = oudjesFor(oliebollen);
+  const rest = oliebollen % OLIEBOLLEN_PER_OUDJE;
+  const zaalRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(900);
+
+  useLayoutEffect(() => {
+    const el = zaalRef.current;
+    if (!el) return;
+    const measure = () => setWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const frontCap = Math.max(3, Math.min(CAST.length, Math.floor((width - 40) / 92)));
+  const front = Math.min(oudjes, frontCap);
+  const perRow = Math.max(10, Math.floor((width - 48) / 16));
+  const crowdCap = perRow * 3;
+  const crowd = Math.max(0, Math.min(crowdCap, oudjes - frontCap));
+  const slots = frontSlots(frontCap);
+
+  // Dancers that join while the hall is open walk in; the first render just shows who is there.
+  const firstFront = useRef(front);
+  const previous = useRef(oudjes);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = oudjes;
+    if (oudjes === before + 1) toast(`Oudje ${formatNumber(oudjes)} komt binnen!`);
+    if (before < POLONAISE_FROM && oudjes >= POLONAISE_FROM) toast("Polonaise! Iedereen achter elkaar aan.");
+  }, [oudjes]);
+
+  const crowdHtml = ["r1", "r2", "r3"]
+    .map((r, ri) => {
+      const inRow = Math.max(0, Math.min(perRow, crowd - ri * perRow));
+      const people = Array.from({ length: inRow }, (_, j) => {
+        const k = ri * 97 + j;
+        // Golden-ratio spread: evenly filled at any row size, without people stacking on one spot.
+        const pos = (((j * 0.618034 + ri * 0.31) % 1) * 0.98 + 0.01) * 100;
+        return `<span class="p" style="left:${pos.toFixed(1)}%;animation-delay:${(-(k % 9) * 0.07).toFixed(2)}s">${crowdSvg(k)}</span>`;
+      }).join("");
+      return `<div class="dz-crow ${r}">${people}</div>`;
+    })
+    .join("");
+
+  const poloMembers = oudjes >= POLONAISE_FROM ? Math.min(8, 3 + Math.floor((oudjes - POLONAISE_FROM) / 60)) : 0;
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+        <div className="px-1 py-1">
+          <p className={fieldLabel}>Oliebollen verkocht</p>
+          <p className="font-serif text-[30px] font-bold leading-9 tabular-nums text-krent">{formatNumber(oliebollen)}</p>
+          <p className="text-xs text-muted">dit seizoen</p>
+        </div>
+        <div className="rounded-md bg-gouwe-50 px-3 py-1">
+          <p className={fieldLabel}>Oudjes op de dansvloer</p>
+          <p className="font-serif text-[30px] font-bold leading-9 tabular-nums text-feest">{formatNumber(oudjes)}</p>
+          <p className="text-xs text-muted">1 oudje = {OLIEBOLLEN_PER_OUDJE} oliebollen</p>
+        </div>
+        <div className="col-span-2 px-1 py-1 sm:col-span-1">
+          <p className={fieldLabel}>Volgende oudje</p>
+          <div className="my-1.5 flex gap-1" aria-hidden="true">
+            {Array.from({ length: OLIEBOLLEN_PER_OUDJE }, (_, i) => (
+              <span key={i} className={`h-3 w-3 rounded-full ${i < rest ? "bg-[radial-gradient(circle_at_35%_30%,#e8b97d_0_20%,#b5763c_55%,#8a5428_100%)]" : "bg-vul-2"}`} />
+            ))}
+          </div>
+          <p className="text-xs text-muted">
+            {oliebollen >= GOAL_OLIEBOLLEN ? "Doel gehaald" : `Nog ${OLIEBOLLEN_PER_OUDJE - rest} ${OLIEBOLLEN_PER_OUDJE - rest === 1 ? "oliebol" : "oliebollen"} tot oudje ${formatNumber(oudjes + 1)}`}
+          </p>
+        </div>
+      </div>
+
+      <div className="dz-zaal" ref={zaalRef} role="img" aria-label={`Discozaal met ${formatNumber(oudjes)} dansende oudjes`}>
+        <div className="dz-flecks" aria-hidden="true" />
+        <svg className="dz-slinger" viewBox="0 0 1000 44" preserveAspectRatio="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: SLINGER_SVG }} />
+        <div className="dz-ball" aria-hidden="true" dangerouslySetInnerHTML={{ __html: discoBallSvg("dzbal") }} />
+        <div className="dz-crowd" aria-hidden="true" style={{ ["--fill" as string]: (crowd / crowdCap).toFixed(2) }} dangerouslySetInnerHTML={{ __html: crowdHtml }} />
+        <div className="dz-floor" aria-hidden="true" />
+        <div className="dz-dancers" aria-hidden="true">
+          {Array.from({ length: front }, (_, i) => (
+            <div
+              key={i}
+              className={`dz-d m-${CAST[i].move} ${i >= firstFront.current && !reducedMotion() ? "enter" : ""}`}
+              style={{ left: `${slots[i].toFixed(1)}%`, ["--dl" as string]: `${(-(i * 0.37) % 2).toFixed(2)}s`, ["--sw" as string]: `${(2.2 + (i % 3) * 0.3).toFixed(1)}s` }}
+              dangerouslySetInnerHTML={{ __html: CAST_SVG[i] }}
+            />
+          ))}
+        </div>
+        {poloMembers > 0 ? (
+          <div className="dz-polo" aria-hidden="true">
+            <div className="dz-train" style={{ ["--zw" as string]: `${width + 40}px` }}>
+              {Array.from({ length: poloMembers }, (_, i) => {
+                const c = (i + 2) % CAST.length;
+                return <div key={i} className={`dz-d m-${CAST[c].move}`} dangerouslySetInnerHTML={{ __html: CAST_SVG[c] }} />;
+              })}
+            </div>
+          </div>
+        ) : null}
+        {oudjes === 0 ? (
+          <p className="absolute bottom-[52px] left-1/2 z-[5] w-max max-w-[86%] -translate-x-1/2 text-center text-[13px] text-muted">
+            <b className="block font-serif text-lg text-krent">De dansvloer is nog leeg.</b>
+            Bij {OLIEBOLLEN_PER_OUDJE} oliebollen komt het eerste oudje binnen.
+          </p>
+        ) : null}
+        {oliebollen >= GOAL_OLIEBOLLEN ? (
+          <span className="absolute right-2.5 top-2.5 z-[5] rounded bg-kerst-50 px-2 py-0.5 text-[11px] font-bold text-kerst-ink">Doel gehaald</span>
+        ) : poloMembers > 0 ? (
+          <span className="absolute right-2.5 top-2.5 z-[5] rounded bg-gouwe-100 px-2 py-0.5 text-[11px] font-bold text-gouwe-ink">Polonaise</span>
+        ) : null}
+      </div>
+
+      <Rollatorbalk oliebollen={oliebollen} />
+    </div>
+  );
+}
+
+// ---------- rollatorbalk ----------
+
+const MILESTONE_KEY = "omacoby-mijlpaal";
+
+/** Progress to the goal; the oudje with the rollator gets a rocket flame while she speeds ahead. */
 export function Rollatorbalk({ oliebollen }: { oliebollen: number }) {
-  const pct = Math.min(100, (oliebollen / GOAL_OLIEBOLLEN) * 100);
-  const [walking, setWalking] = useState(false);
-  const reached = GOAL_MILESTONES.filter((m) => oliebollen >= m);
-  const top = reached[reached.length - 1] ?? 0;
+  const target = Math.min(100, (oliebollen / GOAL_OLIEBOLLEN) * 100);
+  // Start at 0 and fly to the stand, so opening the disco hall launches her once.
+  const [pct, setPct] = useState(0);
+  const [boost, setBoost] = useState(false);
 
   useEffect(() => {
-    setWalking(true);
-    const t = window.setTimeout(() => setWalking(false), 1300);
-    return () => window.clearTimeout(t);
-  }, [pct]);
+    if (target === pct) return;
+    const forward = target > pct;
+    const frame = requestAnimationFrame(() => setPct(target));
+    if (forward && !reducedMotion()) {
+      setBoost(true);
+      const t = window.setTimeout(() => setBoost(false), 1500);
+      return () => {
+        cancelAnimationFrame(frame);
+        window.clearTimeout(t);
+      };
+    }
+    return () => cancelAnimationFrame(frame);
+    // pct is only read to know where she starts from, so it is not a dependency.
+  }, [target]);
 
+  const reached = GOAL_MILESTONES.filter((m) => oliebollen >= m);
+  const top = reached[reached.length - 1] ?? 0;
   // A milestone passed since this device last looked: a rolling oliebol, once. The first visit only records it.
   useEffect(() => {
     let seen = 0;
@@ -164,311 +313,31 @@ export function Rollatorbalk({ oliebollen }: { oliebollen: number }) {
   }, [top]);
 
   return (
-    <section className="rounded-kaart bg-papier px-5 pb-5 pt-[72px] shadow-zacht">
+    <div className="px-1 pb-1 pt-8">
       <div className="dz-track" role="progressbar" aria-valuemin={0} aria-valuemax={GOAL_OLIEBOLLEN} aria-valuenow={oliebollen} aria-label={`Op weg naar ${formatNumber(GOAL_OLIEBOLLEN)} oliebollen`}>
         <div className="dz-fill" style={{ width: `${pct}%` }} />
-        {GOAL_MILESTONES.map((m) => (
-          <span key={m} className={`dz-mile ${oliebollen >= m ? "hit" : ""}`} style={{ left: `${(m / GOAL_OLIEBOLLEN) * 100}%` }}>
-            {oliebollen >= m && m < GOAL_OLIEBOLLEN ? (
-              <span className="dz-hit">
-                <Sticker tone="gouwe" className="px-2 py-1 text-sm">Gehaald!</Sticker>
-              </span>
-            ) : null}
-            <span className="t">
-              {formatNumber(m)}
-              <small>{formatNumber(oudjesFor(m))} oudjes</small>
-            </span>
-          </span>
+        {GOAL_MILESTONES.filter((m) => m < GOAL_OLIEBOLLEN).map((m) => (
+          <span key={m} className={`dz-mile ${oliebollen >= m ? "hit" : ""}`} style={{ left: `${(m / GOAL_OLIEBOLLEN) * 100}%` }} title={`${formatNumber(m)} oliebollen`} />
         ))}
-        <svg className="dz-flag" viewBox="0 0 26 46" aria-hidden="true">
-          <path d="M3 2v44" stroke="#261f1f" strokeWidth="2.4" strokeLinecap="round" />
-          <path d="M4 3h18l-5 6 5 6H4z" fill="#d05438" />
-          <path d="M4 3h6v6H4zM10 9h6v6h-6z" fill="#fffdf6" opacity=".9" />
-        </svg>
-        <div className={`dz-walker ${walking ? "" : "idle"}`} style={{ left: `${pct}%` }}>
-          <RollatorOudje />
+        <div className={`dz-walker ${boost ? "boost" : ""}`} style={{ left: `clamp(28px, ${pct}%, calc(100% - 12px))` }}>
+          <span className="dz-flame" dangerouslySetInnerHTML={{ __html: FLAME_SVG }} />
+          <span dangerouslySetInnerHTML={{ __html: WALKER_SVG }} />
         </div>
       </div>
-      <div className="mt-11 flex flex-wrap justify-between gap-3 text-[13px] text-muted">
+      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted">
         <span>
           {oliebollen >= GOAL_OLIEBOLLEN ? (
             <b className="text-krent">Doel gehaald!</b>
           ) : (
             <>
-              Nog <b className="tabular-nums text-krent">{formatNumber(GOAL_OLIEBOLLEN - oliebollen)}</b> oliebollen te gaan
+              Nog <b className="tabular-nums text-krent">{formatNumber(GOAL_OLIEBOLLEN - oliebollen)}</b> tot het doel
             </>
           )}
         </span>
         <span>
-          Doel: <b className="text-krent">{formatNumber(GOAL_OLIEBOLLEN)} oliebollen</b> = {formatNumber(oudjesFor(GOAL_OLIEBOLLEN))} gratis entrees voor een Gouwe Ouwe-avond
+          Doel: <b className="text-krent">{formatNumber(GOAL_OLIEBOLLEN)}</b> oliebollen = <b className="text-krent">{formatNumber(oudjesFor(GOAL_OLIEBOLLEN))}</b> oudjes naar de Gouwe Ouwe-avond
         </span>
       </div>
-    </section>
-  );
-}
-
-// ---------- Discozaal ----------
-
-const SKIN = ["#f1d3b3", "#e7bf98", "#c99168", "#9c6644", "#6e4630"];
-const HAIR = ["#eceae4", "#d9d5cc", "#bfb9ae", "#f5f2ea"];
-const CLOTHES = ["#d05438", "#69873c", "#dcc05d", "#5c4238", "#c46b8c", "#4f7a9a", "#e0894a"];
-const DANCES: Array<[string, string]> = [
-  ["dz-wave-l", "dz-wave-r"],
-  ["dz-wave-l", "dz-fever-r"],
-  ["dz-up-l", "dz-up-r"],
-  ["dz-still", "dz-wave-r"]
-];
-
-/** Look and dance of one oudje; the seed keeps them the same between renders. */
-function oudjeLook(seed: number) {
-  const r = seeded(seed * 97 + 13);
-  const pick = <T,>(list: T[]) => list[Math.floor(r() * list.length)];
-  const skin = pick(SKIN);
-  const hair = pick(HAIR);
-  const cloth = pick(CLOTHES);
-  const cloth2 = pick(CLOTHES);
-  const dress = r() < 0.55;
-  const glasses = r() < 0.6;
-  const hairStyle = Math.floor(r() * 4);
-  const pearls = dress && r() < 0.5;
-  const [al, ar] = pick(DANCES);
-  const d0 = (1.1 + r() * 0.6).toFixed(2);
-  const dl = (-r() * 2).toFixed(2);
-  const armColor = dress ? skin : cloth;
-
-  const hairShape = [
-    <g key="bun" fill={hair}>
-      <circle cx="24" cy="12" r="4.2" />
-      <path d="M16 21c0-7 4-10 8-10s8 3 8 10c-2-4-5-5-8-5s-6 1-8 5z" />
-    </g>,
-    <g key="perm" fill={hair}>
-      <circle cx="18" cy="17" r="3.6" />
-      <circle cx="22" cy="14" r="3.8" />
-      <circle cx="27" cy="14" r="3.8" />
-      <circle cx="30.5" cy="17.5" r="3.4" />
-      <circle cx="16.5" cy="21" r="2.6" />
-      <circle cx="31.5" cy="21.5" r="2.6" />
-    </g>,
-    <path key="fringe" d="M16 23c0-3 1-5 2-6M32 23c0-3-1-5-2-6" stroke={hair} strokeWidth="3.2" strokeLinecap="round" fill="none" />,
-    <path key="short" d="M15.5 22c-.5-8 4-11 8.5-11s9 3 8.5 11c-1.5-5-4.5-6.5-8.5-6.5S17 17 15.5 22z" fill={hair} />
-  ][hairStyle];
-
-  return {
-    style: { "--al": al, "--ar": ar, "--d0": `${d0}s`, "--dl": `${dl}s` } as CSSProperties,
-    svg: (
-      <svg viewBox="0 0 48 78">
-        <ellipse cx="24" cy="76" rx="11" ry="2.4" fill="#261f1f" opacity=".18" />
-        <g className="move">
-          <path d="M20 58 L19 73 M28 58 L29 73" stroke={dress ? skin : "#261f1f"} strokeWidth="3.4" strokeLinecap="round" />
-          <path d="M15.5 74.5h6M26.5 74.5h6" stroke="#261f1f" strokeWidth="3" strokeLinecap="round" />
-          {dress ? (
-            <path d="M15 33 Q24 29 33 33 L37 59 Q24 63 11 59 Z" fill={cloth} stroke="#261f1f" strokeWidth="1.2" />
-          ) : (
-            <>
-              <path d="M15 33 Q24 29 33 33 L34 52 L14 52 Z" fill={cloth} stroke="#261f1f" strokeWidth="1.2" />
-              <path d="M24 31v21" stroke="#261f1f" strokeWidth=".9" opacity=".5" />
-              <rect x="15" y="51" width="18" height="9" rx="2" fill={cloth2 === cloth ? "#5c4238" : cloth2} stroke="#261f1f" strokeWidth="1.1" />
-            </>
-          )}
-          {pearls ? <path d="M19 32.5 Q24 36 29 32.5" stroke="#fffdf6" strokeWidth="1.6" strokeDasharray="0.1 2.2" strokeLinecap="round" fill="none" /> : null}
-          <g className="arm-l">
-            <path d="M15 37 L8 48" stroke={armColor} strokeWidth="3.6" strokeLinecap="round" />
-            <circle cx="8" cy="48.5" r="2.4" fill={skin} />
-          </g>
-          <g className="arm-r">
-            <path d="M33 37 L40 48" stroke={armColor} strokeWidth="3.6" strokeLinecap="round" />
-            <circle cx="40" cy="48.5" r="2.4" fill={skin} />
-          </g>
-          <circle cx="24" cy="22" r="8" fill={skin} stroke="#261f1f" strokeWidth="1.1" />
-          {hairShape}
-          <path d="M21 26.2 Q24 28.6 27 26.2" stroke="#261f1f" strokeWidth="1.1" fill="none" strokeLinecap="round" />
-          <circle cx="19.6" cy="25" r="1.4" fill="#e88a7a" opacity=".55" />
-          <circle cx="28.4" cy="25" r="1.4" fill="#e88a7a" opacity=".55" />
-          {glasses ? (
-            <g fill="none" stroke="#261f1f" strokeWidth=".9">
-              <circle cx="21" cy="22" r="2.3" />
-              <circle cx="27" cy="22" r="2.3" />
-              <path d="M23.3 22h1.4" />
-            </g>
-          ) : (
-            <>
-              <circle cx="21.2" cy="22" r=".9" fill="#261f1f" />
-              <circle cx="26.8" cy="22" r=".9" fill="#261f1f" />
-            </>
-          )}
-        </g>
-      </svg>
-    )
-  };
-}
-
-/** Fixed spots on the floor: filled from the middle front outwards, back rows smaller. */
-const SLOTS = (() => {
-  const r = seeded(7);
-  const out: Array<{ x: number; y: number; k: number }> = [];
-  const rows = 5;
-  const cols = 9;
-  for (let row = 0; row < rows; row++) {
-    for (let c = 0; c < cols; c++) {
-      const y = 0.26 + (row / (rows - 1)) * 0.72;
-      const x = 0.06 + ((c + (row % 2 ? 0.5 : 0)) / cols) * 0.9 + (r() - 0.5) * 0.04;
-      out.push({ x: Math.min(0.96, x), y: y + (r() - 0.5) * 0.04, k: Math.abs(x - 0.5) * 1.2 + (1 - y) * 0.9 + r() * 0.15 });
-    }
-  }
-  return out.sort((a, b) => a.k - b.k).slice(0, FLOOR_CAPACITY);
-})();
-
-const RAISINS: Array<[number, number, number, number]> = [
-  [26, 33, 2.8, -20], [40, 30, 2.5, 25], [33, 42, 2.6, 0], [47, 40, 2.1, 10], [18, 38, 2, -10],
-  [36, 22, 2, 30], [22, 46, 2.2, 15], [44, 49, 1.9, -25], [29, 52, 2, 5], [14, 29, 1.7, 0]
-];
-const FLAG_COLORS = ["#d05438", "#dcc05d", "#69873c", "#5c4238", "#fffdf6"];
-
-function DiscoOliebol() {
-  return (
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <path d="M33 5c8 0 12 4 17 7 6 4 10 10 9 18 0 9-3 15-8 20-6 6-13 9-21 8-8-1-15-4-20-10C5 42 4 35 6 28c2-8 7-13 13-18 4-3 9-5 14-5z" fill="#b5763c" stroke="#261f1f" strokeWidth="2.2" strokeLinejoin="round" />
-      <path d="M12 40c4 8 12 13 21 13 8 0 15-4 19-11" fill="none" stroke="#7d4a22" strokeWidth="3" strokeLinecap="round" opacity=".55" />
-      <path d="M17 19c3-5 8-8 14-8" fill="none" stroke="#e8b97d" strokeWidth="3" strokeLinecap="round" />
-      <g fill="#fffdf6">
-        <circle cx="24" cy="14" r="2" />
-        <circle cx="31" cy="11" r="1.6" />
-        <circle cx="38" cy="14" r="2.2" />
-        <circle cx="44" cy="19" r="1.5" />
-        <circle cx="20" cy="22" r="1.4" />
-        <circle cx="28" cy="20" r="1.7" />
-        <ellipse cx="42" cy="11" rx="2" ry="1.3" />
-      </g>
-      {RAISINS.map(([x, y, r, a]) => (
-        <ellipse key={`${x}-${y}`} className="raisin" cx={x} cy={y} rx={r} ry={+(r * 0.68).toFixed(1)} transform={`rotate(${a} ${x} ${y})`} fill="#261f1f" />
-      ))}
-    </svg>
-  );
-}
-
-function Dancer({ seed, slot, enter }: { seed: number; slot?: { x: number; y: number }; enter?: boolean }) {
-  const o = oudjeLook(seed);
-  const place: CSSProperties = slot
-    ? { left: `${(slot.x * 100).toFixed(1)}%`, top: `${(slot.y * 100).toFixed(1)}%`, zIndex: Math.round(slot.y * 100), ["--s" as string]: (0.72 + slot.y * 0.42).toFixed(2) }
-    : {};
-  return (
-    <div className={`dz-dancer ${enter ? "enter" : ""}`} style={{ ...o.style, ...place }}>
-      {o.svg}
     </div>
-  );
-}
-
-function readDisco(): boolean {
-  try {
-    return localStorage.getItem(DISCO_KEY) !== "uit";
-  } catch {
-    return true;
-  }
-}
-
-/** The dance floor: one oudje per ten oliebollen under a spinning oliebol; "lichtgevende krenten" turns on the disco. */
-export function Discozaal({ oliebollen }: { oliebollen: number }) {
-  const [disco, setDisco] = useState(readDisco);
-  const oudjes = oudjesFor(oliebollen);
-  const onFloor = Math.min(oudjes, FLOOR_CAPACITY);
-  const polonaise = oudjes - onFloor;
-
-  // Dancers that appear after the first render come in with a hop.
-  const firstCount = useRef(onFloor);
-  const previous = useRef(oudjes);
-  useEffect(() => {
-    const before = previous.current;
-    previous.current = oudjes;
-    if (oudjes - before === 1) toast(oudjes === 1 ? "Het eerste oudje komt binnen!" : `Oudje ${formatNumber(oudjes)} komt binnen!`);
-  }, [oudjes]);
-
-  function toggle() {
-    const next = !disco;
-    setDisco(next);
-    try {
-      localStorage.setItem(DISCO_KEY, next ? "aan" : "uit");
-    } catch {
-      // Not remembered in private mode.
-    }
-  }
-
-  return (
-    <section className="grid gap-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2.5">
-        <button
-          type="button"
-          aria-pressed={disco}
-          onClick={toggle}
-          className="dz-switch inline-flex items-center gap-2.5 rounded-full bg-papier py-1.5 pl-1.5 pr-3.5 text-sm font-bold text-krent shadow-zacht"
-        >
-          <span className="knob" />
-          <span className="glow" />
-          Lichtgevende krenten
-        </button>
-        <p className="text-xs text-muted">
-          {polonaise > 0 ? `${formatNumber(oudjes)} oudjes: ${FLOOR_CAPACITY} op de vloer, de rest in de polonaise.` : "Eén figuurtje = één oudje = tien oliebollen."}
-        </p>
-      </div>
-      <div className={`dz-zaal shadow-zacht ${disco ? "disco" : ""}`} role="img" aria-label={`Discozaal met ${formatNumber(oudjes)} dansende oudjes`}>
-        <div className="dz-wall" />
-        <div className="dz-wall-dark" />
-        <svg className="dz-bunting" viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0 6 Q500 30 1000 6" fill="none" stroke="#261f1f" strokeWidth="1.5" />
-          {Array.from({ length: 24 }, (_, i) => {
-            const x = 20 + i * 41;
-            const t = x / 1000;
-            const y = 6 + 24 * 4 * t * (1 - t) * 0.98;
-            return <path key={i} d={`M${x - 11} ${y} L${x + 11} ${y} L${x} ${y + 22} Z`} fill={FLAG_COLORS[i % 5]} stroke="#261f1f" strokeWidth=".8" />;
-          })}
-        </svg>
-        <div className="dz-banner">Gouwe Ouwe-avond</div>
-        <div className="dz-sign">
-          Vanavond<b className="tabular-nums">{formatNumber(oudjes)}</b>gasten
-        </div>
-        <div className="dz-floor" />
-        <div className="dz-floor-disco" />
-        <div className="dz-beams" aria-hidden="true">
-          <div className="dz-beam b1" />
-          <div className="dz-beam b2" />
-          <div className="dz-beam b3" />
-          <div className="dz-beam b4" />
-        </div>
-        <div className="dz-cord" />
-        <div className="dz-ball">
-          <DiscoOliebol />
-        </div>
-        {[[-70, 30, 0], [64, 10, 0.5], [-50, 100, 1.1], [80, 80, 0.8], [-90, 70, 1.4], [40, 120, 0.3]].map(([dx, dy, delay]) => (
-          <span key={`${dx}-${dy}`} className="dz-sparkle" style={{ left: `calc(50% + ${dx}px)`, top: dy + 30, animationDelay: `${delay}s` }} />
-        ))}
-        <div className="dz-dancefloor" aria-hidden="true">
-          {SLOTS.slice(0, onFloor).map((slot, i) => (
-            <Dancer key={i} seed={i + 1} slot={slot} enter={i >= firstCount.current} />
-          ))}
-        </div>
-        {oudjes === 0 ? (
-          <div className="dz-empty">
-            <p className="font-serif text-lg font-bold text-krent">De dansvloer is nog leeg.</p>
-            <p className="text-[13px] text-muted">Bij 10 oliebollen komt het eerste oudje binnen.</p>
-          </div>
-        ) : null}
-        {polonaise > 0 ? (
-          <>
-            <div className="dz-polo-tag">+ {formatNumber(polonaise)} in de polonaise</div>
-            <div className="dz-polonaise" aria-hidden="true">
-              <div className="line">
-                {Array.from({ length: Math.min(14, polonaise) }, (_, i) => (
-                  <Dancer key={i} seed={500 + i} />
-                ))}
-              </div>
-            </div>
-          </>
-        ) : null}
-        {oliebollen >= GOAL_OLIEBOLLEN ? (
-          <div className="dz-goal">
-            <Sticker tone="kerst">Doel gehaald!</Sticker>
-          </div>
-        ) : null}
-      </div>
-    </section>
   );
 }

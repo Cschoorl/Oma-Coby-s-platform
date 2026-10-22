@@ -1,8 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, secondaryButton, toast, todayIso, type Delta } from "../../components/ui";
-import { Discozaal, Rollatorbalk, Verkoopteller } from "./Discozaal";
-import { exportStand } from "./exportStand";
+import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, secondaryButton, todayIso, type Delta } from "../../components/ui";
+import { DiscoBallIcon, Discozaal, oudjesFor } from "./Discozaal";
+import { OLIEBOLLEN_PER_OUDJE } from "../../config";
+import { ShareStand } from "./ShareStand";
+import type { StandData } from "./exportStand";
 
 type Metric = "oliebollen" | "orders" | "revenue";
 
@@ -45,7 +47,9 @@ function cumulativeUpTo(season: Season, cutoff: number, metric: Metric): number 
 
 export function StatsPage({ state }: { state: DashboardState }) {
   const [metric, setMetric] = useState<Metric>("oliebollen");
-  const [exporting, setExporting] = useState(false);
+  // The chart card shows the cumulative chart, or the disco hall behind the disco-ball button.
+  const [view, setView] = useState<"grafiek" | "disco">("grafiek");
+  const [sharing, setSharing] = useState<StandData | null>(null);
 
   const { seasons, revenueSource, currentYear, cutoff } = useMemo(() => {
     const byYear = new Map<number, Map<number, DayPoint>>();
@@ -121,24 +125,13 @@ export function StatsPage({ state }: { state: DashboardState }) {
 
   const seasonOliebollen = thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0;
 
-  async function onExport() {
-    setExporting(true);
-    try {
-      const comparison = delta(now.oliebollen, last.oliebollen);
-      await exportStand({
-        date: todayIso(),
-        oliebollen: seasonOliebollen,
-        orders: thisSeason ? cumulativeUpTo(thisSeason, 0, "orders") : 0,
-        revenue: revenueSource === "none" || !thisSeason ? null : cumulativeUpTo(thisSeason, 0, "revenue"),
-        revenueIsEstimate: revenueSource === "estimate",
-        comparison: comparison && pastSeasons[0] ? `${comparison.text}` : undefined
-      });
-      toast("De stand van vandaag staat in je downloads.");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Exporteren lukte niet.");
-    } finally {
-      setExporting(false);
-    }
+  const oudjes = oudjesFor(seasonOliebollen);
+
+  function openShare() {
+    // The season so far, added up per day: the line on the card.
+    let running = 0;
+    const curve = (thisSeason?.days ?? []).filter((d) => d.daysBefore >= cutoff).map((d) => (running += d.oliebollen));
+    setSharing({ date: todayIso(), oliebollen: seasonOliebollen, curve: [0, ...curve] });
   }
 
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
@@ -153,11 +146,6 @@ export function StatsPage({ state }: { state: DashboardState }) {
           Er zijn nog geen cijfers van voorgaande jaren. Vul het tabblad <code>Historie</code> in de Sheet (jaar, datum, bestellingen, oliebollen, omzet) om te vergelijken.
         </Notice>
       ) : null}
-
-      {/* The stand as a disco: one oudje per ten oliebollen sold this season. */}
-      <Verkoopteller oliebollen={seasonOliebollen} />
-      <Rollatorbalk oliebollen={seasonOliebollen} />
-      <Discozaal oliebollen={seasonOliebollen} />
 
       <StatStrip
         items={[
@@ -183,25 +171,45 @@ export function StatsPage({ state }: { state: DashboardState }) {
 
       <Card>
         <SectionTitle
-          title={`${metricLabel[metric]} opgeteld per dag`}
-          subtitle="Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
+          title={view === "disco" ? "Discozaal" : `${metricLabel[metric]} opgeteld per dag`}
+          subtitle={
+            view === "disco"
+              ? `Per ${OLIEBOLLEN_PER_OUDJE} verkochte oliebollen danst er een oudje bij.`
+              : "Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
+          }
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <Segmented
-                label="Metriek"
-                value={metric}
-                onChange={setMetric}
-                options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
-              />
-              <button type="button" className={secondaryButton} disabled={exporting} onClick={() => void onExport()} title="Bewaar de stand van vandaag als afbeelding">
-                <Icon name="download" />
-                {exporting ? "Bezig…" : "Exporteer stand"}
+              {view === "grafiek" ? (
+                <Segmented
+                  label="Metriek"
+                  value={metric}
+                  onChange={setMetric}
+                  options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
+                />
+              ) : null}
+              {/* The disco-ball button shows the oudjes right away; clicking it turns the chart into the disco hall. */}
+              <button
+                type="button"
+                aria-pressed={view === "disco"}
+                onClick={() => setView((v) => (v === "disco" ? "grafiek" : "disco"))}
+                title={view === "disco" ? "Terug naar de grafiek" : "Open de discozaal"}
+                className={`inline-flex min-h-[40px] items-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition ${
+                  view === "disco" ? "bg-gouwe-100 text-krent ring-1 ring-inset ring-gouwe" : "bg-gouwe-50 text-krent hover:bg-gouwe-100"
+                }`}
+              >
+                <DiscoBallIcon />
+                <span className="tabular-nums">{formatNumber(oudjes)}</span> {oudjes === 1 ? "oudje" : "oudjes"}
+              </button>
+              <button type="button" className={secondaryButton} onClick={openShare} title="Deel de stand van vandaag als kaartje">
+                <Icon name="share" />
+                Deel stand
               </button>
             </div>
           }
         />
-        <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />
+        {view === "disco" ? <Discozaal oliebollen={seasonOliebollen} /> : <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />}
       </Card>
+      {sharing ? <ShareStand data={sharing} onClose={() => setSharing(null)} /> : null}
 
       <Card>
         <SectionTitle title="Per seizoen" subtitle={`Zelfde periode (${periodLabel}) naast het hele seizoen t/m 31 december.`} />

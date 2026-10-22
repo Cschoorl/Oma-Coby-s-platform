@@ -1,122 +1,96 @@
-/* Discozaal, Verkoopteller en Rollatorbalk (Tussenstand). Animaties staan uit bij "minder beweging" (styles.css). */
+/* Discozaal op de Tussenstand (achter de discobal-knop bij de grafiek).
+   Licht, op dashboard-detail. Animaties staan uit bij "minder beweging" (styles.css). */
 
-/* ---------- Verkoopteller ---------- */
-.dz-dots { display: flex; flex-wrap: wrap; gap: 5px; }
-.dz-dot { position: relative; width: 20px; height: 20px; border-radius: 50%; background: rgba(92, 66, 56, 0.07); transition: background-color 0.25s, transform 0.25s; }
-.dz-dot.on { background: radial-gradient(circle at 35% 30%, #e8b97d 0 18%, #b5763c 45%, #8a5428 100%); transform: scale(1.05); }
-.dz-dot.on::after { content: ""; position: absolute; left: 5px; top: 4px; width: 9px; height: 4px; border-radius: 50%; background: #fffdf6; opacity: 0.9; }
+/* ---------- de zaal ---------- */
+.dz-zaal { position: relative; height: 230px; overflow: hidden; isolation: isolate; border-radius: 8px;
+  background: radial-gradient(ellipse 50% 70% at 50% 0%, rgba(255, 233, 160, 0.7), transparent 70%), linear-gradient(#fbf4da, #f3e6bd); }
+.dz-flecks { position: absolute; inset: 0 0 40px 0; opacity: 0.55; animation: dz-flecks 14s linear infinite;
+  background-image: radial-gradient(circle, rgba(208, 84, 56, 0.55) 0 1.4px, transparent 2px), radial-gradient(circle, rgba(220, 160, 40, 0.6) 0 1.6px, transparent 2.2px), radial-gradient(circle, rgba(105, 135, 60, 0.5) 0 1.3px, transparent 2px);
+  background-size: 120px 70px, 160px 90px, 140px 80px; background-position: 0 0, 50px 25px, 90px 45px; }
+@keyframes dz-flecks { to { background-position: 120px 0, 210px 25px, 230px 45px; } }
+.dz-slinger { position: absolute; left: 0; top: 0; width: 100%; height: 44px; }
+.dz-ball { position: absolute; left: 50%; top: 0; z-index: 2; width: 56px; transform: translateX(-50%); }
+.dz-ball svg { display: block; width: 56px; height: 74px; overflow: visible; }
+.dz-ball .spin { transform-box: fill-box; transform-origin: 50% 50%; animation: dz-wobble 4s ease-in-out infinite; }
+@keyframes dz-wobble { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+.dz-glint { transform-box: fill-box; transform-origin: center; animation: dz-glint 1.8s ease-in-out infinite; }
+@keyframes dz-glint { 0%, 100% { opacity: 0; transform: scale(0.3); } 50% { opacity: 1; transform: scale(1); } }
 
-/* ---------- Rollatorbalk ---------- */
-.dz-track { position: relative; height: 22px; border-radius: 11px; background: rgba(92, 66, 56, 0.07); }
-.dz-fill { position: absolute; inset: 0 auto 0 0; border-radius: 11px; background: linear-gradient(90deg, #dcc05d, #d05438); transition: width 1.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.dz-walker { position: absolute; bottom: 14px; width: 74px; height: 74px; transform: translateX(-62%); transition: left 1.2s cubic-bezier(0.2, 0.8, 0.2, 1); pointer-events: none; }
-.dz-walker svg { width: 100%; height: 100%; overflow: visible; }
-.dz-walker .bob { transform-box: view-box; animation: dz-walkbob 0.7s ease-in-out infinite; }
-.dz-walker .leg-a { transform-box: view-box; transform-origin: 27px 44px; animation: dz-step 0.7s ease-in-out infinite; }
-.dz-walker .leg-b { transform-box: view-box; transform-origin: 27px 44px; animation: dz-step 0.7s ease-in-out infinite reverse; }
-.dz-walker .wheel { transform-box: fill-box; transform-origin: center; animation: dz-wheel 1s linear infinite; }
-.dz-walker.idle .bob, .dz-walker.idle .leg-a, .dz-walker.idle .leg-b, .dz-walker.idle .wheel { animation-play-state: paused; }
-@keyframes dz-walkbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.5px); } }
-@keyframes dz-step { 0%, 100% { transform: rotate(14deg); } 50% { transform: rotate(-14deg); } }
-@keyframes dz-wheel { to { transform: rotate(360deg); } }
-.dz-mile { position: absolute; top: -6px; bottom: -6px; width: 2px; border-radius: 1px; background: #261f1f; }
-.dz-mile .t { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; text-align: center; font-size: 11px; line-height: 14px; font-weight: 700; color: #6d5a4f; }
-.dz-mile .t small { display: block; font-weight: 400; font-size: 11px; }
-.dz-mile.hit .t { color: #3c561b; }
-.dz-mile .dz-hit { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%) rotate(-6deg); }
-.dz-flag { position: absolute; right: -2px; bottom: 14px; width: 26px; height: 46px; }
+/* massa achterin: vult zich en schuift naar voren naarmate het drukker wordt */
+.dz-crowd { position: absolute; inset: 0; z-index: 1; transform-origin: 50% 100%; transform: translateY(calc((1 - var(--fill, 0)) * 22px)) scale(calc(0.88 + var(--fill, 0) * 0.14)); transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.dz-crow { position: absolute; left: 24px; right: 24px; height: 30px; transform-origin: 50% 100%; }
+.dz-crow.r1 { bottom: 92px; opacity: 0.55; transform: scale(0.86); }
+.dz-crow.r2 { bottom: 74px; opacity: 0.72; transform: scale(0.93); }
+.dz-crow.r3 { bottom: 56px; opacity: 0.9; }
+.dz-crow .p { position: absolute; bottom: 0; width: 18px; height: 24px; transform: translateX(-50%); animation: dz-bob 0.6s ease-in-out infinite alternate; }
+.dz-crow .p svg { display: block; width: 100%; height: 100%; }
+@keyframes dz-bob { from { transform: translate(-50%, 0); } to { transform: translate(-50%, -2px); } }
 
-/* ---------- Discozaal ---------- */
-.dz-zaal { position: relative; height: 520px; overflow: hidden; isolation: isolate; border-radius: 14px; background: #f6ecc8; transition: background-color 0.6s; }
-.dz-wall { position: absolute; inset: 0 0 44% 0; background: linear-gradient(#fbf3d6, #f1e3b4); transition: opacity 0.6s; }
-.dz-wall-dark { position: absolute; inset: 0 0 44% 0; background: radial-gradient(ellipse at 50% 0%, #3a2a2a 0%, #1b1414 70%); opacity: 0; transition: opacity 0.6s; }
-.dz-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 44%; background: repeating-linear-gradient(90deg, rgba(92, 66, 56, 0.1) 0 2px, transparent 2px 48px), linear-gradient(#e2c99e, #d4b483); transition: filter 0.6s; }
-.dz-floor-disco {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 44%; opacity: 0; transition: opacity 0.6s;
-  background:
-    radial-gradient(circle at 20% 40%, rgba(220, 192, 93, 0.55), transparent 22%),
-    radial-gradient(circle at 70% 70%, rgba(208, 84, 56, 0.55), transparent 24%),
-    radial-gradient(circle at 45% 20%, rgba(105, 135, 60, 0.55), transparent 20%),
-    repeating-conic-gradient(#2a1f1f 0 25%, #3a2b26 0 50%) 0 0 / 48px 48px;
-  background-size: 200% 200%, 200% 200%, 200% 200%, 48px 48px;
-  animation: dz-floorspots 6s ease-in-out infinite alternate;
-}
-@keyframes dz-floorspots { 0% { background-position: 0% 0%, 100% 100%, 50% 0%, 0 0; } 100% { background-position: 100% 60%, 0% 20%, 20% 100%, 0 0; } }
-.dz-bunting { position: absolute; left: 0; right: 0; top: 18px; z-index: 2; height: 40px; width: 100%; }
-.dz-banner { position: absolute; left: 50%; top: 172px; z-index: 1; transform: translateX(-50%) rotate(-2deg); white-space: nowrap; border-radius: 4px; background: #d05438; padding: 8px 18px 6px; font-family: Bangers, Impact, sans-serif; font-size: 30px; line-height: 1; letter-spacing: 0.04em; color: #f9f3d9; text-transform: uppercase; transition: box-shadow 0.6s, color 0.6s; }
-.dz-sign { position: absolute; right: 16px; top: 70px; z-index: 2; transform: rotate(3deg); border-radius: 6px; background: #261f1f; padding: 8px 12px; text-align: center; font-size: 11px; line-height: 15px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #f9f3d9; box-shadow: 0 4px 16px rgba(38, 31, 31, 0.1); }
-.dz-sign b { display: block; font-family: Bangers, Impact, sans-serif; font-size: 28px; font-weight: 400; line-height: 1; letter-spacing: 0.02em; color: #dcc05d; }
-.dz-cord { position: absolute; left: 50%; top: 0; z-index: 3; width: 2px; height: 40px; transform: translateX(-50%); background: #261f1f; }
-.dz-ball { position: absolute; left: 50%; top: 36px; z-index: 3; width: 112px; height: 112px; transform: translateX(-50%); }
-.dz-ball svg { display: block; width: 100%; height: 100%; overflow: visible; animation: dz-spin 7s linear infinite; }
-@keyframes dz-spin { to { transform: rotate(360deg); } }
-.dz-sparkle { position: absolute; z-index: 4; width: 14px; height: 14px; opacity: 0; pointer-events: none; }
-.dz-sparkle::before, .dz-sparkle::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 2px; border-radius: 2px; background: #fffbe6; box-shadow: 0 0 6px #ffe68a; transform: translate(-50%, -50%); }
-.dz-sparkle::after { transform: translate(-50%, -50%) rotate(90deg); }
-.dz-beams { position: absolute; left: 50%; top: 92px; z-index: 1; width: 0; height: 0; opacity: 0; transition: opacity 0.6s; }
-.dz-beam { position: absolute; left: -70px; top: 0; width: 140px; height: 560px; transform-origin: 50% 0; clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%); mix-blend-mode: screen; }
-.dz-beam.b1 { background: linear-gradient(rgba(220, 192, 93, 0.7), transparent 85%); animation: dz-sweep 5.5s ease-in-out infinite alternate; --from: -50deg; --to: 10deg; }
-.dz-beam.b2 { background: linear-gradient(rgba(208, 84, 56, 0.7), transparent 85%); animation: dz-sweep 4.2s ease-in-out infinite alternate; --from: 40deg; --to: -15deg; }
-.dz-beam.b3 { background: linear-gradient(rgba(105, 135, 60, 0.75), transparent 85%); animation: dz-sweep 6.4s ease-in-out infinite alternate; --from: -20deg; --to: 55deg; }
-.dz-beam.b4 { background: linear-gradient(rgba(255, 246, 200, 0.5), transparent 80%); animation: dz-sweep 3.6s ease-in-out infinite alternate; --from: 15deg; --to: -45deg; }
-@keyframes dz-sweep { from { transform: rotate(var(--from)); } to { transform: rotate(var(--to)); } }
+.dz-floor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 26px; border-top: 1px solid rgba(92, 66, 56, 0.12); background: repeating-linear-gradient(90deg, #ead6ad 0 56px, #e3cb9c 56px 112px); }
 
-.dz-dancefloor { position: absolute; left: 3%; right: 3%; bottom: 2%; z-index: 5; height: 46%; }
-.dz-dancer { --d: var(--d0, 1.4s); position: absolute; width: 54px; height: 88px; transform: translate(-50%, -100%) scale(var(--s, 1)); transform-origin: 50% 100%; }
-.dz-zaal:not(.disco) .dz-dancer { --d: calc(var(--d0, 1.4s) * 1.7); }
-.dz-dancer svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.dz-dancer .move { transform-box: view-box; transform-origin: 24px 76px; animation: dz-bob var(--d) ease-in-out infinite; animation-delay: var(--dl, 0s); }
-.dz-dancer .arm-l { transform-box: view-box; transform-origin: 15px 37px; animation: var(--al, dz-wave-l) var(--d) ease-in-out infinite; animation-delay: var(--dl, 0s); }
-.dz-dancer .arm-r { transform-box: view-box; transform-origin: 33px 37px; animation: var(--ar, dz-wave-r) var(--d) ease-in-out infinite; animation-delay: var(--dl, 0s); }
-.dz-dancer.enter { animation: dz-enter 0.7s cubic-bezier(0.2, 1.4, 0.4, 1); }
-@keyframes dz-enter { 0% { transform: translate(-50%, -160%) scale(calc(var(--s, 1) * 0.4)); } 100% { transform: translate(-50%, -100%) scale(var(--s, 1)); } }
-@keyframes dz-bob { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-4px) rotate(4deg); } }
-@keyframes dz-wave-l { 0%, 100% { transform: rotate(10deg); } 50% { transform: rotate(-35deg); } }
-@keyframes dz-wave-r { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(35deg); } }
-@keyframes dz-fever-r { 0%, 100% { transform: rotate(-150deg); } 50% { transform: rotate(-40deg); } }
-@keyframes dz-up-l { 0%, 100% { transform: rotate(150deg); } 50% { transform: rotate(120deg); } }
-@keyframes dz-up-r { 0%, 100% { transform: rotate(-150deg); } 50% { transform: rotate(-120deg); } }
-@keyframes dz-still { 0%, 100% { transform: none; } }
-.dz-empty { position: absolute; left: 50%; bottom: 18%; z-index: 6; width: max-content; max-width: 86%; transform: translateX(-50%); border-radius: 10px; background: rgba(255, 253, 246, 0.92); padding: 12px 18px; text-align: center; box-shadow: 0 4px 16px rgba(38, 31, 31, 0.1); }
-.dz-polonaise { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; height: 64px; overflow: hidden; pointer-events: none; }
-.dz-polonaise .line { position: absolute; bottom: 4px; left: 0; display: flex; gap: 2px; animation: dz-conga 14s linear infinite; }
-.dz-polonaise .dz-dancer { position: relative; width: 30px; height: 50px; transform: none; }
-.dz-polonaise .dz-dancer .move { animation-name: dz-hop; }
-@keyframes dz-hop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-@keyframes dz-conga { from { transform: translateX(-100%); } to { transform: translateX(110vw); } }
-.dz-polo-tag { position: absolute; left: 12px; bottom: 58px; z-index: 8; border-radius: 4px; background: #dcc05d; padding: 3px 8px; font-size: 12px; line-height: 16px; font-weight: 700; color: #261f1f; }
-.dz-goal { position: absolute; left: 18px; top: 64px; z-index: 6; }
+/* dansers */
+.dz-dancers { position: absolute; inset: 0; z-index: 3; }
+.dz-d { position: absolute; bottom: 8px; width: 54px; height: 84px; transform: translateX(-50%); }
+.dz-d svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dz-d .sway { transform-box: view-box; transform-origin: 30px 90px; animation: dz-sway var(--sw, 2.4s) ease-in-out infinite; animation-delay: var(--dl, 0s); }
+@keyframes dz-sway { 0%, 100% { transform: translateX(-3px) rotate(-2deg); } 50% { transform: translateX(3px) rotate(2deg); } }
+.dz-d .arm-l { transform-box: view-box; transform-origin: 20px 41px; }
+.dz-d .arm-r { transform-box: view-box; transform-origin: 40px 41px; }
+.dz-d .hat { transform-box: view-box; transform-origin: 30px 12px; }
+.dz-d .jump { transform-box: view-box; transform-origin: 30px 90px; }
+.dz-d.enter { animation: dz-walkin 0.8s cubic-bezier(0.2, 1.2, 0.4, 1); }
+@keyframes dz-walkin { from { transform: translate(calc(-50% - 50px), 0); } to { transform: translate(-50%, 0); } }
 
-/* krenten aan: disco */
-.dz-zaal.disco { background: #1b1414; }
-.dz-zaal.disco .dz-wall { opacity: 0; }
-.dz-zaal.disco .dz-wall-dark, .dz-zaal.disco .dz-floor-disco, .dz-zaal.disco .dz-beams { opacity: 1; }
-.dz-zaal.disco .dz-floor { filter: brightness(0.35); }
-.dz-zaal.disco .dz-banner { color: #fff8e6; box-shadow: 0 0 18px rgba(208, 84, 56, 0.9), 0 0 42px rgba(208, 84, 56, 0.5); }
-.dz-zaal.disco .dz-ball svg { animation-duration: 3s; }
-.dz-zaal.disco .dz-ball .raisin { animation: dz-glow 1.6s ease-in-out infinite; }
-.dz-zaal.disco .dz-ball .raisin:nth-of-type(2n) { animation-duration: 1.2s; animation-delay: -0.4s; }
-.dz-zaal.disco .dz-ball .raisin:nth-of-type(3n) { animation-duration: 2s; animation-delay: -0.9s; }
-@keyframes dz-glow {
-  0%, 100% { fill: #ffd84d; filter: drop-shadow(0 0 3px #ffd84d) drop-shadow(0 0 7px #ffb84d); }
-  33% { fill: #ff7a59; filter: drop-shadow(0 0 3px #ff7a59) drop-shadow(0 0 8px #ff7a59); }
-  66% { fill: #b6f07a; filter: drop-shadow(0 0 3px #b6f07a) drop-shadow(0 0 8px #9fe06b); }
-}
-.dz-zaal.disco .dz-sparkle { animation: dz-twinkle 1.8s ease-in-out infinite; }
-@keyframes dz-twinkle { 0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
+.m-wave .arm-l { animation: dz-wave-l 1.2s ease-in-out infinite; } .m-wave .arm-r { animation: dz-wave-r 1.2s ease-in-out infinite; }
+@keyframes dz-wave-l { 0%, 100% { transform: rotate(150deg); } 50% { transform: rotate(115deg); } }
+@keyframes dz-wave-r { 0%, 100% { transform: rotate(-115deg); } 50% { transform: rotate(-150deg); } }
+.m-pump .arm-l { animation: dz-pump-l 1.2s ease-in-out infinite; } .m-pump .arm-r { animation: dz-pump-r 1.2s ease-in-out infinite; }
+@keyframes dz-pump-l { 0%, 100% { transform: rotate(10deg); } 50% { transform: rotate(90deg); } }
+@keyframes dz-pump-r { 0%, 100% { transform: rotate(-90deg); } 50% { transform: rotate(-10deg); } }
+.m-cane .arm-r { animation: dz-cane 2.4s ease-in-out infinite; } .m-cane .arm-l { transform: rotate(30deg); }
+@keyframes dz-cane { 0%, 100% { transform: rotate(-12deg); } 40%, 60% { transform: rotate(-130deg); } 50% { transform: rotate(-112deg); } }
+.m-hat .arm-r { animation: dz-hat-arm 2.8s ease-in-out infinite; } .m-hat .hat { animation: dz-hat-up 2.8s ease-in-out infinite; } .m-hat .arm-l { animation: dz-pump-l 1.4s ease-in-out infinite; }
+@keyframes dz-hat-arm { 0%, 15%, 85%, 100% { transform: rotate(-10deg); } 35%, 65% { transform: rotate(-168deg); } }
+@keyframes dz-hat-up { 0%, 30%, 70%, 100% { transform: translateY(0) rotate(0); } 42%, 58% { transform: translateY(-10px) rotate(-12deg); } }
+.m-hop .jump { animation: dz-hop 0.6s cubic-bezier(0.3, 0, 0.4, 1) infinite alternate; } .m-hop .arm-l { animation: dz-wave-l 0.6s ease-in-out infinite alternate; } .m-hop .arm-r { animation: dz-wave-r 0.6s ease-in-out infinite alternate; } .m-hop .sway { animation-duration: 3.4s; }
+@keyframes dz-hop { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+.m-fever .arm-r { animation: dz-fever 1.2s ease-in-out infinite; } .m-fever .arm-l { transform: rotate(35deg); }
+@keyframes dz-fever { 0%, 100% { transform: rotate(-155deg); } 50% { transform: rotate(-30deg); } }
+.m-twist .arm-l { animation: dz-twist-l 1s ease-in-out infinite; } .m-twist .arm-r { animation: dz-twist-r 1s ease-in-out infinite; } .m-twist .sway { animation-duration: 1s; }
+@keyframes dz-twist-l { 0%, 100% { transform: rotate(65deg); } 50% { transform: rotate(25deg); } }
+@keyframes dz-twist-r { 0%, 100% { transform: rotate(-25deg); } 50% { transform: rotate(-65deg); } }
+.m-clap .arm-l { animation: dz-clap-l 0.6s ease-in-out infinite; } .m-clap .arm-r { animation: dz-clap-r 0.6s ease-in-out infinite; }
+@keyframes dz-clap-l { 0%, 100% { transform: rotate(76deg); } 50% { transform: rotate(54deg); } }
+@keyframes dz-clap-r { 0%, 100% { transform: rotate(-76deg); } 50% { transform: rotate(-54deg); } }
 
-/* schakelaar */
-.dz-switch .knob { position: relative; width: 44px; height: 26px; flex: none; border-radius: 13px; background: rgba(92, 66, 56, 0.12); transition: background-color 0.25s; }
-.dz-switch .knob::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fffdf6; box-shadow: 0 1px 2px rgba(38, 31, 31, 0.15); transition: transform 0.25s; }
-.dz-switch[aria-pressed="true"] .knob { background: #d05438; }
-.dz-switch[aria-pressed="true"] .knob::after { transform: translateX(18px); }
-.dz-switch .glow { width: 10px; height: 10px; border-radius: 50%; background: #d8c998; }
-.dz-switch[aria-pressed="true"] .glow { background: #ffd84d; box-shadow: 0 0 8px #ffd84d, 0 0 14px #ffb84d; }
+/* polonaise */
+.dz-polo { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.dz-train { position: absolute; bottom: 2px; left: 0; display: flex; align-items: flex-end; animation: dz-conga 18s linear infinite; }
+.dz-train .dz-d { position: relative; bottom: 0; width: 40px; height: 62px; margin-right: -10px; transform: none; }
+.dz-train .dz-d .sway { animation: dz-polowalk 0.5s ease-in-out infinite alternate; }
+@keyframes dz-polowalk { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-2px) rotate(3deg); } }
+@keyframes dz-conga { from { transform: translateX(-100%); } to { transform: translateX(var(--zw, 900px)); } }
 
-@media (max-width: 640px) {
-  .dz-zaal { height: 440px; }
-  .dz-banner { top: 150px; font-size: 22px; }
-  .dz-sign { top: 60px; right: 10px; }
-  .dz-ball { width: 88px; height: 88px; }
-  .dz-dancer { width: 44px; height: 72px; }
-}
+/* ---------- rollatorbalk met raketvlam ---------- */
+.dz-track { position: relative; height: 8px; border-radius: 4px; background: rgba(92, 66, 56, 0.07); }
+.dz-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: linear-gradient(90deg, #dcc05d, #d05438); transition: width 1.4s cubic-bezier(0.3, 0, 0.2, 1); }
+.dz-walker { position: absolute; bottom: 4px; width: 38px; height: 34px; transform: translateX(-70%); transition: left 1.4s cubic-bezier(0.3, 0, 0.2, 1); }
+.dz-walker > span:last-child { display: block; width: 100%; height: 100%; }
+.dz-walker svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dz-walker .step { transform-box: view-box; animation: dz-step 0.5s ease-in-out infinite alternate; animation-play-state: paused; }
+.dz-walker.boost .step { animation-play-state: running; }
+@keyframes dz-step { from { transform: translateY(0); } to { transform: translateY(-1.5px); } }
+.dz-flame { position: absolute; right: 86%; bottom: 2px; width: 46px; height: 24px; opacity: 0; transform: scaleX(0.2); transform-origin: 100% 50%; transition: opacity 0.2s, transform 0.25s; pointer-events: none; }
+.dz-flame svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dz-walker.boost .dz-flame { opacity: 1; transform: scaleX(1); }
+.dz-walker.boost .dz-flame svg { animation: dz-flicker 0.12s linear infinite alternate; }
+@keyframes dz-flicker { from { transform: scaleX(0.85) scaleY(0.9); } to { transform: scaleX(1.12) scaleY(1.05); } }
+.dz-mile { position: absolute; top: -3px; bottom: -3px; width: 2px; border-radius: 1px; background: rgba(38, 31, 31, 0.25); }
+.dz-mile.hit { background: #69873c; }
+
+/* ---------- discobal-knop ---------- */
+.dz-btn-ball { display: block; width: 20px; height: 20px; flex: none; }
+.dz-btn-ball .spin { transform-box: fill-box; transform-origin: 50% 50%; }
+button:hover .dz-btn-ball .spin, button[aria-pressed="true"] .dz-btn-ball .spin { animation: dz-wobble 1.2s ease-in-out infinite; }
+
+@media (max-width: 600px) { .dz-zaal { height: 210px; } }

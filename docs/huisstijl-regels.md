@@ -62,8 +62,9 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 2. Eén per actie, korter dan 400 ms, nooit blokkerend (`toast`, `Sticker slap`).
 3. Bij iets bijzonders rolt er een getekende oliebol over het scherm (`rollOliebol`): alles ingepakt, laatste stop afgeleverd, mijlpaal gehaald, aanmelding binnen. Nooit vaker dan één keer per moment.
 4. Oudjes rekenen we eerlijk: oliebollen gedeeld door 10, naar beneden afgerond (`oudjesLine`, `OLIEBOLLEN_PER_OUDJE`).
-5. De Tussenstand is een discozaal (`src/features/stats/Discozaal.tsx`): één dansend oudje per tien verkochte oliebollen, tot 36 op de vloer en de rest in de polonaise met het aantal erbij. De schakelaar "Lichtgevende krenten" zet de disco aan; de keuze wordt per apparaat onthouden. De rollatorbalk laat een oudje met rollator meelopen naar het doel.
-6. Alles staat uit bij "minder beweging" (`prefers-reduced-motion`).
+5. De discozaal (`src/features/stats/Discozaal.tsx`) zit achter de discobal-knop bij de grafiek op de Tussenstand; de knop toont meteen het aantal oudjes. Eén dansend oudje per tien verkochte oliebollen: tot acht vooraan, daarna vult de zaal zich achterin en schuift de massa naar voren; vanaf 60 oudjes loopt er een polonaise. Licht en op dashboard-detail: geen herhaalde getallen in de zaal. Schiet het oudje met de rollator vooruit, dan krijgt ze een raketvlammetje.
+6. *Deel stand* maakt een minimalistisch kaartje (zoals Strava) als Post 4:5 of Story 9:16: datum, titel, het seizoen als één lijn, drie getallen en het logo. Geen grappen of drukte op het kaartje.
+7. Alles staat uit bij "minder beweging" (`prefers-reduced-motion`).
 
 ## Vaste teksten
 

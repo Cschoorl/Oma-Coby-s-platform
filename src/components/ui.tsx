@@ -330,7 +330,13 @@ const iconPaths: Record<string, ReactNode> = {
     </>
   ),
   check: <path d="m5 12 5 5 9-10" />,
-  download: <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" />
+  download: <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14" />,
+  share: (
+    <>
+      <path d="M12 15V4m0 0L8 8m4-4 4 4" />
+      <path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-7" />
+    </>
+  )
 };
 
 export function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof iconPaths | string; className?: string }) {
@@ -407,8 +413,7 @@ export function oudjesLine(oliebollen: number): string {
   return n >= 1 ? `Goed voor ${formatNumber(n)} ${n === 1 ? "oudje" : "oudjes"} op de dansvloer.` : "Weer een stapje richting de dansvloer.";
 }
 
-/** The drawn oliebol (powdered sugar, raisins); also used for the rolling wink and the exported stand. */
-export const OLIEBOL_SVG =
+const OLIEBOL_SVG =
   '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M33 5c8 0 12 4 17 7 6 4 10 10 9 18 0 9-3 15-8 20-6 6-13 9-21 8-8-1-15-4-20-10C5 42 4 35 6 28c2-8 7-13 13-18 4-3 9-5 14-5z" fill="#b5763c" stroke="#261f1f" stroke-width="2.4" stroke-linejoin="round"/><path d="M12 40c4 8 12 13 21 13 8 0 15-4 19-11" fill="none" stroke="#7d4a22" stroke-width="3" stroke-linecap="round" opacity=".55"/><path d="M17 19c3-5 8-8 14-8" fill="none" stroke="#e8b97d" stroke-width="3" stroke-linecap="round"/><g fill="#fffdf6"><circle cx="24" cy="14" r="2"/><circle cx="31" cy="11" r="1.6"/><circle cx="38" cy="14" r="2.2"/><circle cx="44" cy="19" r="1.5"/><circle cx="20" cy="22" r="1.4"/><circle cx="34" cy="18" r="1.3"/><circle cx="28" cy="20" r="1.7"/><ellipse cx="42" cy="11" rx="2" ry="1.3"/></g><g fill="#261f1f"><ellipse cx="26" cy="33" rx="2.6" ry="1.8" transform="rotate(-20 26 33)"/><ellipse cx="40" cy="30" rx="2.3" ry="1.6" transform="rotate(25 40 30)"/><ellipse cx="33" cy="42" rx="2.4" ry="1.7"/><ellipse cx="47" cy="40" rx="1.9" ry="1.4"/><ellipse cx="18" cy="38" rx="1.8" ry="1.3"/></g></svg>';
 
 /**

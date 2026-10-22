@@ -56,7 +56,7 @@ export function shortOptions(counts: SignupCounts, role: VolunteerRole, statuses
 export interface DayStaffing {
   role: VolunteerRole;
   /** One entry per dagdeel ("ochtend"/"middag"/"avond"), a single entry for a whole day. */
-  parts: Array<{ label: string; count: number; target: number; status: StaffingStatus }>;
+  parts: Array<{ option: string; label: string; count: number; target: number; status: StaffingStatus }>;
 }
 
 /** Staffing per role for one season day, built from the form options of that day. */
@@ -69,7 +69,7 @@ export function staffingForDay(counts: SignupCounts, day: string): DayStaffing[]
         const count = countFor(counts, role, o);
         const part = o.match(/:\s*(ochtend|middag|avond)/i)?.[1] ?? "";
         const target = targetFor(role, o);
-        return { label: part, count, target, status: staffingStatus(count, target) };
+        return { option: o, label: part, count, target, status: staffingStatus(count, target) };
       })
     };
   }).filter((d) => d.parts.length > 0);

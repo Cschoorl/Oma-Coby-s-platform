@@ -12,7 +12,7 @@ via een Apps Script.
 | Bezorgen (`#/bezorger`) | bezorger | mobiele pagina met stops, verwachte tijd, aantallen en Maps-route; stop afvinken als afgeleverd |
 | Tussenstand | beheer | besteld, ingepakt, bezorgd, omzet min kosten en vergelijking met eerdere jaren; in de grafiekkeuze ook *Aantal oudjes* (de discozaal) (één dansend oudje per tien verkochte oliebollen, met de rollatorbalk naar het doel); onderaan *Deel stand* (kaartje als Post of Story met oudjes, oliebollen en het verschil met vorig jaar) |
 | Kosten | iedereen met code | bon → automatisch uitgelezen → met IBAN indienen; status volgen. Beheer keurt goed/af en betaalt uit; km-vergoeding per bezorger |
-| Vrijwilligers | beheer | aanmeldingen en bezettingskalender; na de actie persoonsgegevens verwijderen |
+| Vrijwilligers | beheer | aanmeldingen en "Waar is nog plek?" (per dag, taak en dagdeel hoeveel mensen er nog nodig zijn); na de actie persoonsgegevens verwijderen |
 | Aanmelden (`#/aanmelden`) | openbaar | momenten uit het tabblad Agenda (dag, dagdeel, tijd, locatie); komt in hetzelfde tabblad als het Google Formulier |
 | Agenda | iedereen met code | wie wanneer beschikbaar is, uit de aanmeldingen |
 | Pakbonnen (`#/pakbonnen`) | inpakker, beheer | printbare pakbon per order, in routevolgorde |

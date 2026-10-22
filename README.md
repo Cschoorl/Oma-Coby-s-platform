@@ -10,7 +10,7 @@ via een Apps Script.
 | Bestellingen | beheer | opmerkingen beoordelen en aanpassen; bevestiging per order controleren en versturen |
 | Routes | beheer | bezorgers indelen (beschikbaar in dat dagdeel bovenaan), snelste volgorde, km en aankomsttijd per stop; melding bij verouderde routes; route via WhatsApp |
 | Bezorgen (`#/bezorger`) | bezorger | mobiele pagina met stops, verwachte tijd, aantallen en Maps-route; stop afvinken als afgeleverd |
-| Tussenstand | beheer | besteld, ingepakt, bezorgd, omzet min kosten en vergelijking met eerdere jaren; in de grafiekkeuze ook *Discozaal* (één dansend oudje per tien verkochte oliebollen, met de rollatorbalk naar het doel); onderaan *Deel stand* (kaartje als Post of Story met oudjes, oliebollen en het verschil met vorig jaar) |
+| Tussenstand | beheer | besteld, ingepakt, bezorgd, omzet min kosten en vergelijking met eerdere jaren; in de grafiekkeuze ook *Aantal oudjes* (de discozaal) (één dansend oudje per tien verkochte oliebollen, met de rollatorbalk naar het doel); onderaan *Deel stand* (kaartje als Post of Story met oudjes, oliebollen en het verschil met vorig jaar) |
 | Kosten | iedereen met code | bon → automatisch uitgelezen → met IBAN indienen; status volgen. Beheer keurt goed/af en betaalt uit; km-vergoeding per bezorger |
 | Vrijwilligers | beheer | aanmeldingen en bezettingskalender; na de actie persoonsgegevens verwijderen |
 | Aanmelden (`#/aanmelden`) | openbaar | momenten uit het tabblad Agenda (dag, dagdeel, tijd, locatie); komt in hetzelfde tabblad als het Google Formulier |

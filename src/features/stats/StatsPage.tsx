@@ -193,7 +193,7 @@ export function StatsPage({ state }: { state: DashboardState }) {
                   "disco",
                   <span key="disco" className="inline-flex items-center gap-1.5" title={`${formatNumber(oudjes)} oudjes op de dansvloer`}>
                     <DiscoBallIcon />
-                    Discozaal
+                    Aantal oudjes
                   </span>,
                   oudjes
                 ] as ["disco", ReactNode, number]

@@ -3,8 +3,6 @@ import type { DashboardState } from "../../types/dashboard";
 import { Card, Notice, SectionTitle, Segmented, StatStrip, Sticker, fieldLabel, formatEuro, formatNumber, rollOliebol, toast, todayIso, type Delta } from "../../components/ui";
 import { GOAL_MILESTONES, GOAL_OLIEBOLLEN } from "../../config";
 import dansenUrl from "../../assets/gouwe-ouwe-dansen.jpg";
-import { StaffingCalendar } from "../../components/StaffingCalendar";
-import { countSignups } from "../../utils/staffing";
 
 type Metric = "oliebollen" | "orders" | "revenue";
 
@@ -226,7 +224,6 @@ function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardS
   const delivered = deliveries.filter((o) => state.delivery[o.id]).length;
   const approved = state.costs.filter((c) => c.status === "goedgekeurd" || c.status === "uitbetaald").reduce((sum, c) => sum + c.amount, 0);
   const pending = state.costs.filter((c) => c.status === "ingediend").reduce((sum, c) => sum + c.amount, 0);
-  const counts = countSignups(state.volunteers);
 
   return (
     <>
@@ -242,10 +239,6 @@ function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardS
           }
         ]}
       />
-      <Card>
-        <SectionTitle title="Vrijwilligers per dag(deel)" subtitle={`${state.volunteers.length} aanmeldingen. Per dag hoeveel mensen zich per taak hebben aangemeld, tegenover wat nodig is.`} />
-        <StaffingCalendar counts={counts} />
-      </Card>
     </>
   );
 }

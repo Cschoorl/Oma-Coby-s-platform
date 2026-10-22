@@ -92,21 +92,33 @@ interface RawState extends Omit<DashboardState, "orders"> {
 
 function createAppsScriptBackend(url: string): Backend {
   async function call<T>(action: string, payload: Record<string, unknown>): Promise<T> {
+    const json = JSON.stringify({ action, ...payload });
+    // Small requests go as GET (?p=...): a GET survives Google's redirects, a POST may arrive as an
+    // empty GET. Large ones (receipt photos, long confirmation texts) need POST.
+    const getUrl = `${url}${url.includes("?") ? "&" : "?"}p=${encodeURIComponent(json)}`;
     let response: Response;
     try {
-      // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
-      response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action, ...payload })
-      });
+      response =
+        getUrl.length <= 1800
+          ? await fetch(getUrl)
+          : // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
+            await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: json });
     } catch {
-      throw new Error("Geen verbinding met de Google Sheet. Controleer je internet.");
+      throw new Error("Geen verbinding met de Google Sheet. Controleer je internet en of de web-app op toegang \"Iedereen\" staat.");
     }
     if (!response.ok) throw new Error(`De Google Sheet gaf een fout (${response.status}).`);
-    const body = (await response.json()) as { ok: boolean; data?: T; error?: string };
+    let body: { ok: boolean; data?: T; error?: string; message?: string };
+    try {
+      body = await response.json();
+    } catch {
+      throw new Error("De Google Sheet gaf geen geldig antwoord. Staat het script goed in Apps Script en is het opnieuw geïmplementeerd?");
+    }
     if (!body.ok) throw new Error(body.error ?? "Onbekende fout.");
-    return body.data as T;
+    if (body.data === undefined) {
+      // Only the bare GET answer has no data: the request arrived without its content.
+      throw new Error("Het script kreeg het verzoek niet goed binnen. Plak de nieuwste Code.gs in Apps Script en kies Implementeren → Implementaties beheren → Nieuwe versie.");
+    }
+    return body.data;
   }
 
   const withSession = (session: Session, extra: Record<string, unknown> = {}) => ({

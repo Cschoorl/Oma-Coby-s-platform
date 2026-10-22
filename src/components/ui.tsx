@@ -216,17 +216,35 @@ export function EmptyState({ title, text, action }: { title: string; text?: Reac
 }
 
 export function Skeleton({ lines = 3 }: { lines?: number }) {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = window.setTimeout(() => setSlow(true), 1000);
-    return () => window.clearTimeout(t);
-  }, []);
   return (
     <div className="grid gap-2 rounded-kaart bg-papier p-4 shadow-zacht" aria-busy="true">
       {Array.from({ length: lines }, (_, i) => (
         <div key={i} className="oc-skel h-3.5" style={{ width: `${[45, 100, 75, 90][i % 4]}%` }} />
       ))}
-      <p className={`text-xs text-muted ${slow ? "" : "invisible"}`}>Even de olie opwarmen…</p>
+      <OliebolLoader />
+    </div>
+  );
+}
+
+/**
+ * Small loader: an oliebol rolling along a short track, with one line of text.
+ * Only for real waits: it appears after `delay` ms, so quick loads never flash it.
+ * Not for instant actions (ticking, claiming); those are optimistic.
+ */
+export function OliebolLoader({ label = "Even de olie opwarmen…", delay = 1000 }: { label?: string; delay?: number }) {
+  const [show, setShow] = useState(delay === 0);
+  useEffect(() => {
+    if (delay === 0) return;
+    const t = window.setTimeout(() => setShow(true), delay);
+    return () => window.clearTimeout(t);
+  }, [delay]);
+  // The space is kept while hidden, so nothing jumps when it appears.
+  return (
+    <div role="status" aria-live="polite" className={`flex min-h-[30px] items-center gap-3 text-xs text-muted ${show ? "" : "invisible"}`}>
+      <span className="oc-loader-track" aria-hidden="true">
+        <span className="oc-loader-bol" dangerouslySetInnerHTML={{ __html: OLIEBOL_SVG }} />
+      </span>
+      {show ? label : null}
     </div>
   );
 }
@@ -422,12 +440,13 @@ const OLIEBOL_SVG =
  */
 export function rollOliebol() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const w = window.innerWidth;
+  // A lane of at most 480px, centred at the bottom: noticeable without crossing the whole screen.
+  const w = Math.min(480, window.innerWidth * 0.92);
   const lane = document.createElement("div");
   lane.className = "oc-roll-lane";
   lane.setAttribute("aria-hidden", "true");
   lane.style.setProperty("--w", `${w}px`);
-  lane.style.setProperty("--deg", `${Math.round(((w + 80) / (Math.PI * 56)) * 360)}deg`);
+  lane.style.setProperty("--deg", `${Math.round(((w + 80) / (Math.PI * 44)) * 360)}deg`);
   lane.innerHTML = `<div class="oc-roll">${OLIEBOL_SVG}</div>`;
   document.body.appendChild(lane);
   window.setTimeout(() => lane.remove(), 2100);

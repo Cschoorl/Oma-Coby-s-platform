@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { backend, isValidIban, normaliseIban, type Session } from "../../data/backend";
 import type { CostEntry, CostStatus, DashboardState, ReceiptFields } from "../../types/dashboard";
-import { Badge, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Notice, SectionTitle, Segmented, StatStrip, StatusTrack, fieldLabel, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, secondaryButton, textAction, todayIso } from "../../components/ui";
+import { Badge, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Notice, OliebolLoader, SectionTitle, Segmented, StatStrip, StatusTrack, fieldLabel, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, secondaryButton, textAction, todayIso } from "../../components/ui";
 
 interface CostsPageProps {
   state: DashboardState;
@@ -150,6 +150,8 @@ export function CostsPage({ state, session, run }: CostsPageProps) {
             </button>
           ) : null}
         </div>
+        {/* Reading a receipt takes a few seconds: a real wait, so the loader shows. */}
+        {busy === "read" ? <OliebolLoader label="We lezen je bon uit…" delay={600} /> : null}
       </Card>
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}

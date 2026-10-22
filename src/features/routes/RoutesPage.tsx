@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { backend, type Session } from "../../data/backend";
 import type { DashboardState } from "../../types/dashboard";
 import { OrderFilters } from "../orders/OrderFilters";
-import { Badge, Card, CopyButton, EmptyState, Icon, Notice, SectionTitle, StatStrip, fieldLabel, formatDayLabel, formatNumber, ghostButton, inputClass, pickInitialDate, primaryButton, secondaryButton, toast } from "../../components/ui";
+import { Badge, Card, CopyButton, EmptyState, Icon, Notice, OliebolLoader, SectionTitle, StatStrip, fieldLabel, formatDayLabel, formatNumber, ghostButton, inputClass, pickInitialDate, primaryButton, secondaryButton, toast } from "../../components/ui";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
 import { courierCandidates, courierOrders, couriersOn, deliveryOrders, findVolunteer, guessMode, isRouteStale, orderPart, orderedStops, routeKey, transportOn, whatsappNumber } from "./routeUtils";
@@ -21,6 +21,8 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   const dates = useMemo(() => Array.from(new Set(state.orders.map((o) => o.deliveryDate))).sort(), [state.orders]);
   const [date, setDate] = useState(() => pickInitialDate(dates));
   const [busy, setBusy] = useState<string | null>(null);
+  // One flag for the whole run, so the loader does not restart between couriers.
+  const [computingAll, setComputingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modes, setModes] = useState<Record<string, "driving" | "bicycling">>({});
   const [startTimes, setStartTimes] = useState<Record<string, string>>({});
@@ -86,7 +88,12 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   }
 
   async function computeAll() {
-    for (const courier of couriers) await compute(courier);
+    setComputingAll(true);
+    try {
+      for (const courier of couriers) await compute(courier);
+    } finally {
+      setComputingAll(false);
+    }
     toast("Alle routes berekend. De bezorgers kunnen op pad.");
   }
 
@@ -125,6 +132,12 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
           }
         />
         {isDemo ? <p className="-mt-2 mb-3 text-xs text-gouwe-ink">Demo: kilometers zijn een schatting. Met de Sheet-koppeling rekent Google Maps de echte route.</p> : null}
+        {/* Calculating routes calls Google Maps per courier: a real wait. Assigning a courier is quick and shows nothing. */}
+        {computingAll || (busy && !busy.startsWith("assign-")) ? (
+          <div className="mb-3">
+            <OliebolLoader label="De routes worden berekend…" delay={600} />
+          </div>
+        ) : null}
         {error ? (
           <div className="mb-3">
             <Notice tone="error">{error}</Notice>

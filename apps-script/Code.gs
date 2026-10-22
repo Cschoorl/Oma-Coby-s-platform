@@ -524,12 +524,12 @@ function buildState_(role) {
     };
   });
   readTab_('baked').forEach(function (r) {
-    state.baked[isoDate_(r.leverdatum)] = { withRaisins: Number(r.met_krenten) || 0, withoutRaisins: Number(r.zonder_krenten) || 0 };
+    state.baked[isoDate_(r.leverdatum)] = { withRaisins: num_(r.met_krenten), withoutRaisins: num_(r.zonder_krenten) };
   });
   readTab_('routes').forEach(function (r) {
     state.routes[r.sleutel] = {
       key: r.sleutel, date: isoDate_(r.leverdatum), courier: String(r.bezorger), mode: r.vervoer,
-      km: Number(r.km) || 0, minutes: Number(r.minuten) || 0,
+      km: num_(r.km), minutes: num_(r.minuten),
       orderIds: String(r.volgorde || '').split(',').filter(String), mapsUrl: String(r.maps_url || ''),
       computedAt: String(r.berekend_op || '')
     };
@@ -541,20 +541,20 @@ function buildState_(role) {
     return Object.assign({}, v, { phone: '', email: '', remark: '', address: '' });
   });
 
-  const price = Number(getSetting_('prijs_per_oliebol'));
+  const price = num_(getSetting_('prijs_per_oliebol'));
   state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
 
   if (isAdmin) {
     state.costs = readTab_('costs').map(function (r) {
       return {
         id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
-        date: isoDate_(r.datum), amount: Number(r.bedrag) || 0, supplier: String(r.leverancier || ''),
+        date: isoDate_(r.datum), amount: num_(r.bedrag), supplier: String(r.leverancier || ''),
         description: String(r.omschrijving || ''), photoUrl: String(r.foto_url || '')
       };
     });
     state.history = readTab_('history').map(function (r) {
-      const revenue = r.omzet === '' || r.omzet === null ? null : Number(r.omzet);
-      return { year: Number(r.jaar), date: isoDate_(r.datum), orders: Number(r.bestellingen) || 0, oliebollen: Number(r.oliebollen) || 0, revenue: isFinite(revenue) ? revenue : null };
+      const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
+      return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
     }).filter(function (r) { return r.year && r.date; });
   }
   return state;
@@ -607,7 +607,7 @@ function readOrders_() {
     const seasonYear = placed instanceof Date ? (placed.getMonth() < 6 ? placed.getFullYear() - 1 : placed.getFullYear()) : defaultSeason;
     if (!(row[index.leverdatum] instanceof Date)) out.leverdatum = dutchDate_(out.leverdatum, seasonYear);
     return out;
-  }).filter(function (r) { return r.leverdatum && (Number(r.oliebollen_met_krenten) || Number(r.oliebollen_zonder_krenten) || r.locatie_naam); });
+  }).filter(function (r) { return r.leverdatum && (num_(r.oliebollen_met_krenten) || num_(r.oliebollen_zonder_krenten) || r.locatie_naam); });
 }
 
 const DUTCH_MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
@@ -635,7 +635,7 @@ function dutchDate_(value, seasonYear) {
 function logPacking_(orderId, action, name) {
   const order = findOrder_(orderId) || {};
   sheet_('packlog').appendRow([now_(), String(orderId), String(order.locatie_naam || order.contactpersoon || ''), action, name,
-    Number(order.oliebollen_met_krenten) || 0, Number(order.oliebollen_zonder_krenten) || 0]);
+    num_(order.oliebollen_met_krenten), num_(order.oliebollen_zonder_krenten)]);
 }
 
 function volunteerSheet_() {
@@ -785,6 +785,7 @@ function sheet_(tab) {
     sheet.appendRow(def[1]);
     sheet.setFrozenRows(1);
   } else {
+    textKeys_(tab, sheet);
     // Add columns introduced by a newer script version to an existing tab.
     const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0].map(String);
     def[1].forEach(function (h) {
@@ -804,7 +805,11 @@ function readTab_(tab) {
   const headers = values[0].map(String);
   return values.slice(1).map(function (row) {
     const out = {};
-    headers.forEach(function (h, i) { out[h] = row[i] instanceof Date ? formatCell_(row[i], h) : row[i]; });
+    headers.forEach(function (h, i) {
+      const v = row[i];
+      // The first column and order_id are keys: a timestamp key keeps its time, or it no longer matches the order.
+      out[h] = i === 0 || h === 'order_id' ? keyOf_(v) : v instanceof Date ? formatCell_(v, h) : v;
+    });
     return out;
   });
 }
@@ -818,7 +823,7 @@ function findOrCreate_(tab, key) {
   const headers = values[0].map(String);
   let rowIndex = -1;
   for (let i = 1; i < values.length; i++) {
-    const cell = values[i][0] instanceof Date ? isoDate_(values[i][0]) : String(values[i][0]);
+    const cell = keyOf_(values[i][0]);
     if (cell === id) { rowIndex = i; break; }
   }
   if (rowIndex === -1) {
@@ -871,6 +876,66 @@ function bump_() {
 /** Simple trigger: handmatige wijzigingen in de Sheet zijn zo direct zichtbaar in het dashboard. */
 function onEdit() {
   bump_();
+}
+
+/**
+ * Eenmalig uitvoeren (kies "installeer" bovenin de editor en klik Uitvoeren).
+ * onEdit ziet alleen getypte wijzigingen. Deze triggers zorgen dat ook nieuwe formulierinzendingen,
+ * ingevoegde of verwijderde rijen, sorteren en geplakte blokken direct in het platform verschijnen.
+ * Nog eens uitvoeren kan geen kwaad: oude triggers van dit script worden eerst verwijderd.
+ */
+function installeer() {
+  const ss = SpreadsheetApp.getActive();
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (['bijWijziging', 'bijFormulier'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('bijWijziging').forSpreadsheet(ss).onChange().create();
+  ScriptApp.newTrigger('bijFormulier').forSpreadsheet(ss).onFormSubmit().create();
+  // Make sure every dashboard tab exists, with its key column as text.
+  Object.keys(TABS).forEach(function (tab) { sheet_(tab); });
+  bump_();
+  return 'Klaar: wijzigingen in de Sheet komen nu direct door in het platform.';
+}
+
+/** Installable trigger (onChange): rijen invoegen/verwijderen, sorteren, plakken, tabbladen. */
+function bijWijziging() {
+  bump_();
+}
+
+/** Installable trigger (onFormSubmit): nieuwe bestelling of aanmelding via een Google Formulier. */
+function bijFormulier() {
+  bump_();
+}
+
+/** Key cell → text. Sheets may turn "2026-11-15 10:12:00" into a date; keep the time if it has one. */
+function keyOf_(v) {
+  if (v instanceof Date) {
+    const tz = Session.getScriptTimeZone();
+    const hasTime = Utilities.formatDate(v, tz, 'HH:mm:ss') !== '00:00:00';
+    return Utilities.formatDate(v, tz, hasTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd');
+  }
+  return String(v === null || v === undefined ? '' : v).trim();
+}
+
+/** Keeps the key column of a dashboard tab as plain text, so new keys are not turned into dates. Once per tab. */
+function textKeys_(tab, sheet) {
+  if (tab === 'history') return;
+  const props = PropertiesService.getScriptProperties();
+  const flag = 'TEXT_KEYS_' + tab;
+  if (props.getProperty(flag)) return;
+  // The packing log has the time first and the order number second.
+  sheet.getRange(tab === 'packlog' ? 'B:B' : 'A:A').setNumberFormat('@');
+  props.setProperty(flag, '1');
+}
+
+/** Number from a cell: 12.5, "12,5", "€ 1.234,50" and "" (→ 0) all work. */
+function num_(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let raw = String(v === null || v === undefined ? '' : v).replace(/[€\s]/g, '');
+  if (!raw) return 0;
+  if (raw.indexOf(',') !== -1) raw = raw.replace(/\./g, '').replace(',', '.');
+  const n = Number(raw);
+  return isFinite(n) ? n : 0;
 }
 
 function requireName_(name) {

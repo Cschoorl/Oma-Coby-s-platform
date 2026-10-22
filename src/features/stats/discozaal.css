@@ -2,7 +2,7 @@
    Licht, op dashboard-detail. Animaties staan uit bij "minder beweging" (styles.css). */
 
 /* ---------- de zaal ---------- */
-.dz-zaal { position: relative; height: 230px; overflow: hidden; isolation: isolate; border-radius: 8px;
+.dz-zaal { position: relative; height: 280px; overflow: hidden; isolation: isolate; border-radius: 8px;
   background: radial-gradient(ellipse 50% 70% at 50% 0%, rgba(255, 233, 160, 0.7), transparent 70%), linear-gradient(#fbf4da, #f3e6bd); }
 .dz-flecks { position: absolute; inset: 0 0 40px 0; opacity: 0.55; animation: dz-flecks 14s linear infinite;
   background-image: radial-gradient(circle, rgba(208, 84, 56, 0.55) 0 1.4px, transparent 2px), radial-gradient(circle, rgba(220, 160, 40, 0.6) 0 1.6px, transparent 2.2px), radial-gradient(circle, rgba(105, 135, 60, 0.5) 0 1.3px, transparent 2px);
@@ -16,17 +16,29 @@
 .dz-glint { transform-box: fill-box; transform-origin: center; animation: dz-glint 1.8s ease-in-out infinite; }
 @keyframes dz-glint { 0%, 100% { opacity: 0; transform: scale(0.3); } 50% { opacity: 1; transform: scale(1); } }
 
-/* massa achterin: vult zich en schuift naar voren naarmate het drukker wordt */
-.dz-crowd { position: absolute; inset: 0; z-index: 1; transform-origin: 50% 100%; transform: translateY(calc((1 - var(--fill, 0)) * 22px)) scale(calc(0.88 + var(--fill, 0) * 0.14)); transition: transform 1.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.dz-crow { position: absolute; left: 24px; right: 24px; height: 30px; transform-origin: 50% 100%; }
-.dz-crow.r1 { bottom: 92px; opacity: 0.55; transform: scale(0.86); }
-.dz-crow.r2 { bottom: 74px; opacity: 0.72; transform: scale(0.93); }
-.dz-crow.r3 { bottom: 56px; opacity: 0.9; }
-.dz-crow .p { position: absolute; bottom: 0; width: 18px; height: 24px; transform: translateX(-50%); animation: dz-bob 0.6s ease-in-out infinite alternate; }
-.dz-crow .p svg { display: block; width: 100%; height: 100%; }
-@keyframes dz-bob { from { transform: translate(-50%, 0); } to { transform: translate(-50%, -2px); } }
+/* inrichting: lamp met franjes, letterbord, platenspeler, boekenkast, tafel met oliebollen */
+.dz-wainscot { position: absolute; left: 0; right: 0; bottom: 78px; height: 46px; background: repeating-linear-gradient(90deg, rgba(138, 106, 79, 0.16) 0 2px, rgba(138, 106, 79, 0.08) 2px 64px); border-top: 2px solid rgba(138, 106, 79, 0.3); }
+.dz-prop { position: absolute; z-index: 1; }
+.dz-prop svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.dz-lamp { left: 6%; top: 0; width: 60px; height: 92px; transform-origin: 50% 0; animation: dz-swing 5s ease-in-out infinite; }
+@keyframes dz-swing { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+.dz-player { left: 2%; bottom: 74px; width: 112px; height: 87px; }
+.dz-player .dz-record { transform-box: fill-box; transform-origin: center; animation: dz-recordspin 1.4s linear infinite; }
+@keyframes dz-recordspin { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.96); } 100% { transform: scaleX(1); } }
+.dz-player .dz-notes { animation: dz-note 2.4s ease-in infinite; }
+@keyframes dz-note { 0% { transform: translate(0, 10px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(10px, -14px); opacity: 0; } }
+.dz-bookcase { right: 2%; bottom: 74px; width: 86px; height: 134px; }
+.dz-table { right: 12%; bottom: 60px; z-index: 2; width: 104px; height: 67px; }
+.dz-sign { position: absolute; left: 21%; top: 50px; z-index: 1; display: grid; justify-items: center; gap: 1px; padding: 7px 12px 6px; border-radius: 4px; background: #3a2f2c; color: #fffdf6; box-shadow: 0 0 0 3px #8a6a4f; font-size: 10px; line-height: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
+.dz-sign::before { content: ""; position: absolute; left: 50%; top: -22px; width: 44px; height: 22px; transform: translateX(-50%); border: 1px solid #a89889; border-bottom: 0; clip-path: polygon(0 100%, 50% 0, 100% 100%); }
+.dz-sign b { font-family: Arvo, Rockwell, Georgia, serif; font-size: 16px; line-height: 20px; letter-spacing: 0.12em; color: #f4e5a6; }
+@media (max-width: 640px) {
+  .dz-bookcase, .dz-table, .dz-player { display: none; }
+  .dz-lamp { left: 4%; width: 46px; height: 70px; }
+  .dz-sign { left: auto; right: 10px; top: 40px; }
+}
 
-.dz-floor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 26px; border-top: 1px solid rgba(92, 66, 56, 0.12); background: repeating-linear-gradient(90deg, #ead6ad 0 56px, #e3cb9c 56px 112px); }
+.dz-floor { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; height: 80px; border-top: 1px solid rgba(92, 66, 56, 0.12); background: repeating-linear-gradient(90deg, #ead6ad 0 56px, #e3cb9c 56px 112px); }
 
 /* dansers */
 .dz-dancers { position: absolute; inset: 0; z-index: 3; }
@@ -93,4 +105,4 @@
 .dz-btn-ball .spin { transform-box: fill-box; transform-origin: 50% 50%; }
 button:hover .dz-btn-ball .spin, button[aria-pressed="true"] .dz-btn-ball .spin { animation: dz-wobble 1.2s ease-in-out infinite; }
 
-@media (max-width: 600px) { .dz-zaal { height: 210px; } }
+@media (max-width: 600px) { .dz-zaal { height: 260px; } }

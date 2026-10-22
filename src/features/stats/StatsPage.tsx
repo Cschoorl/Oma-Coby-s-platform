@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, secondaryButton, todayIso, type Delta } from "../../components/ui";
+import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, todayIso, type Delta } from "../../components/ui";
 import { DiscoBallIcon, Discozaal, oudjesFor } from "./Discozaal";
 import { OLIEBOLLEN_PER_OUDJE } from "../../config";
 import { ShareStand } from "./ShareStand";
@@ -47,8 +47,10 @@ function cumulativeUpTo(season: Season, cutoff: number, metric: Metric): number 
 
 export function StatsPage({ state }: { state: DashboardState }) {
   const [metric, setMetric] = useState<Metric>("oliebollen");
+  // The chart choice leads; "Discozaal" is one more option in it and turns the chart into the disco hall.
+  const [disco, setDisco] = useState(false);
   // The chart card shows the cumulative chart, or the disco hall behind the disco-ball button.
-  const [view, setView] = useState<"grafiek" | "disco">("grafiek");
+  const view: "grafiek" | "disco" = disco ? "disco" : "grafiek";
   const [sharing, setSharing] = useState<StandData | null>(null);
 
   const { seasons, revenueSource, currentYear, cutoff } = useMemo(() => {
@@ -178,36 +180,37 @@ export function StatsPage({ state }: { state: DashboardState }) {
               : "Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
           }
           action={
-            <div className="flex flex-wrap items-center gap-2">
-              {view === "grafiek" ? (
-                <Segmented
-                  label="Metriek"
-                  value={metric}
-                  onChange={setMetric}
-                  options={(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string])}
-                />
-              ) : null}
-              {/* The disco-ball button shows the oudjes right away; clicking it turns the chart into the disco hall. */}
-              <button
-                type="button"
-                aria-pressed={view === "disco"}
-                onClick={() => setView((v) => (v === "disco" ? "grafiek" : "disco"))}
-                title={view === "disco" ? "Terug naar de grafiek" : "Open de discozaal"}
-                className={`inline-flex min-h-[40px] items-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition ${
-                  view === "disco" ? "bg-gouwe-100 text-krent ring-1 ring-inset ring-gouwe" : "bg-gouwe-50 text-krent hover:bg-gouwe-100"
-                }`}
-              >
-                <DiscoBallIcon />
-                <span className="tabular-nums">{formatNumber(oudjes)}</span> {oudjes === 1 ? "oudje" : "oudjes"}
-              </button>
-              <button type="button" className={secondaryButton} onClick={openShare} title="Deel de stand van vandaag als kaartje">
-                <Icon name="share" />
-                Deel stand
-              </button>
-            </div>
+            <Segmented
+              label="Weergave"
+              value={view === "disco" ? "disco" : metric}
+              onChange={(v) => {
+                if (v === "disco") return setDisco(true);
+                setDisco(false);
+                setMetric(v);
+              }}
+              options={[
+                ...(Object.keys(metricLabel) as Metric[]).filter((m) => m !== "revenue" || revenueSource !== "none").map((m) => [m, metricLabel[m]] as [Metric, string]),
+                [
+                  "disco",
+                  <span key="disco" className="inline-flex items-center gap-1.5" title={`${formatNumber(oudjes)} oudjes op de dansvloer`}>
+                    <DiscoBallIcon />
+                    Discozaal
+                  </span>,
+                  oudjes
+                ] as ["disco", ReactNode, number]
+              ]}
+            />
           }
         />
         {view === "disco" ? <Discozaal oliebollen={seasonOliebollen} /> : <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />}
+        {/* Sharing closes the card: one clear action, in feest at 24px so the light text stays readable. */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-lijn pt-4">
+          <p className="text-sm text-muted">Deel de stand van vandaag als kaartje, voor de groepsapp of Instagram.</p>
+          <button type="button" className="inline-flex min-h-[48px] items-center gap-2 rounded-md bg-feest px-5 font-display text-2xl uppercase leading-none tracking-wide text-meel transition hover:bg-feest-hover active:translate-y-px" onClick={openShare}>
+            <Icon name="share" className="h-5 w-5" />
+            Deel stand
+          </button>
+        </div>
       </Card>
       {sharing ? <ShareStand data={sharing} onClose={() => setSharing(null)} /> : null}
 

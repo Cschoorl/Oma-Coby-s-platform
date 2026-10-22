@@ -8,6 +8,12 @@ import "./discozaal.css";
 
 /** From this many oudjes a polonaise walks past in front. */
 const POLONAISE_FROM = 60;
+/** Three rows on the dance floor, front to back; every figure is one oudje. */
+const ROWS = [
+  { scale: 1, bottom: 6, step: 84 },
+  { scale: 0.82, bottom: 30, step: 70 },
+  { scale: 0.66, bottom: 52, step: 58 }
+];
 
 export function oudjesFor(oliebollen: number): number {
   return Math.floor(oliebollen / OLIEBOLLEN_PER_OUDJE);
@@ -109,13 +115,28 @@ function oudjeSvg(f: Character): string {
 }
 const CAST_SVG = CAST.map(oudjeSvg);
 
-const CROWD_COLORS = ["#d9826c", "#d6b75a", "#8fa868", "#c98aa3", "#7f9fb8", "#e0a070"];
-const CROWD_HAIR = ["#efebe3", "#dcd6cb", "#f7f4ee"];
-function crowdSvg(i: number): string {
-  const c = CROWD_COLORS[(i * 5) % CROWD_COLORS.length];
-  const arms = i % 4 === 0 ? `<path d="M4 15 L2 7 M14 15 L16 7" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/>` : "";
-  return `<svg viewBox="0 0 18 24">${arms}<path d="M2 24 Q2 14 9 14 Q16 14 16 24z" fill="${c}"/><circle cx="9" cy="9" r="4.6" fill="#e7c3a0"/><path d="M4.4 8.4 Q4.8 3.8 9 3.8 Q13.2 3.8 13.6 8.4 Q11.5 6.3 9 6.3 Q6.5 6.3 4.4 8.4z" fill="${CROWD_HAIR[i % CROWD_HAIR.length]}"/></svg>`;
-}
+// ---------- inrichting: het bruine café van Oma Coby, licht getekend ----------
+
+const LAMP_SVG = `<svg viewBox="0 0 70 108" aria-hidden="true"><path d="M35 0v38" stroke="${K}" stroke-width="1.6"/><ellipse cx="35" cy="78" rx="30" ry="12" fill="#ffe7a8" opacity=".55"/><path d="M15 38h40l11 32H4z" fill="#d9a35b" stroke="${K}" stroke-width="1.4" stroke-linejoin="round"/><path d="M20 44h30M17 52h36M13 61h44" stroke="#b8803e" stroke-width="1.2" opacity=".6"/><g stroke="#b8803e" stroke-width="1.6" stroke-linecap="round">${Array.from({ length: 13 }, (_, i) => `<path d="M${6 + i * 4.8} 71v${i % 2 ? 7 : 9}"/>`).join("")}</g><circle cx="35" cy="73" r="4" fill="#fff6d0"/></svg>`;
+
+const BOOKCASE_SVG = `<svg viewBox="0 0 96 150" aria-hidden="true"><rect x="2" y="4" width="92" height="144" rx="2" fill="#8a6a4f" stroke="${K}" stroke-width="1.4"/><rect x="8" y="10" width="80" height="132" fill="#5c4238"/>${[10, 43, 76, 109]
+  .map((y, r) => {
+    let x = 10;
+    let books = "";
+    const colors = ["#d05438", "#dcc05d", "#69873c", "#4f7a9a", "#c46b8c", "#f1d9cd", "#e0894a"];
+    for (let i = 0; x < 82; i++) {
+      const w = 5 + ((i * 7 + r * 3) % 5);
+      const h = 22 + ((i * 5 + r) % 8);
+      books += `<rect x="${x}" y="${y + 31 - h}" width="${w}" height="${h}" rx=".8" fill="${colors[(i + r * 2) % colors.length]}"/>`;
+      x += w + 1;
+    }
+    return books + `<rect x="8" y="${y + 31}" width="80" height="2" fill="#8a6a4f"/>`;
+  })
+  .join("")}</svg>`;
+
+const PLAYER_SVG = `<svg viewBox="0 0 124 96" aria-hidden="true"><rect x="8" y="40" width="104" height="48" rx="3" fill="#7a5a44" stroke="${K}" stroke-width="1.4"/><path d="M14 88v7M106 88v7" stroke="${K}" stroke-width="3" stroke-linecap="round"/><rect x="18" y="50" width="38" height="30" rx="2" fill="#8a6a4f"/><rect x="62" y="50" width="40" height="30" rx="2" fill="#8a6a4f"/><circle cx="37" cy="65" r="2" fill="#dcc05d"/><circle cx="81" cy="65" r="2" fill="#dcc05d"/><rect x="14" y="22" width="92" height="18" rx="3" fill="#c08446" stroke="${K}" stroke-width="1.2"/><g class="dz-record"><ellipse cx="54" cy="24" rx="30" ry="7" fill="#261f1f"/><ellipse cx="54" cy="24" rx="20" ry="4.6" fill="none" stroke="#4a3d38" stroke-width=".8"/><ellipse cx="54" cy="24" rx="6" ry="1.6" fill="#d05438"/></g><path d="M96 16 L94 26 L78 24" stroke="#cfc9be" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="96" cy="16" r="3" fill="#cfc9be"/><g class="dz-notes" fill="${K}"><path d="M40 8a3 2.4 0 1 1-.1 0V-6l7-2v13a3 2.4 0 1 1-.1 0V-4l-6.9 2z" opacity=".55"/></g></svg>`;
+
+const TABLE_SVG = `<svg viewBox="0 0 112 72" aria-hidden="true"><defs><pattern id="dz-ruit" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#fffdf6"/><rect width="4" height="4" fill="#e9a08c"/><rect x="4" y="4" width="4" height="4" fill="#e9a08c"/></pattern></defs><path d="M20 40v30M92 40v30" stroke="#6b4d3a" stroke-width="4" stroke-linecap="round"/><path d="M4 30h104l-6 16H10z" fill="url(#dz-ruit)" stroke="${K}" stroke-width="1.2" stroke-linejoin="round"/><ellipse cx="46" cy="29" rx="24" ry="4.5" fill="#fffdf6" stroke="${K}" stroke-width="1"/><g stroke="${K}" stroke-width="1"><circle cx="36" cy="22" r="7" fill="#b5763c"/><circle cx="48" cy="21" r="7.5" fill="#c08446"/><circle cx="58" cy="23" r="6.5" fill="#b5763c"/><circle cx="43" cy="13" r="6.5" fill="#c08446"/><circle cx="53" cy="13" r="6" fill="#b5763c"/></g><g fill="#fffdf6"><circle cx="34" cy="18" r="1.2"/><circle cx="47" cy="16" r="1.4"/><circle cx="57" cy="19" r="1.1"/><circle cx="42" cy="9" r="1.2"/><circle cx="52" cy="9" r="1"/></g><path d="M82 14h10l-1.5 15h-7z" fill="#f6e3a3" stroke="${K}" stroke-width="1"/><path d="M83 18h8" stroke="#fffdf6" stroke-width="1.4"/></svg>`;
 
 const WALKER_SVG = `<svg viewBox="0 0 46 42" aria-hidden="true"><g class="step"><circle cx="14" cy="8" r="5.5" fill="#f1d3b3"/><path d="M8.5 8 Q8.5 2.5 14 2.5 Q19.5 2.5 19.5 8 Q17 5.5 14 5.5 Q11 5.5 8.5 8z" fill="#e5e0d6"/><circle cx="10" cy="3" r="2.4" fill="#e5e0d6"/><path d="M8.5 14h11l2 15H7z" fill="#d05438"/><rect x="9" y="28" width="3.4" height="11" rx="1.5" fill="#f1d3b3"/><rect x="15" y="28" width="3.4" height="11" rx="1.5" fill="#f1d3b3"/><path d="M19 17 L27 20" stroke="#d05438" stroke-width="3" stroke-linecap="round"/></g><path d="M27 19 L29 19 L30 38 M29 19 L41 20 L42 38 M30 28 L41.5 28" stroke="${K}" stroke-width="1.6" stroke-linecap="round" fill="none"/><rect x="31" y="22" width="9" height="5" rx="1" fill="#dcc05d"/><circle cx="30" cy="38.5" r="2.5" fill="${K}"/><circle cx="42" cy="38.5" r="2.5" fill="${K}"/></svg>`;
 const FLAME_SVG = `<svg viewBox="0 0 34 18" aria-hidden="true"><defs><linearGradient id="dz-flame-g" x1="1" x2="0" y1="0" y2="0"><stop offset="0" stop-color="#fff3b0"/><stop offset=".35" stop-color="#ffc23d"/><stop offset=".7" stop-color="#f07a2a"/><stop offset="1" stop-color="#d05438" stop-opacity="0"/></linearGradient></defs><path d="M34 9 C26 1 12 2 0 9 C12 16 26 17 34 9z" fill="url(#dz-flame-g)"/><path d="M34 9 C29 5 22 5.5 16 9 C22 12.5 29 13 34 9z" fill="#fffbe0"/></svg>`;
@@ -137,12 +158,6 @@ export function DiscoBallIcon() {
 
 // ---------- de discozaal ----------
 
-/** Positions (in %) for the front row, filled from the middle outwards. */
-function frontSlots(cap: number): number[] {
-  const order = [3, 4, 2, 5, 1, 6, 0, 7].filter((s) => s < cap);
-  return order.map((s) => 6 + ((s + 0.5) / cap) * 88);
-}
-
 /** KPI strip, the disco hall and the rollator bar, as shown behind the disco-ball button. */
 export function Discozaal({ oliebollen }: { oliebollen: number }) {
   const oudjes = oudjesFor(oliebollen);
@@ -160,15 +175,39 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
     return () => ro.disconnect();
   }, []);
 
-  const frontCap = Math.max(3, Math.min(CAST.length, Math.floor((width - 40) / 92)));
-  const front = Math.min(oudjes, frontCap);
-  const perRow = Math.max(10, Math.floor((width - 48) / 16));
-  const crowdCap = perRow * 3;
-  const crowd = Math.max(0, Math.min(crowdCap, oudjes - frontCap));
-  const slots = frontSlots(frontCap);
+  // Every figure is exactly one oudje, so the hall can be counted: three rows on the floor (front first),
+  // then the polonaise. Whoever does not fit waits outside, with the number shown.
+  const narrow = width < 640;
+  const span = width * (narrow ? 0.92 : 0.7);
+  const rowCaps = ROWS.map((r) => Math.max(2, Math.floor(span / r.step)));
+  const floorCap = rowCaps.reduce((a, b) => a + b, 0);
+  const onFloor = Math.min(oudjes, floorCap);
+  const poloMembers = oudjes - onFloor > 0 && oudjes >= POLONAISE_FROM ? Math.min(8, oudjes - onFloor, 3 + Math.floor((oudjes - POLONAISE_FROM) / 60)) : 0;
+  const outside = Math.max(0, oudjes - onFloor - poloMembers);
+
+  // Place dancers row by row, each row from the middle outwards; back rows sit between the heads in front.
+  const placed: Array<{ row: number; left: number; cast: number }> = [];
+  let left = onFloor;
+  ROWS.forEach((_, ri) => {
+    const n = Math.min(left, rowCaps[ri]);
+    left -= n;
+    const cap = rowCaps[ri];
+    const order = Array.from({ length: cap }, (_, j) => j).sort((a, b) => Math.abs(a - (cap - 1) / 2) - Math.abs(b - (cap - 1) / 2));
+    const startPct = narrow ? 4 : 15;
+    const widthPct = narrow ? 92 : 70;
+    order.slice(0, n).forEach((j) => {
+      placed.push({ row: ri, left: startPct + ((j + 0.5 + (ri % 2 ? 0.25 : 0)) / cap) * widthPct, cast: (placed.length * 3 + ri) % CAST.length });
+    });
+  });
+
+  const tags = [
+    oliebollen >= GOAL_OLIEBOLLEN ? <span key="goal" className="rounded bg-kerst-50 px-2 py-0.5 text-kerst-ink">Doel gehaald</span> : null,
+    poloMembers > 0 ? <span key="polo" className="rounded bg-gouwe-100 px-2 py-0.5 text-gouwe-ink">{poloMembers} in de polonaise</span> : null,
+    outside > 0 ? <span key="out" className="rounded bg-papier/90 px-2 py-0.5 text-krent shadow-zacht">+ {formatNumber(outside)} in de rij voor de deur</span> : null
+  ].filter(Boolean);
 
   // Dancers that join while the hall is open walk in; the first render just shows who is there.
-  const firstFront = useRef(front);
+  const firstCount = useRef(onFloor);
   const previous = useRef(oudjes);
   useEffect(() => {
     const before = previous.current;
@@ -176,21 +215,6 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
     if (oudjes === before + 1) toast(`Oudje ${formatNumber(oudjes)} komt binnen!`);
     if (before < POLONAISE_FROM && oudjes >= POLONAISE_FROM) toast("Polonaise! Iedereen achter elkaar aan.");
   }, [oudjes]);
-
-  const crowdHtml = ["r1", "r2", "r3"]
-    .map((r, ri) => {
-      const inRow = Math.max(0, Math.min(perRow, crowd - ri * perRow));
-      const people = Array.from({ length: inRow }, (_, j) => {
-        const k = ri * 97 + j;
-        // Golden-ratio spread: evenly filled at any row size, without people stacking on one spot.
-        const pos = (((j * 0.618034 + ri * 0.31) % 1) * 0.98 + 0.01) * 100;
-        return `<span class="p" style="left:${pos.toFixed(1)}%;animation-delay:${(-(k % 9) * 0.07).toFixed(2)}s">${crowdSvg(k)}</span>`;
-      }).join("");
-      return `<div class="dz-crow ${r}">${people}</div>`;
-    })
-    .join("");
-
-  const poloMembers = oudjes >= POLONAISE_FROM ? Math.min(8, 3 + Math.floor((oudjes - POLONAISE_FROM) / 60)) : 0;
 
   return (
     <div className="grid gap-3">
@@ -219,20 +243,39 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
       </div>
 
       <div className="dz-zaal" ref={zaalRef} role="img" aria-label={`Discozaal met ${formatNumber(oudjes)} dansende oudjes`}>
+        <div className="dz-wainscot" aria-hidden="true" />
         <div className="dz-flecks" aria-hidden="true" />
         <svg className="dz-slinger" viewBox="0 0 1000 44" preserveAspectRatio="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: SLINGER_SVG }} />
+        <div className="dz-prop dz-lamp" aria-hidden="true" dangerouslySetInnerHTML={{ __html: LAMP_SVG }} />
+        <div className="dz-sign" aria-hidden="true">
+          <span>Vanavond</span>
+          <b className="tabular-nums">{oudjes === 0 ? "Nog leeg" : `${formatNumber(oudjes)} ${oudjes === 1 ? "oudje" : "oudjes"}`}</b>
+        </div>
+        <div className="dz-prop dz-player" aria-hidden="true" dangerouslySetInnerHTML={{ __html: PLAYER_SVG }} />
+        <div className="dz-prop dz-bookcase" aria-hidden="true" dangerouslySetInnerHTML={{ __html: BOOKCASE_SVG }} />
         <div className="dz-ball" aria-hidden="true" dangerouslySetInnerHTML={{ __html: discoBallSvg("dzbal") }} />
-        <div className="dz-crowd" aria-hidden="true" style={{ ["--fill" as string]: (crowd / crowdCap).toFixed(2) }} dangerouslySetInnerHTML={{ __html: crowdHtml }} />
         <div className="dz-floor" aria-hidden="true" />
+        <div className="dz-prop dz-table" aria-hidden="true" dangerouslySetInnerHTML={{ __html: TABLE_SVG }} />
         <div className="dz-dancers" aria-hidden="true">
-          {Array.from({ length: front }, (_, i) => (
-            <div
-              key={i}
-              className={`dz-d m-${CAST[i].move} ${i >= firstFront.current && !reducedMotion() ? "enter" : ""}`}
-              style={{ left: `${slots[i].toFixed(1)}%`, ["--dl" as string]: `${(-(i * 0.37) % 2).toFixed(2)}s`, ["--sw" as string]: `${(2.2 + (i % 3) * 0.3).toFixed(1)}s` }}
-              dangerouslySetInnerHTML={{ __html: CAST_SVG[i] }}
-            />
-          ))}
+          {placed.map((d, i) => {
+            const r = ROWS[d.row];
+            return (
+              <div
+                key={i}
+                className={`dz-d m-${CAST[d.cast].move} ${i >= firstCount.current && !reducedMotion() ? "enter" : ""}`}
+                style={{
+                  left: `${d.left.toFixed(1)}%`,
+                  bottom: r.bottom,
+                  width: 54 * r.scale,
+                  height: 84 * r.scale,
+                  zIndex: 3 - d.row,
+                  ["--dl" as string]: `${(-(i * 0.37) % 2).toFixed(2)}s`,
+                  ["--sw" as string]: `${(2.2 + (i % 3) * 0.3).toFixed(1)}s`
+                }}
+                dangerouslySetInnerHTML={{ __html: CAST_SVG[d.cast] }}
+              />
+            );
+          })}
         </div>
         {poloMembers > 0 ? (
           <div className="dz-polo" aria-hidden="true">
@@ -250,12 +293,10 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
             Bij {OLIEBOLLEN_PER_OUDJE} oliebollen komt het eerste oudje binnen.
           </p>
         ) : null}
-        {oliebollen >= GOAL_OLIEBOLLEN ? (
-          <span className="absolute right-2.5 top-2.5 z-[5] rounded bg-kerst-50 px-2 py-0.5 text-[11px] font-bold text-kerst-ink">Doel gehaald</span>
-        ) : poloMembers > 0 ? (
-          <span className="absolute right-2.5 top-2.5 z-[5] rounded bg-gouwe-100 px-2 py-0.5 text-[11px] font-bold text-gouwe-ink">Polonaise</span>
-        ) : null}
+        <div className="absolute right-2.5 top-2.5 z-[5] hidden justify-items-end gap-1 text-[11px] font-bold sm:grid">{tags}</div>
       </div>
+      {/* On phones the labels sit under the hall, so they do not cover the letter board. */}
+      {tags.length > 0 ? <div className="flex flex-wrap gap-1 text-[11px] font-bold sm:hidden">{tags}</div> : null}
 
       <Rollatorbalk oliebollen={oliebollen} />
     </div>

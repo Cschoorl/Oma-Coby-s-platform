@@ -12,12 +12,18 @@ Het script:
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier en barter; dat tabblad wordt nooit aangepast);
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
-  `Bezorgstatus` en `Agenda`;
+  `Bezorgstatus`, `Agenda` en `Locaties` (opgezochte adressen voor het automatisch indelen);
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
   zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
 - logt elke afgeronde en heropende order met naam en tijd in het tabblad `Inpaklog`;
-- berekent routes en kilometers met de ingebouwde Google Maps-dienst (geen API-sleutel nodig);
+- berekent routes en kilometers met de ingebouwde Google Maps-dienst (geen API-sleutel nodig): één route per
+  bezorger per dagdeel ("rit"), vanaf de loods (`CONFIG.START_ADDRESS`), met `CONFIG.MINUTES_PER_STOP` (15) minuten
+  per stop; de laatste rit van de dag eindigt bij het woonadres van de bezorger. Andere vrijwilligers zien de route
+  zonder dat woonadres;
+- zoekt voor **Routes → Automatisch indelen** de adressen van bestellingen en bezorgers op (Google Maps-geocoder)
+  en bewaart ze in `Locaties`, zodat elk adres maar één keer wordt opgezocht. Staat een adres verkeerd, pas het dan
+  aan in de bestelling; een oude regel in `Locaties` mag je weggooien;
 - berekent per stop de verwachte aankomsttijd (vertrektijd + rijtijd + 5 minuten per stop);
 - houdt bij welke stops de bezorgers als afgeleverd hebben afgevinkt (`Bezorgstatus`);
 - verstuurt klantbevestigingen vanuit het Google-account van de Sheet (`MailApp`);
@@ -133,7 +139,7 @@ Onder **Vrijwilligers → Na de actie** kan beheer met één knop (na het typen 
 
 - alle aanmeldingen in `Formulierreacties 1`;
 - in `Totaal_lijst bestellingen`: contactpersoon, telefoon, e-mail (`Info`), adres (`Bezorglocatie`) en opmerkingen (`Comments`);
-- namen in de dashboardtabbladen, IBANs in `Kosten`, de routes, en de bonfoto's in de Drive-map.
+- namen in de dashboardtabbladen, IBANs in `Kosten`, de routes, de opgezochte adressen in `Locaties`, en de bonfoto's in de Drive-map.
 
 Aantallen, bedragen en datums blijven staan, zodat de tussenstand van volgend jaar kan vergelijken. Maak eventueel eerst een kopie van de Sheet.
 

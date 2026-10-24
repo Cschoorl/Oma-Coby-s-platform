@@ -118,6 +118,3 @@ export function dayTasks(volunteers: Volunteer[], day: string, roles: VolunteerR
     })
     .filter((t) => t.moments.length > 0 || t.people.length > 0);
 }
-
-/** Letter per task for the small blocks in the overview. */
-export const roleLetter: Record<VolunteerRole, string> = { inpakken: "I", fietskoerier: "F", autokoerier: "A", oliebollenbar: "B" };

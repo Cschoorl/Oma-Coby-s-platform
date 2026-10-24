@@ -63,19 +63,24 @@ Het aangepaste aantal dozen wordt niet opgeslagen. Het geldt alleen voor die pri
 
 ## 2. Poppetjes met naam in plaats van "Jij"
 
-- Iedereen krijgt een klein getekend poppetje: een buste in een outfit. De outfits zijn schort, kersttrui, streepjestrui, stippenjurk, tuinbroek, colbert met strik, ruitjeshemd, hoodie, koksbuis en jas met sjaal.
-- Elke outfit komt in zes kleuren: de merkkleuren plus het blauw en roze van de discozaal. Daarnaast variëren haar, huidskleur, achtergrond en bril.
+- Iedereen krijgt een klein getekend poppetje in de doodle-stijl van corporate memphis: een egale gekleurde cirkel met losse zwarte lijntjes.
+- **Wat varieert:**
+  - 11 kapsels en hoeden: krul, lus, zwiep, lang haar, pet, baret, cowboyhoed, pony, kuif, golf en kaal
+  - 8 kleuren
+  - 6 gezichten: lach, open mond, neus, knipoog, blij en opzij
+  - soms een ronde of hoekige bril, of een snor
+- De felle kleuren zijn alleen voor de poppetjes. Ze vallen buiten de merkkleuren, net als de kleuren in de discozaal.
 - **Dezelfde naam geeft overal hetzelfde poppetje**, op elk apparaat. Het poppetje volgt uit de naam; er wordt niets opgeslagen.
-- **Iedereen krijgt een eigen outfit-en-kleurcombinatie**, zolang er niet meer dan 60 mensen zijn.
+- **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 88 mensen zijn.
   - Het dashboard maakt een lijst van alle namen die het kent: vrijwilligers, inpakkers, bezorgers, wie heeft afgeleverd, en wie is ingelogd.
-  - De outfits worden eerlijk verdeeld. De eerste tien mensen dragen allemaal iets anders, daarna komt een tweede ronde in andere kleuren.
+  - De kapsels worden eerlijk verdeeld. De eerste elf mensen hebben allemaal een ander kapsel, daarna komt een tweede ronde in andere kleuren.
   - Komt er iemand bij, dan verandert het poppetje van anderen meestal niet. Het kan wel gebeuren.
 - **Waar het staat:**
   - **Inpakken:** "Jij" is vervangen door je voornaam met poppetje, in een gouwe ouwe-pilletje. Bij een ander staat er bijvoorbeeld "Ria is bezig". Bij *Ingepakt door* staat het poppetje met de naam.
   - **Kop van het dashboard:** je naam met poppetje, ook in het telefoonmenu.
   - **Routes:** het poppetje bij elke bezorger.
   - **Vrijwilligers en Agenda:** zie hieronder.
-- Bij het inloggen staat nog geen poppetje. De verdeling hangt af van wie het dashboard kent, en dat is pas na het inloggen bekend. Een voorbeeld op het inlogscherm zou soms een andere outfit tonen dan je daarna krijgt.
+- Bij het inloggen staat nog geen poppetje. De verdeling hangt af van wie het dashboard kent, en dat is pas na het inloggen bekend.
 - Bestand: `src/components/Avatar.tsx` (`Avatar`, `NameTag`, `setAvatarRoster`, `avatarLook`). De namenlijst wordt gevuld in `src/App.tsx` (`rosterNames`).
 - De regels staan in `docs/huisstijl-regels.md` onder *Personen*.
 
@@ -87,8 +92,8 @@ Opgezet zoals roostertools (Eitje, Planday) beschikbaarheid tonen: een rij per p
 - **Het overzicht *Wie kan wanneer*:**
   - Links staan de namen met poppetje, het aantal dagen en eventueel *max N*. Deze kolom blijft staan als je zijwaarts scrollt.
   - Bovenaan staan de dagen. Een dikkere lijn markeert een nieuwe week en de pauze rond de kerst.
-  - Onder elke dag staat per taak (I, A, B) hoeveel mensen er kunnen: rood met ! is te weinig, geel is bijna, groen is genoeg.
-  - In de cellen staan blokjes in de taakkleur (I = inpakken, A = autokoerier, B = Oliebollenbar, F = fietskoerier bij oude aanmeldingen). Met de muis erop zie je de tijd en het dagdeel.
+  - Onder de dagen staat per taak (Inpakken, Bezorgen, Bar) een stippelvakje met de dienst van die dag: de tijd (bijvoorbeeld *6:30–12*) en *kunnen/nodig* (bijvoorbeeld *2/4*). Rood met ! is te weinig, geel is bijna, groen is genoeg. Zonder tijd in de Agenda staat er *hele dag*.
+  - In de cellen staat per dienst die iemand kan een blokje met de tijd, in de kleur van de taak: geel voor inpakken, rood voor bezorgen, bruin voor de bar, groen voor de fietskoerier bij oude aanmeldingen. Met de muis erop zie je de taak, het dagdeel en de plek.
   - Je kunt zoeken, filteren op taak (*Alles*, *Inpakken*, *Bezorgen*, *Bar*) en sorteren op naam of op meeste dagen.
 - **Klik op een naam** om een zijpaneel te openen met:
   - knoppen voor WhatsApp, bellen en mail

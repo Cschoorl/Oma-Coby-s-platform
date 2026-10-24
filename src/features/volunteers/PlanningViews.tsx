@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import type { Volunteer, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, reminderLabel, volunteerRoleLabel } from "../../types/dashboard";
-import { Avatar, NameTag, avatarLook, outfitLabel } from "../../components/Avatar";
+import { Avatar, NameTag } from "../../components/Avatar";
 import { Icon, Note, fieldLabel, secondaryButton, taskClass } from "../../components/ui";
 import { statusLabel, type StaffingStatus } from "../../utils/staffing";
 import { whatsappNumber } from "../routes/routeUtils";
-import { dayTasks, daysOf, roleLetter, slotsOn, type DayTask, type SeasonDayInfo, type Slot } from "./availability";
+import { dayTasks, daysOf, slotsOn, type SeasonDayInfo, type Slot } from "./availability";
 
 /*
  * Planning views after the way rostering tools (Eitje, Planday) show availability: one row per
@@ -20,21 +20,17 @@ export const statusSign: Record<StaffingStatus, string> = { weinig: "!", bijna: 
 /** "Bezorgen" reads better than "Autokoerier" in tight spots. */
 export const shortRole: Record<VolunteerRole, string> = { inpakken: "Inpakken", fietskoerier: "Fiets", autokoerier: "Bezorgen", oliebollenbar: "Bar" };
 
-/** A small block in the task colour with the task letter: I, A or B. */
-export function TaskBlock({ role, title }: { role: VolunteerRole; title?: string }) {
-  return (
-    <span className={`inline-grid h-[18px] w-[18px] place-items-center rounded-[4px] text-[10px] font-bold ${taskClass[role]}`} title={title ?? volunteerRoleLabel[role]}>
-      {roleLetter[role]}
-    </span>
-  );
+/** A small swatch in the task colour, for legends and lists. */
+export function TaskDot({ role }: { role: VolunteerRole }) {
+  return <span aria-hidden="true" className={`inline-block h-3 w-3 shrink-0 rounded-[3px] ${taskClass[role]}`} />;
 }
 
 export function TaskLegend({ roles }: { roles: VolunteerRole[] }) {
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
       {roles.map((r) => (
-        <span key={r} className="inline-flex items-center gap-1">
-          <TaskBlock role={r} /> {volunteerRoleLabel[r]}
+        <span key={r} className="inline-flex items-center gap-1.5">
+          <TaskDot role={r} /> {volunteerRoleLabel[r]}
         </span>
       ))}
     </span>
@@ -45,11 +41,14 @@ function slotText(slot: Slot): string {
   return [slot.part, slot.time, slot.location].filter(Boolean).join(" · ");
 }
 
-/** One day's staffing per shown task, for the header of the overview. */
-function dayHead(volunteers: Volunteer[], day: string, roles: VolunteerRole[]): { tasks: DayTask[] } | null {
-  const tasks = dayTasks(volunteers, day, roles);
-  if (tasks.length === 0) return null;
-  return { tasks };
+/** "6:30–12:00" → "6:30–12", "9:00–12:00" → "9–12": fits a narrow column. Without a time: the dagdeel or "hele dag". */
+export function shiftTime(slot: Slot): string {
+  return slot.time ? slot.time.replace(/:00/g, "") : slot.part || "hele dag";
+}
+
+/** A shift as a block in the task colour with its time, like a planned shift in a rostering tool. */
+function ShiftChip({ slot }: { slot: Slot }) {
+  return <span className={`block truncate rounded-[5px] px-1 py-[3px] text-center text-[10px] font-bold leading-tight tabular-nums ${taskClass[slot.role]}`}>{shiftTime(slot)}</span>;
 }
 
 interface MatrixProps {
@@ -64,12 +63,19 @@ interface MatrixProps {
   onDay: (day: string) => void;
 }
 
-/** Rows are people, columns are days. Sticky names on the left, sticky days on top. */
+const COL = "w-[64px] min-w-[64px]";
+
+/**
+ * Rows are people, columns are days. Sticky names on the left, sticky days on top. Above the people,
+ * one row per task with that day's shift: its time and how many can against how many are needed.
+ * In the cells, each shift someone can do as a block with its time, in the task colour.
+ */
 export function AvailabilityMatrix({ volunteers, everyone, days, roles, selectedPerson, selectedDay, onPerson, onDay }: MatrixProps) {
-  const heads = days.map((d) => dayHead(everyone, d.key, roles));
-  // Tasks without moments this season (fietskoerier) only show in the rows, not in the staffing on top.
+  const tasksPerDay = days.map((d) => dayTasks(everyone, d.key, roles));
+  // Tasks without moments this season (fietskoerier) only show in the rows, not in the shifts on top.
   const headRoles = roles.filter((r) => ACTIVE_ROLES.includes(r));
   const weekStart = (i: number) => i > 0 && (days[i].weekday === "ma" || seasonGap(days[i - 1], days[i]));
+  const line = (i: number) => (weekStart(i) ? "border-l-2 border-l-lijn-2" : "");
   return (
     <div className="-mx-4 overflow-x-auto sm:-mx-5">
       <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
@@ -79,12 +85,12 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
               <span className={fieldLabel}>{days[0]?.month ?? ""}</span>
             </th>
             {days.map((d, i) => (
-              <th key={d.key} scope="col" className={`bg-papier p-0 pb-1 font-normal ${weekStart(i) ? "border-l-2 border-lijn-2" : ""}`}>
+              <th key={d.key} scope="col" className={`bg-papier px-0.5 pb-1 font-normal ${line(i)}`}>
                 <button
                   type="button"
                   onClick={() => onDay(d.key)}
                   aria-label={`${d.label}: wie kan er`}
-                  className={`grid w-10 justify-items-center rounded-md py-1 leading-tight hover:bg-vul ${selectedDay === d.key ? "bg-gouwe-100" : ""}`}
+                  className={`grid ${COL} justify-items-center rounded-md py-1 leading-tight hover:bg-vul ${selectedDay === d.key ? "bg-gouwe-100" : ""}`}
                 >
                   <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">{d.weekday}</span>
                   <span className="font-serif text-base font-bold tabular-nums text-krent">{d.day}</span>
@@ -92,42 +98,43 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
               </th>
             ))}
           </tr>
-          <tr>
-            <th scope="row" className="sticky left-0 z-20 border-b border-lijn-2 bg-papier px-4 pb-2 text-left text-[11px] font-normal text-muted sm:px-5">
-              Kunnen er
-            </th>
-            {heads.map((h, i) => (
-              <td key={days[i].key} className={`border-b border-lijn-2 bg-papier px-0.5 pb-2 align-top ${weekStart(i) ? "border-l-2 border-l-lijn-2" : ""}`}>
-                {h ? (
-                  <button
-                    type="button"
-                    onClick={() => onDay(days[i].key)}
-                    className="mx-auto grid w-10 gap-px rounded-md py-0.5 hover:bg-vul"
-                    aria-label={`${days[i].label}: ${h.tasks.map((t) => `${volunteerRoleLabel[t.role]} ${t.people.length}, ${statusLabel[t.status].toLowerCase()}`).join("; ")}`}
-                  >
-                    {headRoles.map((role) => {
-                      const task = h.tasks.find((t) => t.role === role && t.moments.length > 0);
-                      return (
-                        <span key={role} className="flex items-baseline justify-center gap-0.5 text-[11px] leading-[15px] tabular-nums">
-                          {headRoles.length > 1 ? <span className="w-2 text-[9px] font-bold text-muted">{roleLetter[role]}</span> : null}
-                          {task ? (
-                            <b className={`w-5 text-right ${statusText[task.status]}`}>
-                              {task.status === "weinig" ? <span className="font-serif">!</span> : null}
-                              {task.people.length}
-                            </b>
-                          ) : (
-                            <span className="w-5 text-right text-muted/50">–</span>
-                          )}
-                        </span>
-                      );
-                    })}
-                  </button>
-                ) : (
-                  <span className="block text-center text-[11px] text-muted/50">–</span>
-                )}
-              </td>
-            ))}
-          </tr>
+          {headRoles.map((role, r) => {
+            const last = r === headRoles.length - 1;
+            return (
+              <tr key={role}>
+                <th scope="row" className={`sticky left-0 z-20 bg-papier px-4 py-0.5 text-left font-normal sm:px-5 ${last ? "border-b border-lijn-2 pb-2" : ""}`}>
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-krent">
+                    <TaskDot role={role} />
+                    {shortRole[role]}
+                    {r === 0 ? <span className="font-normal text-muted">· kunnen / nodig</span> : null}
+                  </span>
+                </th>
+                {days.map((d, i) => {
+                  const task = tasksPerDay[i].find((t) => t.role === role && t.moments.length > 0);
+                  return (
+                    <td key={d.key} className={`bg-papier px-0.5 py-0.5 align-top ${line(i)} ${last ? "border-b border-lijn-2 pb-2" : ""}`}>
+                      {task ? (
+                        <button
+                          type="button"
+                          onClick={() => onDay(d.key)}
+                          className={`grid ${COL} gap-px rounded-[5px] border border-dashed border-lijn-2 bg-papier px-1 py-[3px] text-center leading-tight hover:bg-vul`}
+                          aria-label={`${d.label}, ${volunteerRoleLabel[role]}: ${task.people.length} van ${task.moments.reduce((n, m) => n + m.target, 0)} nodig, ${statusLabel[task.status].toLowerCase()}`}
+                        >
+                          <span className="truncate text-[10px] text-muted tabular-nums">{task.moments.map((m) => shiftTime(m.slot)).join(" · ")}</span>
+                          <b className={`text-[11px] tabular-nums ${statusText[task.status]}`}>
+                            {task.status === "weinig" ? <span className="font-serif">! </span> : null}
+                            {task.people.length}/{task.moments.reduce((n, m) => n + m.target, 0)}
+                          </b>
+                        </button>
+                      ) : (
+                        <span className={`block ${COL} text-center text-[11px] text-muted/40`}>–</span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </thead>
         <tbody>
           {volunteers.map((v) => {
@@ -137,7 +144,7 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
               <tr key={v.id} className={`group ${active ? "bg-gouwe-50" : ""}`}>
                 <th scope="row" className={`sticky left-0 z-10 border-b border-lijn px-4 py-1 text-left font-normal sm:px-5 ${active ? "bg-gouwe-50" : "bg-papier group-hover:bg-[#fbf6e6]"}`}>
                   <button type="button" onClick={() => onPerson(v)} className="flex w-full items-center gap-2 rounded-md py-0.5 text-left">
-                    <Avatar name={v.name} size={26} />
+                    <Avatar name={v.name} size={30} />
                     <span className="min-w-0">
                       <span className="block max-w-[96px] truncate font-bold text-krent underline-offset-4 group-hover:underline sm:max-w-[150px]">{v.name}</span>
                       <span className="block text-[11px] text-muted">
@@ -149,20 +156,16 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
                 </th>
                 {days.map((d, i) => {
                   const slots = slotsOn(v, d.key).filter((s) => roles.includes(s.role));
-                  const shown = Array.from(new Set(slots.map((s) => s.role)));
                   return (
-                    <td
-                      key={d.key}
-                      className={`border-b border-lijn px-0.5 py-1 text-center align-middle ${weekStart(i) ? "border-l-2 border-l-lijn-2" : ""} ${selectedDay === d.key ? "bg-gouwe-50/70" : "group-hover:bg-[#fbf6e6]"}`}
-                    >
-                      {shown.length ? (
-                        <span className="inline-flex flex-wrap justify-center gap-0.5" title={`${v.name}, ${d.label}: ${slots.map((s) => `${volunteerRoleLabel[s.role]}${slotText(s) ? ` (${slotText(s)})` : ""}`).join(", ")}`}>
-                          {shown.map((r) => (
-                            <TaskBlock key={r} role={r} title="" />
+                    <td key={d.key} className={`border-b border-lijn px-0.5 py-1 align-middle ${line(i)} ${selectedDay === d.key ? "bg-gouwe-50/70" : "group-hover:bg-[#fbf6e6]"}`}>
+                      {slots.length ? (
+                        <span className={`grid ${COL} gap-0.5`} title={`${v.name}, ${d.label}: ${slots.map((s) => `${volunteerRoleLabel[s.role]}${slotText(s) ? ` (${slotText(s)})` : ""}`).join(", ")}`}>
+                          {slots.map((s) => (
+                            <ShiftChip key={s.option} slot={s} />
                           ))}
                         </span>
                       ) : (
-                        <span aria-hidden="true" className="inline-block h-1 w-1 rounded-full bg-lijn-2" />
+                        <span aria-hidden="true" className={`block ${COL} text-center text-[11px] leading-none text-lijn-2`}>·</span>
                       )}
                     </td>
                   );
@@ -247,7 +250,7 @@ export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDa
                   <span className="grid gap-0.5">
                     {slotsOn(v, d.key).map((s) => (
                       <span key={s.option} className="flex flex-wrap items-center gap-1.5 text-xs text-krent">
-                        <TaskBlock role={s.role} />
+                        <TaskDot role={s.role} />
                         {volunteerRoleLabel[s.role]}
                         {slotText(s) ? <span className="text-muted">{slotText(s)}</span> : null}
                       </span>
@@ -270,7 +273,7 @@ export function PersonHeader({ v }: { v: Volunteer }) {
       <div className="min-w-0">
         <h2 className="truncate font-serif text-xl font-bold leading-tight text-krent">{v.name}</h2>
         <p className="text-xs text-muted">
-          {[v.city, `in een ${outfitLabel[avatarLook(v.name).outfit]}`].filter(Boolean).join(" · ")}
+          {v.city}
         </p>
       </div>
     </div>

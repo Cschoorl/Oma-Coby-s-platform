@@ -106,8 +106,8 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <TaskLegend roles={roles} />
           <p className="text-xs text-muted">
-            Bovenaan per taak hoeveel mensen er die dag kunnen: <b className="text-feest-ink">rood met !</b> te weinig, <b className="text-gouwe-ink">geel</b> bijna, <b className="text-kerst-ink">groen</b> genoeg.
-            Beschikbaarheid, nog geen rooster.
+            Bovenaan per taak de dienst van die dag, met wie er kunnen tegenover wie er nodig zijn: <b className="text-feest-ink">rood met !</b> te weinig, <b className="text-gouwe-ink">geel</b> bijna,{" "}
+            <b className="text-kerst-ink">groen</b> genoeg. Beschikbaarheid, nog geen rooster.
           </p>
         </div>
       </Card>

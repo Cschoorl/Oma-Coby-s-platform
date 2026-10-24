@@ -100,7 +100,12 @@ const CONFIG = {
     oliebollenbar: ['wil je helpen in de oliebollenbar'],
     oliebollenbarDays: ['op welke dag(en) wil je helpen in de oliebollenbar'],
     remark: ['wil je nog iets kwijt'],
-    address: ['adres', 'straat + huisnummer']
+    address: ['adres', 'straat + huisnummer'],
+    // From the step-by-step signup on the platform; the old Google Form has none of these.
+    mode: ['hoe aangemeld'],
+    flexible: ['mag ingedeeld worden waar nodig'],
+    maxShifts: ['hoe vaak maximaal'],
+    reminder: ['herinnering 24 uur van tevoren']
   }
 };
 
@@ -114,6 +119,27 @@ const VOLUNTEER_DEFAULT_HEADERS = [
   'Wil je helpen in de Oliebollenbar?', 'Op welke dag(en) wil je helpen in de Oliebollenbar?',
   'Naam + achternaam', 'Woonplaats', 'Telefoonnummer', 'Emailadres', 'Wil je nog iets kwijt? Opmerkingen, vragen, ideeën, suggesties ?'
 ];
+
+/** Columns the 2025 form does not have; added at the end of the tab the first time they get a value. */
+const EXTRA_VOLUNTEER_HEADERS = {
+  address: 'Adres',
+  mode: 'Hoe aangemeld',
+  flexible: 'Mag ingedeeld worden waar nodig',
+  maxShifts: 'Hoe vaak maximaal',
+  reminder: 'Herinnering 24 uur van tevoren'
+};
+
+/** How the planning answers read in the sheet, and back. */
+const PLANNING_TEXT = {
+  mode: { taak: 'Taak in gedachten', dag: 'Dag in gedachten', flexibel: 'Maakt niet uit' },
+  maxShifts: { '1': '1 keer', '2-3': '2 à 3 keer', vaker: 'Zo vaak als nodig' },
+  reminder: { whatsapp: 'WhatsApp', mail: 'Mail', geen: 'Nee' }
+};
+
+function planningKey_(map, text) {
+  const t = String(text || '').trim().toLowerCase();
+  return Object.keys(map).filter(function (k) { return map[k].toLowerCase() === t; })[0] || '';
+}
 
 /*
  * Script-eigenschappen (Projectinstellingen → Script-eigenschappen):
@@ -515,17 +541,25 @@ const HANDLERS = {
       values[role + 'Days'] = r.wants ? (r.days || []).map(String).join(', ') : '';
     });
     values.cargoBike = roles.fietskoerier && roles.fietskoerier.wants ? (body.cargoBike ? 'Ja' : 'Nee') : '';
+    const planning = body.planning || null;
+    if (planning) {
+      values.mode = PLANNING_TEXT.mode[planning.mode] || '';
+      values.flexible = planning.flexible ? 'Ja' : 'Nee';
+      values.maxShifts = PLANNING_TEXT.maxShifts[planning.maxShifts] || '';
+      values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
+    }
 
     return withLock_(function () {
       const sheet = volunteerSheet_();
       let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
       let index = volunteerIndex_(headers);
-      // The 2025 form has no address question: add the column at the end when someone fills it in.
-      if (values.address && index.address === undefined) {
-        sheet.getRange(1, headers.length + 1).setValue('Adres');
-        headers = headers.concat(['Adres']);
+      // The 2025 form has no address or planning questions: add those columns at the end when needed.
+      Object.keys(EXTRA_VOLUNTEER_HEADERS).forEach(function (field) {
+        if (!values[field] || index[field] !== undefined) return;
+        sheet.getRange(1, headers.length + 1).setValue(EXTRA_VOLUNTEER_HEADERS[field]);
+        headers = headers.concat([EXTRA_VOLUNTEER_HEADERS[field]]);
         index = volunteerIndex_(headers);
-      }
+      });
       const row = headers.map(function () { return ''; });
       Object.keys(index).forEach(function (field) {
         if (values[field] !== undefined) row[index[field]] = values[field];
@@ -807,9 +841,22 @@ function readVolunteers_() {
       email: cell(row, 'email'),
       roles: roles,
       cargoBike: truthy_(cell(row, 'cargoBike')),
-      remark: cell(row, 'remark')
+      remark: cell(row, 'remark'),
+      planning: readPlanning_(cell(row, 'mode'), cell(row, 'flexible'), cell(row, 'maxShifts'), cell(row, 'reminder'))
     };
   }).filter(function (v) { return v.name; });
+}
+
+/** The planning columns of one row; undefined for rows from the old Google Form. */
+function readPlanning_(mode, flexible, maxShifts, reminder) {
+  const m = planningKey_(PLANNING_TEXT.mode, mode);
+  if (!m) return undefined;
+  return {
+    mode: m,
+    flexible: truthy_(flexible),
+    maxShifts: planningKey_(PLANNING_TEXT.maxShifts, maxShifts) || 'vaker',
+    reminder: planningKey_(PLANNING_TEXT.reminder, reminder) || 'geen'
+  };
 }
 
 function findOrder_(orderId) {

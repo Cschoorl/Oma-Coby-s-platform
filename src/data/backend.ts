@@ -12,6 +12,7 @@ import type {
   Role,
   RoleAvailability,
   RouteInfo,
+  SignupPlanning,
   Volunteer,
   VolunteerRole
 } from "../types/dashboard";
@@ -45,6 +46,7 @@ export interface VolunteerSignup {
   cargoBike: boolean;
   remark: string;
   consent: boolean;
+  planning?: SignupPlanning;
 }
 
 export interface ReceiptResult {
@@ -588,7 +590,8 @@ function createDemoBackend(notice?: string): Backend {
           email: signup.email.trim(),
           roles: signup.roles,
           cargoBike: signup.roles.fietskoerier.wants && signup.cargoBike,
-          remark: signup.remark.trim()
+          remark: signup.remark.trim(),
+          planning: signup.planning
         });
       });
     },

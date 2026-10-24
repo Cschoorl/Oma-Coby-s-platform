@@ -68,7 +68,27 @@ export interface Volunteer {
   /** Answer to "Kan je een bakfiets lenen van iemand?". */
   cargoBike: boolean;
   remark: string;
+  /** From the step-by-step signup; empty for rows from the old Google Form. */
+  planning?: SignupPlanning;
 }
+
+/** How someone signed up: with a task in mind, a day in mind, or "put me where you need me". */
+export type SignupMode = "taak" | "dag" | "flexibel";
+export type MaxShifts = "1" | "2-3" | "vaker";
+export type ReminderChannel = "whatsapp" | "mail" | "geen";
+
+/** The planning answers of the step-by-step signup, written to their own columns in the sheet. */
+export interface SignupPlanning {
+  mode: SignupMode;
+  /** True: we may also put them on another task or moment where it is busier. */
+  flexible: boolean;
+  maxShifts: MaxShifts;
+  /** A message 24 hours before each shift. */
+  reminder: ReminderChannel;
+}
+
+export const maxShiftsLabel: Record<MaxShifts, string> = { "1": "1 keer", "2-3": "2 à 3 keer", vaker: "Zo vaak als nodig" };
+export const reminderLabel: Record<ReminderChannel, string> = { whatsapp: "WhatsApp", mail: "Mail", geen: "Geen" };
 
 export type CostStatus = "ingediend" | "goedgekeurd" | "afgekeurd" | "uitbetaald";
 

@@ -85,6 +85,9 @@ aan het begin van de vraag, bijv. "Op welke dag(en) kan je helpen als fietskoeri
 mogen blijven staan. Aanmeldingen via de aanmeldpagina (`#/aanmelden`) worden in hetzelfde tabblad toegevoegd,
 in dezelfde kolommen en hetzelfde formaat als het formulier ("Vrijdag 18 december: middag").
 
+- De aanmeldpagina zet vier extra kolommen achteraan zodra ze voor het eerst gevuld worden: *Hoe aangemeld*,
+  *Mag ingedeeld worden waar nodig*, *Hoe vaak maximaal* en *Herinnering 24 uur van tevoren*
+  (zie `docs/vrijwilligers-aanmelding.md`). Rijen uit het Google Formulier laten die leeg.
 - De agenda in het dashboard wordt gevuld uit deze aanmeldingen (beschikbaarheid, niet het definitieve rooster).
 - Inpakkers en bezorgers zien alleen namen en dagen; telefoon, e-mail en opmerkingen ziet alleen beheer.
 - De dagen op de aanmeldpagina staan in `src/config.ts` (`SIGNUP_OPTIONS`), het aantal benodigde mensen per

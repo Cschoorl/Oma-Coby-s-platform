@@ -45,8 +45,9 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 1. Een persoon staat er altijd met naam en eigen poppetje (`Avatar`, `NameTag` in `src/components/Avatar.tsx`), nooit als "Jij".
 2. Het poppetje is een getekend oudje: een hoofd in een egale fantasiekleur, wit of grijs haar of een hoed, en fijne lijntjes in donker chocoladebruin (`#403634`) voor een gezicht met uitdrukking, lachrimpels en blosjes. Soms een bril, leesbril, snor of parels. Lief, niet kinderachtig.
 3. De gezichtskleuren zijn zes iets vergrijsde, op elkaar afgestemde tinten: lavendel, saliegroen, perzik, honinggeel, mistblauw en oudroze. Geen huidtinten en geen felle snoepkleuren. Alle blosjes zijn hetzelfde zachte zalmroze (`#D99294`). Deze kleuren zijn alleen voor de poppetjes, net als bij de discozaal.
-4. Dezelfde naam geeft overal hetzelfde poppetje. Binnen het dashboard krijgt iedereen een eigen combinatie van haar en kleur.
-5. Wie ingelogd is, staat in een gouwe ouwe-pilletje (`NameTag mine`); anderen in een zacht vlak.
+4. Er zijn twee tekeningen van hetzelfde poppetje. De grote (vanaf 44 px) heeft rimpels, wenkbrauwen en kleine accessoires. De kleine (rooster, lijsten, naamlabels) is een eigen vereenvoudigde versie, geen verkleinde kopie. Die heeft een sterke buitenlijn, rustige binnenlijnen, alleen ogen, mond en de grote kenmerken, en iets vollere kleuren. In beide is de buitenlijn het zwaarst.
+5. Dezelfde naam geeft overal hetzelfde poppetje. Binnen het dashboard krijgt iedereen een eigen combinatie van haar en kleur.
+6. Wie ingelogd is, staat in een gouwe ouwe-pilletje (`NameTag mine`); anderen in een zacht vlak.
 
 ## Gedrag
 

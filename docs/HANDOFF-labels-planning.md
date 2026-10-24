@@ -70,7 +70,10 @@ Het aangepaste aantal dozen wordt niet opgeslagen. Het geldt alleen voor die pri
   - 6 kleuren voor het hoofd, 4 tinten wit tot grijs voor het haar, 4 gedempte kleuren voor hoed, pet, muts, hoofddoek en haarband
   - 7 gezichten: glimlach, schaterlach, knipoog, verbaasd, tevreden met de ogen dicht, giechel en schalks
   - soms een ronde bril, een leesbril aan een koordje, een snor of parel-oorbellen
-- Onder de 40 px worden de lijnen iets dikker en vallen de rimpels weg, zodat het naast een naam leesbaar blijft.
+- **Twee tekeningen van dezelfde persoon.** De kleine is geen verkleinde kopie, maar een eigen, eenvoudigere versie.
+  - **Groot** (44 px en meer: profiel, panelen) heeft wenkbrauwen, rimpels, plukjes, de neus, het bloemetje op de hoed en het koordje van de leesbril.
+  - **Klein** (onder 44 px: rooster, lijsten, naamlabels) heeft een sterke buitenlijn en rustige binnenlijnen. Er staan alleen ogen en mond in, plus de grote kenmerken: kapsel of hoed, bril en snor. De kleuren zijn een stap voller, zodat ze op 26 px nog uit elkaar te houden zijn.
+  - In beide tekeningen is de buitenlijn dikker dan de lijnen binnenin, zodat een rimpeltje nooit even zwaar weegt als de rand van het hoofd.
 - De felle kleuren zijn alleen voor de poppetjes. Ze vallen buiten de merkkleuren, net als de kleuren in de discozaal.
 - **Dezelfde naam geeft overal hetzelfde poppetje**, op elk apparaat. Het poppetje volgt uit de naam; er wordt niets opgeslagen.
 - **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 72 mensen zijn.

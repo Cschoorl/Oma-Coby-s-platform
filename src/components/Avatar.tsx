@@ -1,11 +1,15 @@
 import { useMemo } from "react";
 
 /*
- * Every person gets a small drawn oudje: a head in a flat, slightly unusual colour, grey or white
- * hair (or a hat, cap or scarf), and fine black lines for an expressive face with smile lines,
- * blush and now and then glasses, a moustache or pearls. You see at a glance who is who (and that
+ * Every person gets a drawn oudje: a head in a soft fantasy colour, grey or white hair (or a hat,
+ * cap or scarf), and brown lines for an expressive face. You see at a glance who is who (and that
  * it is you) instead of "Jij". The look follows from the name, so it is the same on every screen
  * and device. Hair plus colour is unique within the roster (see setAvatarRoster).
+ *
+ * There are two drawings of the same person. Large (40 px and up: profile, panels) has the wrinkles,
+ * brows, strands and small accessories. Small (rosters, lists, name tags) is not a scaled-down copy
+ * but its own simpler version: a strong outer contour, calm inner lines, only the eyes, mouth and
+ * the big features (hair shape, hat, glasses, moustache), in slightly fuller colours.
  */
 
 /** Dark chocolate instead of near-black: a friendlier, more hand-drawn line. */
@@ -21,7 +25,9 @@ const GOLD = "#dcb867";
  * children's book, never candy or face paint. Not skin tones, so nobody is sorted by skin colour.
  * Lavendel, saliegroen, perzik, honinggeel, mistblauw, oudroze; illustrations only, like the discozaal.
  */
-const COLOURS = ["#b3a8cc", "#a8b88f", "#e3ae94", "#dfc07e", "#9fb2c2", "#cf9fa3"];
+const COLOURS = ["#aea1d0", "#a3b887", "#e6a98c", "#e1bd70", "#98afc6", "#d1989d"];
+/** The same six a step fuller, for the small drawing: at 26 px soft colours otherwise blur together. */
+const SMALL_COLOURS = ["#a091cb", "#93ae74", "#e09a7a", "#dcb25a", "#859fbd", "#c9868c"];
 /** White to steel grey: everybody here has been around a while. */
 const TONES = [WHITE, "#e4ded5", "#c7beb3", "#a0978c"];
 /** Hats, caps, scarves and hairbands. */
@@ -119,13 +125,16 @@ interface Shape {
   d?: string;
   c?: [number, number, number];
   fill?: string;
-  /** "line" is the outline, "fine" the thinner detail; "none" for flat colour only. */
-  stroke?: "line" | "fine" | "none";
+  /**
+   * Line weight. "outline" is the contour of a coloured shape (the default when it is filled with the
+   * face, hair or accent), "feature" the eyes, mouth and glasses (the default otherwise), "fine" the detail.
+   */
+  stroke?: "outline" | "feature" | "fine" | "none";
   colour?: string;
   opacity?: number;
   dash?: boolean;
-  /** Wrinkles and other small detail, left out when the face is drawn small. */
-  small?: false;
+  /** Only in the large or only in the small drawing. Everything "fine" is large only. */
+  only?: "big" | "small";
 }
 
 type Pt = [number, number];
@@ -170,7 +179,7 @@ function sideCurls(top: number): Shape {
 
 const HEAD = "M32 13C42.6 13 50 20.6 50 31.6 50 45.2 42 56 32 56S14 45.2 14 31.6C14 20.6 21.4 13 32 13Z";
 const EARS = "M14.8 32.6C11.4 31.2 9.8 33.6 10.4 36.4 11 39.4 13 40.6 15.4 40M49.2 32.6C52.6 31.2 54.2 33.6 53.6 36.4 53 39.4 51 40.6 48.6 40";
-const SEAM = { colour: WHITE, opacity: 0.55, stroke: "fine" as const };
+const SEAM = { colour: WHITE, opacity: 0.55, stroke: "fine" as const, only: "big" as const };
 
 const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
   krul: {
@@ -262,8 +271,8 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
         [44.2, 19.2],
         [41.2, 19.2],
         [40.2, 16.4]
-      ] as Pt[]).map(([x, y]): Shape => ({ c: [x, y, 1.9], fill: WHITE, stroke: "fine" })),
-      { c: [42.6, 17.2, 1.3], fill: GOLD, stroke: "fine" }
+      ] as Pt[]).map(([x, y]): Shape => ({ c: [x, y, 1.9], fill: WHITE, stroke: "fine", only: "big" })),
+      { c: [42.6, 17.2, 1.3], fill: GOLD, stroke: "fine", only: "big" }
     ]
   },
   scheiding: {
@@ -317,7 +326,7 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
         [32, 19.6],
         [16.4, 51],
         [47.6, 51]
-      ] as Pt[]).map(([x, y]): Shape => ({ c: [x, y, 0.9], fill: WHITE, stroke: "none", opacity: 0.8 }))
+      ] as Pt[]).map(([x, y]): Shape => ({ c: [x, y, 0.9], fill: WHITE, stroke: "none", opacity: 0.8, only: "big" }))
     ]
   },
   kuif: {
@@ -337,59 +346,72 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
   }
 };
 
+/** An eye: a dot with a glint when large, a slightly bigger plain dot when small. */
 const dot = (x: number, y: number): Shape[] => [
-  { c: [x, y, 1.7], fill: K, stroke: "none" },
-  { c: [x + 0.6, y - 0.6, 0.5], fill: WHITE, stroke: "none" }
+  { c: [x, y, 1.7], fill: K, stroke: "none", only: "big" },
+  { c: [x + 0.6, y - 0.6, 0.5], fill: WHITE, stroke: "none", only: "big" },
+  { c: [x, y, 2.3], fill: K, stroke: "none", only: "small" }
 ];
 
-/** Eyes, brows and mouth per face: the expression. The nose, blush and wrinkles are the same for everyone. */
-const FACE_SHAPES: Record<Face, Shape[]> = {
-  glim: [
-    ...dot(25, 34),
-    ...dot(39, 34),
-    { d: "M21.6 29.6q3.2-2 6.4-.2M36 29.4q3.2-1.8 6.4.2M27.2 46.4q4.8 4 9.6 0" },
-    { d: "M22.6 43q-1.2 2.8.6 5.2M41.4 43q1.2 2.8-.6 5.2", stroke: "fine" }
-  ],
-  lach: [
-    { d: "M21.8 34.6q3.2-3.6 6.4 0M35.8 34.6q3.2-3.6 6.4 0M21.4 28.6q3.4-2.4 6.8-.4M35.8 28.2q3.4-2 6.8.4" },
-    { d: "M25.4 44.6h13.2q-.8 7.6-6.6 7.6t-6.6-7.6Z", fill: K },
-    { d: "M28.8 50.4q3.2-2.4 6.4 0-1.4 1.6-3.2 1.6t-3.2-1.6Z", fill: TONGUE, stroke: "none" }
-  ],
-  knipoog: [
-    ...dot(39, 34),
-    { d: "M21.8 34.2q3.2 2.4 6.4 0M21.6 30.6q3.2-.8 6.4.4M36 28.6q3.2-2.2 6.4-.2M27 46q5.4 4.6 10.6-.8" },
-    { d: "M38.4 44.4q1 .6.6 1.8", stroke: "fine" }
-  ],
-  verbaasd: [
-    { c: [25, 34, 2.4], fill: WHITE },
-    { c: [39, 34, 2.4], fill: WHITE },
-    { c: [25.3, 34.3, 1.1], fill: K, stroke: "none" },
-    { c: [39.3, 34.3, 1.1], fill: K, stroke: "none" },
-    { d: "M21.4 27.4q3.4-2.6 6.8-.8M35.8 26.6q3.4-1.8 6.8.8" },
-    { d: "M32 44.8c1.3 0 2.2 1.2 2.2 2.8S33.3 50.4 32 50.4 29.8 49.2 29.8 47.6 30.7 44.8 32 44.8Z", fill: K }
-  ],
-  tevreden: [
-    { d: "M21.8 33.8q3.2 2.8 6.4 0M35.8 33.8q3.2 2.8 6.4 0M21.8 29.4q3-1.4 6 0M36.2 29.4q3-1.4 6 0M28 46.4q4 2.8 8 0" },
-    { d: "M21.6 33.4l-1.2-.6M42.4 33.4l1.2-.6", stroke: "fine" }
-  ],
-  giechel: [
-    { d: "M22.4 31.8l4.6 2.2-4.6 2.2M41.6 31.8l-4.6 2.2 4.6 2.2M21.4 28q3.4-2.6 6.8-.6M35.8 27.4q3.4-2 6.8.6" },
-    { d: "M25.6 44.2q6.4 1.6 12.8 0-1.4 8-6.4 8t-6.4-8Z", fill: K },
-    { d: "M29 50.4q3-2.2 6 0-1.3 1.6-3 1.6t-3-1.6Z", fill: TONGUE, stroke: "none" }
-  ],
-  schalks: [
-    ...dot(25, 34.4),
-    ...dot(39, 34.4),
-    { d: "M22.4 32.8q2.6-1 5.2 0M36.4 32.8q2.6-1 5.2 0M21.6 30q3.2-.4 6.4.4M36 28.4q3.4-3 6.6-.6M27.4 47q3.6 1.6 8.2-2" }
-  ]
+/** The expression: eyes and mouth always; brows (and lids) and laughter lines only large. */
+const FACE_SHAPES: Record<Face, { eyes: Shape[]; mouth: Shape[]; brows: string; fine?: string }> = {
+  glim: {
+    eyes: [...dot(25, 34), ...dot(39, 34)],
+    brows: "M21.6 29.6q3.2-2 6.4-.2M36 29.4q3.2-1.8 6.4.2",
+    mouth: [{ d: "M27.2 46.4q4.8 4 9.6 0" }],
+    fine: "M22.6 43q-1.2 2.8.6 5.2M41.4 43q1.2 2.8-.6 5.2"
+  },
+  lach: {
+    eyes: [{ d: "M21.8 34.6q3.2-3.6 6.4 0M35.8 34.6q3.2-3.6 6.4 0" }],
+    brows: "M21.4 28.6q3.4-2.4 6.8-.4M35.8 28.2q3.4-2 6.8.4",
+    mouth: [
+      { d: "M25.4 44.6h13.2q-.8 7.6-6.6 7.6t-6.6-7.6Z", fill: K },
+      { d: "M28.8 50.4q3.2-2.4 6.4 0-1.4 1.6-3.2 1.6t-3.2-1.6Z", fill: TONGUE, stroke: "none" }
+    ]
+  },
+  knipoog: {
+    eyes: [{ d: "M21.8 34.2q3.2 2.4 6.4 0" }, ...dot(39, 34)],
+    brows: "M21.6 30.6q3.2-.8 6.4.4M36 28.6q3.2-2.2 6.4-.2",
+    mouth: [{ d: "M27 46q5.4 4.6 10.6-.8" }],
+    fine: "M38.4 44.4q1 .6.6 1.8"
+  },
+  verbaasd: {
+    eyes: [
+      { c: [25, 34, 2.4], fill: WHITE },
+      { c: [39, 34, 2.4], fill: WHITE },
+      { c: [25.3, 34.3, 1.1], fill: K, stroke: "none" },
+      { c: [39.3, 34.3, 1.1], fill: K, stroke: "none" }
+    ],
+    brows: "M21.4 27.4q3.4-2.6 6.8-.8M35.8 26.6q3.4-1.8 6.8.8",
+    mouth: [{ d: "M32 44.8c1.3 0 2.2 1.2 2.2 2.8S33.3 50.4 32 50.4 29.8 49.2 29.8 47.6 30.7 44.8 32 44.8Z", fill: K }]
+  },
+  tevreden: {
+    eyes: [{ d: "M21.8 33.8q3.2 2.8 6.4 0M35.8 33.8q3.2 2.8 6.4 0" }],
+    brows: "M21.8 29.4q3-1.4 6 0M36.2 29.4q3-1.4 6 0",
+    mouth: [{ d: "M28 46.4q4 2.8 8 0" }],
+    fine: "M21.6 33.4l-1.2-.6M42.4 33.4l1.2-.6"
+  },
+  giechel: {
+    eyes: [{ d: "M22.4 31.8l4.6 2.2-4.6 2.2M41.6 31.8l-4.6 2.2 4.6 2.2" }],
+    brows: "M21.4 28q3.4-2.6 6.8-.6M35.8 27.4q3.4-2 6.8.6",
+    mouth: [
+      { d: "M25.6 44.2q6.4 1.6 12.8 0-1.4 8-6.4 8t-6.4-8Z", fill: K },
+      { d: "M29 50.4q3-2.2 6 0-1.3 1.6-3 1.6t-3-1.6Z", fill: TONGUE, stroke: "none" }
+    ]
+  },
+  schalks: {
+    eyes: [...dot(25, 34.4), ...dot(39, 34.4)],
+    brows: "M22.4 32.8q2.6-1 5.2 0M36.4 32.8q2.6-1 5.2 0M21.6 30q3.2-.4 6.4.4M36 28.4q3.4-3 6.6-.6",
+    mouth: [{ d: "M27.4 47q3.6 1.6 8.2-2" }]
+  }
 };
 
+/** Blush for everyone; a laughter line by each eye, a line on the forehead and the nose only large. */
 const FACE_COMMON: Shape[] = [
   { c: [22.6, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.45 },
   { c: [41.4, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.45 },
-  // Laughter lines, bags under the eyes and a line on the forehead: an oudje, not a toddler.
-  { d: "M19.4 33.2l-1.8-.6M19.6 35.6l-1.6.8M44.6 33.2l1.8-.6M44.4 35.6l1.6.8M23.2 37.8q1.8.8 3.6 0M37.2 37.8q1.8.8 3.6 0M27.8 25.8q4.2-1.2 8.4 0M30.4 53.2q1.6.7 3.2 0", stroke: "fine", small: false },
-  { d: "M32.4 36.2c-1.4 2.4-2.6 4.6-1.2 5.2.9.4 1.8.3 2.6-.1" }
+  { d: "M19.4 34l-1.8-.4M44.6 34l1.8-.4M27.8 25.8q4.2-1.2 8.4 0", stroke: "fine" },
+  { d: "M32.4 36.2c-1.4 2.4-2.6 4.6-1.2 5.2.9.4 1.8.3 2.6-.1", only: "big" }
 ];
 
 const EXTRA_SHAPES: Record<Extra, { under?: Shape[]; over?: Shape[] }> = {
@@ -398,17 +420,17 @@ const EXTRA_SHAPES: Record<Extra, { under?: Shape[]; over?: Shape[] }> = {
   snor: { under: [{ d: "M32 42.6c-1.8-1.6-6.2-1.8-8.4 1.4 2.8 1.2 6 .8 8.4-.8 2.4 1.6 5.6 2 8.4.8-2.2-3.2-6.6-3-8.4-1.4Z", fill: "hair" }] },
   bril: {
     over: [
-      { c: [25, 34, 4.6], fill: WHITE, opacity: 0.22, stroke: "none" },
-      { c: [39, 34, 4.6], fill: WHITE, opacity: 0.22, stroke: "none" },
+      { c: [25, 34, 4.6], fill: WHITE, opacity: 0.22, stroke: "none", only: "big" },
+      { c: [39, 34, 4.6], fill: WHITE, opacity: 0.22, stroke: "none", only: "big" },
       { d: "M29.6 34a4.6 4.6 0 1 1-9.2 0 4.6 4.6 0 1 1 9.2 0M43.6 34a4.6 4.6 0 1 1-9.2 0 4.6 4.6 0 1 1 9.2 0M29.6 33.6q2.4-1.6 4.8 0M20.4 33.4l-6-.8M43.6 33.4l6-.8" }
     ]
   },
-  // Half-moon reading glasses low on the nose, on a beaded cord.
+  // Half-moon reading glasses low on the nose; large, they hang on a beaded cord.
   leesbril: {
     over: [
       { d: "M22.4 37.4h6.4q-.2 3.6-3.2 3.6t-3.2-3.6ZM35.2 37.4h6.4q-.2 3.6-3.2 3.6t-3.2-3.6Z", fill: WHITE, opacity: 0.9 },
       { d: "M28.8 37.8q3.2-1.4 6.4 0" },
-      { d: "M22.4 37.8Q15.4 46 18 56.4M41.6 37.8Q48.6 46 46 56.4", stroke: "line", colour: "accent", dash: true }
+      { d: "M22.4 37.8Q15.4 46 18 56.4M41.6 37.8Q48.6 46 46 56.4", stroke: "feature", colour: "accent", dash: true, only: "big" }
     ]
   },
   parels: {
@@ -419,31 +441,42 @@ const EXTRA_SHAPES: Record<Extra, { under?: Shape[]; over?: Shape[] }> = {
   }
 };
 
-/** The drawing as SVG markup. Below 40 px the lines get a little heavier and the wrinkles drop out, so it stays clear. */
+/** Below this size the small drawing is used. */
+const SMALL_BELOW = 44;
+
+/** The drawing as SVG markup: the large one, or from SMALL_BELOW down its own simpler version. */
 export function avatarSvg(look: AvatarLook, size = 64): string {
-  const small = size < 40;
-  const width = { line: small ? 1.8 : 1.3, fine: small ? 1.15 : 0.85 };
-  const token = (v: string | undefined) => (v === "face" ? look.colour : v === "hair" ? look.tone : v === "accent" ? look.accent : v);
+  const small = size < SMALL_BELOW;
+  // A clear step between the contour and what is inside it; small has a stronger contour and no detail.
+  const width = small ? { outline: 2.9, feature: 2.1, fine: 0 } : { outline: 1.7, feature: 1.25, fine: 0.7 };
+  const face = small ? SMALL_COLOURS[COLOURS.indexOf(look.colour)] ?? look.colour : look.colour;
+  const token = (v: string | undefined) => (v === "face" ? face : v === "hair" ? look.tone : v === "accent" ? look.accent : v);
+  const filled = (s: Shape) => s.fill === "face" || s.fill === "hair" || s.fill === "accent";
   const draw = (s: Shape) => {
-    if (small && s.small === false) return "";
+    const weight = s.stroke ?? (filled(s) ? "outline" : "feature");
+    if ((small && (s.only === "big" || weight === "fine")) || (!small && s.only === "small")) return "";
     const fill = token(s.fill) ?? "none";
     // The hairband is a thick coloured line with no outline.
     const band = s.stroke === "none" && s.colour === "accent" && !s.fill;
-    const stroke = band ? look.accent : s.stroke === "none" ? "none" : (token(s.colour) ?? K);
-    const w = band ? (small ? 3.4 : 2.8) : width[s.stroke === "fine" ? "fine" : "line"];
+    const stroke = band ? look.accent : weight === "none" ? "none" : (token(s.colour) ?? K);
+    const w = band ? (small ? 3.8 : 3) : weight === "none" ? 0 : width[weight];
     const attrs = `fill="${fill}" stroke="${stroke}"${stroke === "none" ? "" : ` stroke-width="${w}"`}${s.opacity !== undefined ? ` opacity="${s.opacity}"` : ""}${
-      s.dash ? ` stroke-dasharray="0.1 ${small ? 2.6 : 2}"` : ""
+      s.dash ? ' stroke-dasharray="0.1 2"' : ""
     }`;
     return s.c ? `<circle cx="${s.c[0]}" cy="${s.c[1]}" r="${s.c[2]}" ${attrs}/>` : `<path d="${s.d}" ${attrs}/>`;
   };
   const hair = HAIR_SHAPES[look.hair];
   const extra = EXTRA_SHAPES[look.extra];
+  const expression = FACE_SHAPES[look.face];
   const shapes: Shape[] = [
     ...(hair.back ?? []),
     ...(NO_EARS.has(look.hair) ? [] : [{ d: EARS, fill: "face" }, { d: "M12.6 35q1.6-.4 2 1.4M51.4 35q-1.6-.4-2 1.4", stroke: "fine" as const }]),
     { d: HEAD, fill: "face" },
     ...FACE_COMMON,
-    ...FACE_SHAPES[look.face],
+    ...expression.eyes,
+    { d: expression.brows, only: "big" },
+    ...(expression.fine ? [{ d: expression.fine, stroke: "fine" as const }] : []),
+    ...expression.mouth,
     ...(extra.under ?? []),
     ...hair.front,
     ...(extra.over ?? [])

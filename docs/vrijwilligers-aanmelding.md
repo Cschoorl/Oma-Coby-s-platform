@@ -40,11 +40,11 @@ Heeft een dag toch meer dan één dienst in de Agenda (bijvoorbeeld de bar 's mi
 ## Het gesprek
 
 1. **Hoi! Oma Coby hier, nou ja, mijn digitale versie. Weet je al wat je wilt doen, of wanneer je kunt?**
-   - *Ik weet wat ik wil doen*: welke taak? Bij bezorgen volgt de rijbewijsvraag, daarna per taak de dagen. Tot slot nog een vraag naar krappe momenten (alleen als die er zijn).
-   - *Ik weet wanneer ik kan*: welke dagen? Wanneer, alleen op dagen met meer diensten. Wat wil je op die dagen doen? Hier kan ook "maakt niet uit". Bij bezorgen volgt de rijbewijsvraag.
+   - *Ik weet wat ik wil doen*: welke taak? Bij bezorgen volgt de rijbewijsvraag, dan vraag 3, daarna per taak de dagen. Tot slot nog een vraag naar krappe momenten (alleen als die er zijn).
+   - *Ik weet wanneer ik kan*: welke dagen? Wanneer, alleen op dagen met meer diensten. Wat wil je op die dagen doen? Hier kan ook "maakt niet uit". Bij bezorgen volgt de rijbewijsvraag, dan vraag 3.
    - *Zet me maar in waar het nodig is*: welke dagen? Wanneer, alleen op dagen met meer diensten. Alle taken staan aan en je haalt weg wat niet past. Bij bezorgen volgt de rijbewijsvraag.
 2. **Rijbewijs** (alleen bij bezorgen). Keuze uit *Rijbewijs én auto*, *Rijbewijs, geen auto* of *Geen rijbewijs*. Zonder rijbewijs valt bezorgen af. Was dat je enige taak, dan kies je opnieuw.
-3. **Mag ik je ook ergens anders neerzetten als het daar drukker is?** Na "zet me maar in" slaan we deze vraag over.
+3. **Je hebt gekozen voor inpakken. Als het bij een andere taak drukker is, mag ik je daar dan ook neerzetten?** Direct na de taakkeuze, met de gekozen taak erin, zodat duidelijk is waar "ergens anders" tegenover staat. Na "zet me maar in" en als je al alle taken koos ("maakt niet uit") slaan we deze vraag over: dan geldt hij als ja.
 4. **Je kunt op 3 dagen. Op hoeveel daarvan wil je helpen?** Oma telt voor je, dus je hoeft je dagen niet zelf na te tellen. Keuze uit 1, 2 of 3 dagen (en 5 bij meer dan 5 dagen), of *Alle 3*. Het zijn echte aantallen, zodat het rooster je nooit vaker inplant. Bij één dag vraagt Oma dit niet.
 5. **Zal ik je de dag ervoor herinneren?** Via WhatsApp, via mail of het hoeft niet.
 6. **Hoe heet je, en hoe kan ik je bereiken?** Voor- en achternaam, telefoon (verplicht bij WhatsApp) of mail (verplicht bij mail), woonplaats. Het adres vragen we alleen aan bezorgers.

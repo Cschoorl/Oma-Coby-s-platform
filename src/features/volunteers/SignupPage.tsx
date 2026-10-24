@@ -74,22 +74,36 @@ function countDays(roles: ReturnType<typeof toRoles>): number {
   return new Set(ACTIVE_ROLES.flatMap((r) => roles[r].days.map(dayKey))).size;
 }
 
+/** The tasks they could be asked for: this season's (on their days, when they chose days), no bezorgen without a licence. */
+function offeredRoles(a: Answers): VolunteerRole[] {
+  return (a.mode === "taak" ? ACTIVE_ROLES : rolesOnDays(a.days)).filter((r) => !(r === "autokoerier" && a.driving === "nee"));
+}
+
+/** They chose every task there is: "somewhere else" does not exist, so they can be put wherever it is busy. */
+const openToAll = (a: Answers) => a.roles.length > 0 && offeredRoles(a).every((r) => a.roles.includes(r));
+
+/** "inpakken en bezorgen": the tasks as Oma says them in a sentence. */
+function taskNames(roles: VolunteerRole[]): string {
+  const names = ACTIVE_ROLES.filter((r) => roles.includes(r)).map((r) => (r === "autokoerier" ? "bezorgen" : r === "oliebollenbar" ? "de Oliebollenbar" : volunteerRoleLabel[r].toLowerCase()));
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} en ${names[names.length - 1]}` : (names[0] ?? "");
+}
+
 function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): StepId[] {
   const ids: StepId[] = ["mode"];
   if (!a.mode) return ids;
   // Bezorgen needs a driving licence: asked straight after choosing it, before any days for it.
   const license: StepId[] = a.roles.includes("autokoerier") ? ["license"] : [];
+  // Right after the task choice, while it is fresh; "Zet me maar in" and choosing every task already answer it.
+  const flexible: StepId[] = a.mode !== "flexibel" && !openToAll(a) ? ["flexible"] : [];
   if (a.mode === "taak") {
-    ids.push("roles", ...license, ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
+    ids.push("roles", ...license, ...flexible, ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
     if (suggestions.length > 0) ids.push("suggest");
   } else {
     ids.push("days");
     // Only a question on days with more than one shift; with one morning shift there is nothing to ask.
     if (daysWithChoice(a.days).length > 0) ids.push("parts");
-    ids.push("dayroles", ...license);
+    ids.push("dayroles", ...license, ...flexible);
   }
-  // "Zet me maar in waar het nodig is" already answers this one.
-  if (a.mode !== "flexibel") ids.push("flexible");
   // With one day the maximum is that day; no need to ask.
   if (chosenDays > 1) ids.push("max");
   ids.push("reminder", "contact", "check");
@@ -159,6 +173,8 @@ export function SignupPage() {
   const first = firstName.trim().split(" ")[0];
   /** "Zet me maar in" and "Maakt niet uit" offer every task on their days, but no bezorgen without a licence. */
   const offered = (list: string[]) => rolesOnDays(list).filter((r) => !(r === "autokoerier" && a.driving === "nee"));
+  /** Whether they may be put where it is busy: asked, or answered by how they signed up. */
+  const flexibleNow = a.mode === "flexibel" || openToAll(a) || a.flexible === true;
 
   const days = seasonDays();
   const dayLabel = (key: string) => shortDay(days.find((d) => d.key === key)?.label ?? key);
@@ -229,7 +245,8 @@ export function SignupPage() {
       answer: () => (a.mode === "dag" && a.roles.length === offered(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", "))
     },
     flexible: {
-      say: ["Als het ergens anders drukker is, mag ik je daar dan ook neerzetten?"],
+      // Names their task, so it is clear what "ergens anders" is measured against.
+      say: [`Je hebt gekozen voor ${taskNames(a.roles)}. Als het bij een andere taak drukker is, mag ik je daar dan ook neerzetten?`],
       answer: () => (a.flexible ? "Ja, prima" : "Liever niet"),
       react: () => (a.flexible ? "Fijn!" : "Afspraak is afspraak.")
     },
@@ -533,7 +550,7 @@ export function SignupPage() {
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">Planning</dt>
                   <dd className="text-krent">
-                    {a.mode === "flexibel" || a.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen wat ik koos"} · maximaal {maxShiftsLabel(maxShifts)}
+                    {flexibleNow ? "Mag ingedeeld worden waar het nodig is" : "Alleen wat ik koos"} · maximaal {maxShiftsLabel(maxShifts)}
                   </dd>
                 </div>
               </dl>
@@ -591,7 +608,7 @@ export function SignupPage() {
       if (view.next?.ready) advance();
       return;
     }
-    if (!a.mode || (a.flexible === null && a.mode !== "flexibel") || !a.reminder) return;
+    if (!a.mode || (a.flexible === null && !flexibleNow) || !a.reminder) return;
     setBusy(true);
     setError(null);
     try {
@@ -607,7 +624,7 @@ export function SignupPage() {
         consent,
         planning: {
           mode: a.mode,
-          flexible: a.mode === "flexibel" || a.flexible === true,
+          flexible: flexibleNow,
           maxShifts,
           reminder: a.reminder,
           driving: roles.autokoerier.wants && a.driving && a.driving !== "nee" ? a.driving : undefined
@@ -650,7 +667,7 @@ export function SignupPage() {
   }
 
   return (
-    <form className="grid gap-4" onSubmit={submit}>
+    <form className="grid gap-6" onSubmit={submit}>
       <div className="grid gap-0.5">
         <p className={fieldLabel}>Vrijwilligers gezocht</p>
         <h1 className="font-display text-[34px] uppercase leading-none tracking-wide text-krent">
@@ -658,10 +675,10 @@ export function SignupPage() {
         </h1>
       </div>
 
-      <div className="grid gap-3" role="log" aria-live="polite" aria-label="Gesprek met Oma Coby">
+      <div className="grid gap-6" role="log" aria-live="polite" aria-label="Gesprek met Oma Coby">
         {/* The conversation so far. */}
         {ids.slice(0, index).map((id, k) => (
-          <div key={id} className="grid gap-1.5">
+          <div key={id} className="grid gap-3">
             <OmaSays lines={joinLines(k > 0 ? copy[ids[k - 1]].react?.() : undefined, copy[id].say)} />
             <div className="flex items-center justify-end gap-2">
               <button type="button" className={`${textAction} text-xs`} onClick={() => goTo(id)}>
@@ -730,7 +747,7 @@ function OmaSays({ lines, typing = false }: { lines: string[]; typing?: boolean 
   return (
     <div className="flex items-end gap-2">
       <img src={omaUrl} alt="" className="h-8 w-8 flex-none rounded-full object-cover object-top" />
-      <div className="grid max-w-[85%] justify-items-start gap-1">
+      <div className="grid max-w-[85%] justify-items-start gap-2">
         {lines.map((line, i) => (
           <p key={i} className="rounded-kaart rounded-bl-sm bg-papier px-3 py-2 text-sm text-krent shadow-zacht">
             {line}

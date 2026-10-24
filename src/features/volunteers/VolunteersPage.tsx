@@ -112,7 +112,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
                   ))}
                   {v.cargoBike ? <Badge tone="zacht">Bakfiets</Badge> : null}
                   {v.planning?.flexible ? <Badge tone="klaar">Inzetbaar waar nodig</Badge> : null}
-                  {v.planning ? <Badge tone="zacht">Max {maxShiftsLabel[v.planning.maxShifts].toLowerCase()}</Badge> : null}
+                  {v.planning ? <Badge tone="zacht">Max {maxShiftsLabel(v.planning.maxShifts)}</Badge> : null}
                   {v.planning && v.planning.reminder !== "geen" ? <Badge tone="zacht">Herinnering via {reminderLabel[v.planning.reminder]}</Badge> : null}
                 </span>
               </div>

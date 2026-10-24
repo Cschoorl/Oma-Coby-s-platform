@@ -132,7 +132,6 @@ const EXTRA_VOLUNTEER_HEADERS = {
 /** How the planning answers read in the sheet, and back. */
 const PLANNING_TEXT = {
   mode: { taak: 'Taak in gedachten', dag: 'Dag in gedachten', flexibel: 'Maakt niet uit' },
-  maxShifts: { '1': '1 keer', '2-3': '2 à 3 keer', vaker: 'Zo vaak als nodig' },
   reminder: { whatsapp: 'WhatsApp', mail: 'Mail', geen: 'Nee' }
 };
 
@@ -545,7 +544,7 @@ const HANDLERS = {
     if (planning) {
       values.mode = PLANNING_TEXT.mode[planning.mode] || '';
       values.flexible = planning.flexible ? 'Ja' : 'Nee';
-      values.maxShifts = PLANNING_TEXT.maxShifts[planning.maxShifts] || '';
+      values.maxShifts = Number(planning.maxShifts) > 0 ? Math.round(Number(planning.maxShifts)) + ' keer' : '';
       values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
     }
 
@@ -854,7 +853,8 @@ function readPlanning_(mode, flexible, maxShifts, reminder) {
   return {
     mode: m,
     flexible: truthy_(flexible),
-    maxShifts: planningKey_(PLANNING_TEXT.maxShifts, maxShifts) || 'vaker',
+    // "3 keer" → 3; empty means no maximum given, so as many as they chose.
+    maxShifts: parseInt(String(maxShifts), 10) || 0,
     reminder: planningKey_(PLANNING_TEXT.reminder, reminder) || 'geen'
   };
 }

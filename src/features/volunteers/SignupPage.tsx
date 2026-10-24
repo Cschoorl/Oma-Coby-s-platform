@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
 import { countFor, dayKey, labelQuietOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
-import type { MaxShifts, ReminderChannel, VolunteerRole } from "../../types/dashboard";
+import type { ReminderChannel, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
@@ -58,7 +58,23 @@ function hasParts(role: VolunteerRole): boolean {
 
 type Suggestion = { role: VolunteerRole; option: string };
 
-function stepIds(a: Answers, suggestions: Suggestion[]): StepId[] {
+/** The answers as per-task moments, with the quiet moments they added when Oma asked ("role|option"). */
+function withExtra(a: Answers, extra: string[]) {
+  const base = toRoles(a);
+  for (const key of extra) {
+    const [role, option] = key.split("|") as [VolunteerRole, string];
+    const days = new Set([...base[role].days, option]);
+    base[role] = { wants: true, days: SIGNUP_OPTIONS[role].filter((o) => days.has(o)) };
+  }
+  return base;
+}
+
+/** Different days they can, over all tasks: inpakken and the bar on one day is still one day. */
+function countDays(roles: ReturnType<typeof toRoles>): number {
+  return new Set(ACTIVE_ROLES.flatMap((r) => roles[r].days.map(dayKey))).size;
+}
+
+function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): StepId[] {
   const ids: StepId[] = ["name", "mode"];
   if (!a.mode) return ids;
   if (a.mode === "taak") {
@@ -72,7 +88,9 @@ function stepIds(a: Answers, suggestions: Suggestion[]): StepId[] {
   }
   // "Zet me maar in waar het nodig is" already answers this one.
   if (a.mode !== "flexibel") ids.push("flexible");
-  ids.push("max", "reminder", "contact", "check");
+  // With one day the maximum is that day; no need to ask.
+  if (chosenDays > 1) ids.push("max");
+  ids.push("reminder", "contact", "check");
   return ids;
 }
 
@@ -121,20 +139,15 @@ export function SignupPage() {
     return a.roles.flatMap((role) => suggestOptions(counts, role, a.picks[role]).map((option) => ({ role, option }))).slice(0, 4);
   }, [counts, a.mode, a.roles, a.picks]);
 
-  const ids = stepIds(a, suggestions);
+  const roles = useMemo(() => withExtra(a, extra), [a, extra]);
+  const chosenDays = countDays(roles);
+  /** The maximum as it goes into the sheet: never more than the days they chose. */
+  const maxShifts = Math.max(1, Math.min(a.maxShifts ?? chosenDays, chosenDays));
+
+  const ids = stepIds(a, suggestions, chosenDays);
   const index = Math.max(0, ids.indexOf(at));
   const current = ids[index];
   const first = firstName.trim().split(" ")[0];
-
-  const roles = useMemo(() => {
-    const base = toRoles(a);
-    for (const key of extra) {
-      const [role, option] = key.split("|") as [VolunteerRole, string];
-      const days = new Set([...base[role].days, option]);
-      base[role] = { wants: true, days: SIGNUP_OPTIONS[role].filter((o) => days.has(o)) };
-    }
-    return base;
-  }, [a, extra]);
 
   const days = seasonDays();
   const dayLabel = (key: string) => shortDay(days.find((d) => d.key === key)?.label ?? key);
@@ -197,7 +210,7 @@ export function SignupPage() {
     dayroles: {
       say:
         a.mode === "dag"
-          ? ["En wat wil je die dag doen?"]
+          ? [a.days.length === 1 ? "En wat wil je die dag doen?" : "En wat wil je op die dagen doen?"]
           : ["Ik heb je bij alles ingevuld. Haal weg wat je niet kunt of wilt. Geen auto? Dan haal je autokoerier weg."],
       answer: () => (a.mode === "dag" && a.roles.length === rolesOnDays(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", ")),
       react: () => "Prima."
@@ -208,9 +221,9 @@ export function SignupPage() {
       react: () => (a.flexible ? "Daar word ik blij van." : "Ook goed. Afspraak is afspraak.")
     },
     max: {
-      say: ["Hoe vaak wil je dit seizoen maximaal helpen?"],
-      answer: () => (a.maxShifts ? maxShiftsLabel[a.maxShifts] : ""),
-      react: () => (a.maxShifts === "vaker" ? "Jij bent een kanjer." : "Afgesproken.")
+      say: [`Je kunt op ${chosenDays} dagen. Hoe vaak wil je maximaal helpen?`],
+      answer: () => (maxShifts === chosenDays ? `Alle ${chosenDays} dagen` : maxShiftsLabel(maxShifts)),
+      react: () => (maxShifts === chosenDays ? "Jij bent een kanjer." : `Afgesproken, hooguit ${maxShiftsLabel(maxShifts)}.`)
     },
     reminder: {
       say: ["Zal ik je de dag ervoor even herinneren? Dan weet je waar en hoe laat."],
@@ -270,7 +283,7 @@ export function SignupPage() {
     if (open.length) after.parts = { ...after.parts, ...Object.fromEntries(open.map((d) => [d, partsOnDay(d)])) };
     setA(after);
     setError(null);
-    const list = stepIds(after, suggestions);
+    const list = stepIds(after, suggestions, countDays(withExtra(after, extra)));
     setAt(list[Math.min(list.indexOf(current) + 1, list.length - 1)]);
   }
 
@@ -416,15 +429,15 @@ export function SignupPage() {
           )
         };
       case "max":
+        // Exact numbers where they matter for the rooster, then "all the days you chose".
         return {
           content: (
-            <QuickReplies<MaxShifts>
-              value={a.maxShifts}
-              onPick={(maxShifts) => advance({ maxShifts })}
+            <QuickReplies
+              value={a.maxShifts === null ? null : String(maxShifts)}
+              onPick={(n) => advance({ maxShifts: Number(n) })}
               options={[
-                ["1", "1 keer"],
-                ["2-3", "2 à 3 keer"],
-                ["vaker", "Zo vaak als nodig"]
+                ...[1, 2, 3, 5].filter((n) => n < chosenDays).map((n): [string, string] => [String(n), maxShiftsLabel(n)]),
+                [String(chosenDays), `Alle ${chosenDays} dagen`]
               ]}
             />
           )
@@ -479,7 +492,7 @@ export function SignupPage() {
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">Planning</dt>
                   <dd className="text-krent">
-                    {a.mode === "flexibel" || a.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen wat ik koos"} · maximaal {a.maxShifts ? maxShiftsLabel[a.maxShifts].toLowerCase() : "–"}
+                    {a.mode === "flexibel" || a.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen wat ik koos"} · maximaal {maxShiftsLabel(maxShifts)}
                   </dd>
                 </div>
               </dl>
@@ -537,7 +550,7 @@ export function SignupPage() {
       if (view.next?.ready) advance();
       return;
     }
-    if (!a.mode || (a.flexible === null && a.mode !== "flexibel") || !a.maxShifts || !a.reminder) return;
+    if (!a.mode || (a.flexible === null && a.mode !== "flexibel") || !a.reminder) return;
     setBusy(true);
     setError(null);
     try {
@@ -551,7 +564,7 @@ export function SignupPage() {
         cargoBike: false,
         remark,
         consent,
-        planning: { mode: a.mode, flexible: a.mode === "flexibel" || a.flexible === true, maxShifts: a.maxShifts, reminder: a.reminder }
+        planning: { mode: a.mode, flexible: a.mode === "flexibel" || a.flexible === true, maxShifts, reminder: a.reminder }
       });
       setDone(true);
       rollOliebol();
@@ -616,15 +629,28 @@ export function SignupPage() {
       </div>
 
       {!typing ? (
-        <div ref={composerRef} tabIndex={-1} className="outline-none" aria-label={lines[lines.length - 1]}>
+        // Focus lands here by script so the answers come next for keyboard users; no ring on a container.
+        <div ref={composerRef} tabIndex={-1} className="focus:outline-none" aria-label={lines[lines.length - 1]}>
           <Card>
-            {view.content}
+            {!view.next && current !== "check" ? (
+              // Quick replies answer at once: they share one row with "Terug".
+              <div className="flex flex-wrap items-center gap-2">
+                {index > 0 ? (
+                  <button type="button" className={ghostButton} onClick={() => goTo(ids[index - 1])}>
+                    Terug
+                  </button>
+                ) : null}
+                <div className="ml-auto">{view.content}</div>
+              </div>
+            ) : (
+              view.content
+            )}
             {error ? (
               <div className="mt-3">
                 <Notice tone="error">{error}</Notice>
               </div>
             ) : null}
-            {view.next || current === "check" || index > 0 ? (
+            {view.next || current === "check" ? (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                 {index > 0 ? (
                   <button type="button" className={ghostButton} onClick={() => goTo(ids[index - 1])}>

@@ -1,5 +1,5 @@
 import type { SignupCounts } from "../../data/backend";
-import type { MaxShifts, ReminderChannel, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
+import type { ReminderChannel, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES } from "../../types/dashboard";
 import { SIGNUP_OPTIONS } from "../../config";
 import { countFor, dayKey, staffingStatus, targetFor } from "../../utils/staffing";
@@ -27,7 +27,7 @@ export interface Answers {
   parts: Record<string, Part[]>;
   cargoBike: boolean;
   flexible: boolean | null;
-  maxShifts: MaxShifts | null;
+  maxShifts: number | null;
   reminder: ReminderChannel | null;
 }
 

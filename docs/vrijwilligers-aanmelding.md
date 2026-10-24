@@ -42,7 +42,7 @@ Heeft een dag toch meer dan één dienst in de Agenda (bijvoorbeeld de bar 's mi
    - *Ik weet wanneer ik kan*: welke dagen? Wanneer, alleen op dagen met meer diensten. En wat wil je die dag doen? Hier kan ook "maakt niet uit".
    - *Zet me maar in waar het nodig is*: welke dagen? Wanneer, alleen op dagen met meer diensten. Alle taken staan aan en je haalt weg wat niet past.
 3. **Mag ik je ook ergens anders neerzetten als het daar drukker is?** Na "zet me maar in" slaan we deze vraag over.
-4. **Hoe vaak wil je maximaal helpen?** Keuze uit 1 keer, 2 à 3 keer of zo vaak als nodig.
+4. **Je kunt op 4 dagen. Hoe vaak wil je maximaal helpen?** Keuze uit 1, 2 of 3 keer (en 5 keer bij meer dan 5 dagen), of *Alle 4 dagen*. Het zijn echte aantallen, zodat het rooster iemand nooit vaker inplant, en nooit meer dan de dagen die je koos. Bij één dag vraagt Oma dit niet.
 5. **Zal ik je de dag ervoor herinneren?** Via WhatsApp, via mail of het hoeft niet.
 6. **Hoe kan ik je bereiken?** Achternaam, telefoon (verplicht bij WhatsApp) of mail (verplicht bij mail), woonplaats. Het adres vragen we alleen aan bezorgers.
 7. **Klopt dit zo?** Een samenvatting, een opmerking, toestemming en dan versturen.
@@ -59,7 +59,7 @@ Er komen vier kolommen bij. Apps Script zet ze achteraan zodra ze voor het eerst
 | --- | --- |
 | Hoe aangemeld | Taak in gedachten / Dag in gedachten / Maakt niet uit |
 | Mag ingedeeld worden waar nodig | Ja / Nee |
-| Hoe vaak maximaal | 1 keer / 2 à 3 keer / Zo vaak als nodig |
+| Hoe vaak maximaal | 1 keer, 2 keer, … (een aantal) |
 | Herinnering 24 uur van tevoren | WhatsApp / Mail / Nee |
 
 In de demo-modus komt alles in de lokale demo-opslag terecht. Op *Vrijwilligers* zie je de antwoorden als labels per persoon.

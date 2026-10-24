@@ -63,16 +63,17 @@ Het aangepaste aantal dozen wordt niet opgeslagen. Het geldt alleen voor die pri
 
 ## 2. Poppetjes met naam in plaats van "Jij"
 
-- Iedereen krijgt een klein getekend oudje: een hoofd in een egale, wat ongewone kleur (lila, mint, koraal, mosterd), wit of grijs haar, en fijne zwarte lijntjes. Lachrimpels, walletjes en blosjes maken er een oudje van in plaats van een kleuter.
+- Iedereen krijgt een klein getekend oudje: een hoofd in een egale fantasiekleur, wit of grijs haar, en fijne lijntjes in donker chocoladebruin (`#403634`). Lachrimpels, walletjes en blosjes maken er een oudje van in plaats van een kleuter.
+- **Palet:** warm en nostalgisch, als een kinderboekillustratie. Zes iets vergrijsde kleuren: lavendel, saliegroen, perzik, honinggeel, mistblauw en oudroze. Bewust geen huidtinten, zodat niemand op huidskleur wordt ingedeeld. Alle blosjes zijn hetzelfde zachte zalmroze (`#D99294`).
 - **Wat varieert:**
   - 12 kapsels en hoofddeksels: permanentje, knotje, kaal met plukjes, pet, dameshoedje met bloem, scheiding, bob, lang haar met haarband, baret, hoofddoek, kuif en muts met pompon
-  - 8 kleuren voor het hoofd, 4 tinten wit tot grijs voor het haar, 4 kleuren voor hoed, pet, muts, hoofddoek en haarband
+  - 6 kleuren voor het hoofd, 4 tinten wit tot grijs voor het haar, 4 gedempte kleuren voor hoed, pet, muts, hoofddoek en haarband
   - 7 gezichten: glimlach, schaterlach, knipoog, verbaasd, tevreden met de ogen dicht, giechel en schalks
   - soms een ronde bril, een leesbril aan een koordje, een snor of parel-oorbellen
 - Onder de 40 px worden de lijnen iets dikker en vallen de rimpels weg, zodat het naast een naam leesbaar blijft.
 - De felle kleuren zijn alleen voor de poppetjes. Ze vallen buiten de merkkleuren, net als de kleuren in de discozaal.
 - **Dezelfde naam geeft overal hetzelfde poppetje**, op elk apparaat. Het poppetje volgt uit de naam; er wordt niets opgeslagen.
-- **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 96 mensen zijn.
+- **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 72 mensen zijn.
   - Het dashboard maakt een lijst van alle namen die het kent: vrijwilligers, inpakkers, bezorgers, wie heeft afgeleverd, en wie is ingelogd.
   - De kapsels worden eerlijk verdeeld. De eerste twaalf mensen hebben allemaal een ander kapsel, daarna komt een tweede ronde in andere kleuren.
   - Komt er iemand bij, dan verandert het poppetje van anderen meestal niet. Het kan wel gebeuren.

@@ -8,18 +8,24 @@ import { useMemo } from "react";
  * and device. Hair plus colour is unique within the roster (see setAvatarRoster).
  */
 
-const K = "#2a2222";
+/** Dark chocolate instead of near-black: a friendlier, more hand-drawn line. */
+const K = "#403634";
 const WHITE = "#fffdf7";
-const BLUSH = "#ff6b6b";
-const TONGUE = "#e8707a";
-const GOLD = "#e9c34d";
+/** One soft salmon for every cheek, so the faces read as one family. */
+const BLUSH = "#d99294";
+const TONGUE = "#c97a7c";
+const GOLD = "#dcb867";
 
-/** Flat, slightly unusual skin colours; illustrations only, like the discozaal. */
-const COLOURS = ["#a99cf0", "#7fcfa8", "#f2967c", "#e8c65a", "#86c3ec", "#f3a0c4", "#b4cf86", "#f5b26b"];
+/**
+ * Six fantasy colours for the face, greyed a little rather than lightened: warm and nostalgic like a
+ * children's book, never candy or face paint. Not skin tones, so nobody is sorted by skin colour.
+ * Lavendel, saliegroen, perzik, honinggeel, mistblauw, oudroze; illustrations only, like the discozaal.
+ */
+const COLOURS = ["#b3a8cc", "#a8b88f", "#e3ae94", "#dfc07e", "#9fb2c2", "#cf9fa3"];
 /** White to steel grey: everybody here has been around a while. */
-const TONES = [WHITE, "#e6e1d9", "#c6bfb6", "#9d958c"];
+const TONES = [WHITE, "#e4ded5", "#c7beb3", "#a0978c"];
 /** Hats, caps, scarves and hairbands. */
-const ACCENTS = ["#3f4f8f", "#b5473b", "#2f6d58", "#6c4a87"];
+const ACCENTS = ["#56617f", "#a65d50", "#567467", "#7a5f80"];
 
 export const HAIRS = ["krul", "knot", "kaal", "pet", "hoed", "scheiding", "bob", "lang", "baret", "hoofddoek", "kuif", "muts"] as const;
 type Hair = (typeof HAIRS)[number];
@@ -60,7 +66,7 @@ const SLOTS = HAIRS.length * COLOURS.length;
 let roster = new Map<string, number>();
 
 /**
- * Gives everyone in the roster their own hair-and-colour combination (up to 96 people).
+ * Gives everyone in the roster their own hair-and-colour combination (up to 72 people).
  * Names are placed in hash order, not signup order, so adding someone rarely changes anyone else's look.
  */
 export function setAvatarRoster(names: string[]): void {
@@ -379,8 +385,8 @@ const FACE_SHAPES: Record<Face, Shape[]> = {
 };
 
 const FACE_COMMON: Shape[] = [
-  { c: [22.6, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.32 },
-  { c: [41.4, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.32 },
+  { c: [22.6, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.45 },
+  { c: [41.4, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.45 },
   // Laughter lines, bags under the eyes and a line on the forehead: an oudje, not a toddler.
   { d: "M19.4 33.2l-1.8-.6M19.6 35.6l-1.6.8M44.6 33.2l1.8-.6M44.4 35.6l1.6.8M23.2 37.8q1.8.8 3.6 0M37.2 37.8q1.8.8 3.6 0M27.8 25.8q4.2-1.2 8.4 0M30.4 53.2q1.6.7 3.2 0", stroke: "fine", small: false },
   { d: "M32.4 36.2c-1.4 2.4-2.6 4.6-1.2 5.2.9.4 1.8.3 2.6-.1" }

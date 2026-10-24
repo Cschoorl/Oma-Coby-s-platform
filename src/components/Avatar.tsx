@@ -1,20 +1,20 @@
 import { useMemo } from "react";
 
 /*
- * Every person gets a drawn oudje: a head in a soft fantasy colour, grey or white hair (or a hat,
- * cap or scarf), and brown lines for an expressive face. You see at a glance who is who (and that
- * it is you) instead of "Jij". The look follows from the name, so it is the same on every screen
- * and device. Hair plus colour is unique within the roster (see setAvatarRoster).
+ * Every person gets a drawn oudje in flat colour, without outlines: a wide, softly square face on a
+ * disc in a dark tint of that same face colour, grey or white hair (or a hat, cap or scarf), and the
+ * eyes, brows and mouth as solid shapes in that dark tint. Contrast does the work, not lines. You see
+ * at a glance who is who (and that it is you) instead of "Jij". The look follows from the name, so it
+ * is the same on every screen and device. Hair plus colour is unique within the roster (see setAvatarRoster).
  *
- * There are two drawings of the same person. Large (40 px and up: profile, panels) has the wrinkles,
- * brows, strands and small accessories. Small (rosters, lists, name tags) is not a scaled-down copy
- * but its own simpler version: a strong outer contour, calm inner lines, only the eyes, mouth and
- * the big features (hair shape, hat, glasses, moustache), in slightly fuller colours.
+ * There are two drawings of the same person. Large (44 px and up: profile, panels) adds small detail:
+ * laughter lines, strands, the flower on the hat, the cord of the reading glasses, pearls. Small
+ * (rosters, lists, name tags) is its own simpler version with only the big shapes, in fuller colours.
  */
 
-/** Dark chocolate instead of near-black: a friendlier, more hand-drawn line. */
-const K = "#403634";
 const WHITE = "#fffdf7";
+/** The deep brown every dark tint is mixed with. */
+const DEEP = "#2b2321";
 /** One soft salmon for every cheek, so the faces read as one family. */
 const BLUSH = "#d99294";
 const TONGUE = "#c97a7c";
@@ -26,12 +26,10 @@ const GOLD = "#dcb867";
  * Lavendel, saliegroen, perzik, honinggeel, mistblauw, oudroze; illustrations only, like the discozaal.
  */
 const COLOURS = ["#aea1d0", "#a3b887", "#e6a98c", "#e1bd70", "#98afc6", "#d1989d"];
-/** The same six a step fuller, for the small drawing: at 26 px soft colours otherwise blur together. */
-const SMALL_COLOURS = ["#a091cb", "#93ae74", "#e09a7a", "#dcb25a", "#859fbd", "#c9868c"];
+/** The same six a step fuller, for the small drawing and for hats: at 26 px soft colours blur together. */
+const FULL = ["#a091cb", "#93ae74", "#e09a7a", "#dcb25a", "#859fbd", "#c9868c"];
 /** White to steel grey: everybody here has been around a while. */
 const TONES = [WHITE, "#e4ded5", "#c7beb3", "#a0978c"];
-/** Hats, caps, scarves and hairbands. */
-const ACCENTS = ["#56617f", "#a65d50", "#567467", "#7a5f80"];
 
 export const HAIRS = ["krul", "knot", "kaal", "pet", "hoed", "scheiding", "bob", "lang", "baret", "hoofddoek", "kuif", "muts"] as const;
 type Hair = (typeof HAIRS)[number];
@@ -48,6 +46,7 @@ export interface AvatarLook {
   face: Face;
   extra: Extra;
   tone: string;
+  /** Hat, cap, scarf or hairband: one of the other five colours, so it stands apart from the face. */
   accent: string;
 }
 
@@ -64,6 +63,12 @@ function hash(text: string, seed = 2166136261): number {
     h = Math.imul(h, 16777619) >>> 0;
   }
   return h;
+}
+
+/** Mixes two hex colours: t = 0 gives a, t = 1 gives b. */
+function mix(a: string, b: string, t: number): string {
+  const ch = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, "0")).join("")}`;
 }
 
 const SLOTS = HAIRS.length * COLOURS.length;
@@ -103,38 +108,43 @@ export function avatarLook(name: string): AvatarLook {
   const slot = roster.get(key) ?? hash(key) % SLOTS;
   const more = hash(key, 0x9e3779b9);
   const hair = HAIRS[slot % HAIRS.length];
+  const colour = Math.floor(slot / HAIRS.length);
   let extra = EXTRAS[(more >>> 11) % EXTRAS.length];
   if (extra === "parels" && NO_EARS.has(hair)) extra = "geen";
   return {
     hair,
-    colour: COLOURS[Math.floor(slot / HAIRS.length)],
+    colour: COLOURS[colour],
     face: FACES[(more >>> 5) % FACES.length],
     extra,
     tone: TONES[(more >>> 17) % TONES.length],
-    accent: ACCENTS[(more >>> 21) % ACCENTS.length]
+    accent: FULL[(colour + 1 + ((more >>> 21) % (COLOURS.length - 1))) % COLOURS.length]
   };
 }
 
 /*
- * Drawn on a 64 × 64 canvas. The head is an egg from (14, 13) to (50, 56); the eyes sit at
- * (25, 34) and (39, 34). Shapes are drawn in order: hair behind the head, ears, head, face, hair in front, extras.
+ * Drawn on a 64 × 64 canvas: a disc, on it a wide rounded face from (12, 17) to (52, 55) with the
+ * eyes at (25, 36.5) and (39, 36.5). The hair was drawn for a narrower head, so it is widened to fit
+ * (see HAIR_FIT). Order: disc, hair behind, ears, face, features, hair in front, extras.
  */
 
-/** A path or circle; fill and stroke are tokens resolved per look ("face", "hair", "accent") or a colour. */
+/**
+ * A path, circle or ellipse. Fill and stroke are colours or tokens resolved per look: "face", "hair",
+ * "accent", "ink" (the dark tint of the face, for eyes, brows and mouth) and "mid" (ears, nose).
+ */
 interface Shape {
   d?: string;
   c?: [number, number, number];
+  e?: [number, number, number, number];
   fill?: string;
-  /**
-   * Line weight. "outline" is the contour of a coloured shape (the default when it is filled with the
-   * face, hair or accent), "feature" the eyes, mouth and glasses (the default otherwise), "fine" the detail.
-   */
-  stroke?: "outline" | "feature" | "fine" | "none";
+  /** A filled shape has no outline. A line is "feature" (glasses, a smile; the default for unfilled shapes) or "fine" detail. */
+  stroke?: "feature" | "fine" | "none";
   colour?: string;
   opacity?: number;
   dash?: boolean;
   /** Only in the large or only in the small drawing. Everything "fine" is large only. */
   only?: "big" | "small";
+  /** A brow: a short bar, thicker than a line. */
+  brow?: true;
 }
 
 type Pt = [number, number];
@@ -177,8 +187,6 @@ function sideCurls(top: number): Shape {
   };
 }
 
-const HEAD = "M32 13C42.6 13 50 20.6 50 31.6 50 45.2 42 56 32 56S14 45.2 14 31.6C14 20.6 21.4 13 32 13Z";
-const EARS = "M14.8 32.6C11.4 31.2 9.8 33.6 10.4 36.4 11 39.4 13 40.6 15.4 40M49.2 32.6C52.6 31.2 54.2 33.6 53.6 36.4 53 39.4 51 40.6 48.6 40";
 const SEAM = { colour: WHITE, opacity: 0.55, stroke: "fine" as const, only: "big" as const };
 
 const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
@@ -210,7 +218,8 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
   knot: {
     back: [
       { c: [32, 10, 6.2], fill: "hair" },
-      { d: "M28.4 10.4q3.6-4 7.2 0M36.4 6.2l3.8-2.4M37.4 8.4l3.8-1.6", stroke: "fine" }
+      { d: "M28.4 10.4q3.6-4 7.2 0", stroke: "fine" },
+      { d: "M36.4 6.2l3.8-2.4M37.4 8.4l3.8-1.6", stroke: "fine", colour: "accent" }
     ],
     front: [
       { d: "M14.3 33C13.6 20 21.5 12.6 32 12.6S50.4 20 49.7 33C48 26.5 41 21.6 32 21.6S16 26.5 14.3 33Z", fill: "hair" },
@@ -246,7 +255,8 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
           "Q47.2 30 48.4 37Z",
         fill: "hair"
       },
-      { d: "M38.6 17.2q4 .8 6.2 4M30.2 13.2q-.8-2.8 1.2-4.4M33.4 13.1q.8-2.6 3.2-3.4", stroke: "fine" }
+      { d: "M38.6 17.2q4 .8 6.2 4", stroke: "fine" },
+      { d: "M30.2 13.2q-.8-2.8 1.2-4.4M33.4 13.1q.8-2.6 3.2-3.4", stroke: "fine", colour: "hair" }
     ]
   },
   pet: {
@@ -303,7 +313,7 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
       sideCurls(27.6),
       { d: "M12.2 25.8C9.5 17.8 19 10.4 33 10.6S56.4 17 51.6 25.4C44.6 22.4 21.6 21.8 12.2 25.8Z", fill: "accent" },
       { d: "M14.6 23.6Q32 20.4 49.4 23", ...SEAM },
-      { d: "M33.6 10.8q.4-2.4 1.8-3.4" }
+      { d: "M33.6 10.8q.4-2.4 1.8-3.4", colour: "accent" }
     ]
   },
   hoofddoek: {
@@ -346,97 +356,93 @@ const HAIR_SHAPES: Record<Hair, { back?: Shape[]; front: Shape[] }> = {
   }
 };
 
-/** An eye: a dot with a glint when large, a slightly bigger plain dot when small. */
-const dot = (x: number, y: number): Shape[] => [
-  { c: [x, y, 1.7], fill: K, stroke: "none", only: "big" },
-  { c: [x + 0.6, y - 0.6, 0.5], fill: WHITE, stroke: "none", only: "big" },
-  { c: [x, y, 2.3], fill: K, stroke: "none", only: "small" }
+const HEAD = "M26 17h12c8 0 14 6 14 14v9c0 9-6.4 15-15 15H27c-8.6 0-15-6-15-15v-9c0-8 6-14 14-14Z";
+/** Widens the hair (drawn for a 36-wide head) to the 40-wide face and lowers it onto the forehead. */
+const HAIR_FIT = "translate(32 3) scale(1.12 1) translate(-32 0)";
+
+/** Brows as short solid bars, not lines: [x1, y1, x2, y2] per brow. */
+const brows = (left: [number, number, number, number], right: [number, number, number, number]): Shape => ({
+  d: `M${left[0]} ${left[1]}L${left[2]} ${left[3]}M${right[0]} ${right[1]}L${right[2]} ${right[3]}`,
+  colour: "ink",
+  brow: true
+});
+const BROW = 3;
+
+/** Open eyes: solid ovals. */
+const ovals = (y = 36.5): Shape[] => [
+  { e: [25, y, 2.3, 2.9], fill: "ink" },
+  { e: [39, y, 2.3, 2.9], fill: "ink" }
 ];
 
-/** The expression: eyes and mouth always; brows (and lids) and laughter lines only large. */
-const FACE_SHAPES: Record<Face, { eyes: Shape[]; mouth: Shape[]; brows: string; fine?: string }> = {
-  glim: {
-    eyes: [...dot(25, 34), ...dot(39, 34)],
-    brows: "M21.6 29.6q3.2-2 6.4-.2M36 29.4q3.2-1.8 6.4.2",
-    mouth: [{ d: "M27.2 46.4q4.8 4 9.6 0" }],
-    fine: "M22.6 43q-1.2 2.8.6 5.2M41.4 43q1.2 2.8-.6 5.2"
-  },
-  lach: {
-    eyes: [{ d: "M21.8 34.6q3.2-3.6 6.4 0M35.8 34.6q3.2-3.6 6.4 0" }],
-    brows: "M21.4 28.6q3.4-2.4 6.8-.4M35.8 28.2q3.4-2 6.8.4",
-    mouth: [
-      { d: "M25.4 44.6h13.2q-.8 7.6-6.6 7.6t-6.6-7.6Z", fill: K },
-      { d: "M28.8 50.4q3.2-2.4 6.4 0-1.4 1.6-3.2 1.6t-3.2-1.6Z", fill: TONGUE, stroke: "none" }
-    ]
-  },
-  knipoog: {
-    eyes: [{ d: "M21.8 34.2q3.2 2.4 6.4 0" }, ...dot(39, 34)],
-    brows: "M21.6 30.6q3.2-.8 6.4.4M36 28.6q3.2-2.2 6.4-.2",
-    mouth: [{ d: "M27 46q5.4 4.6 10.6-.8" }],
-    fine: "M38.4 44.4q1 .6.6 1.8"
-  },
-  verbaasd: {
-    eyes: [
-      { c: [25, 34, 2.4], fill: WHITE },
-      { c: [39, 34, 2.4], fill: WHITE },
-      { c: [25.3, 34.3, 1.1], fill: K, stroke: "none" },
-      { c: [39.3, 34.3, 1.1], fill: K, stroke: "none" }
-    ],
-    brows: "M21.4 27.4q3.4-2.6 6.8-.8M35.8 26.6q3.4-1.8 6.8.8",
-    mouth: [{ d: "M32 44.8c1.3 0 2.2 1.2 2.2 2.8S33.3 50.4 32 50.4 29.8 49.2 29.8 47.6 30.7 44.8 32 44.8Z", fill: K }]
-  },
-  tevreden: {
-    eyes: [{ d: "M21.8 33.8q3.2 2.8 6.4 0M35.8 33.8q3.2 2.8 6.4 0" }],
-    brows: "M21.8 29.4q3-1.4 6 0M36.2 29.4q3-1.4 6 0",
-    mouth: [{ d: "M28 46.4q4 2.8 8 0" }],
-    fine: "M21.6 33.4l-1.2-.6M42.4 33.4l1.2-.6"
-  },
-  giechel: {
-    eyes: [{ d: "M22.4 31.8l4.6 2.2-4.6 2.2M41.6 31.8l-4.6 2.2 4.6 2.2" }],
-    brows: "M21.4 28q3.4-2.6 6.8-.6M35.8 27.4q3.4-2 6.8.6",
-    mouth: [
-      { d: "M25.6 44.2q6.4 1.6 12.8 0-1.4 8-6.4 8t-6.4-8Z", fill: K },
-      { d: "M29 50.4q3-2.2 6 0-1.3 1.6-3 1.6t-3-1.6Z", fill: TONGUE, stroke: "none" }
-    ]
-  },
-  schalks: {
-    eyes: [...dot(25, 34.4), ...dot(39, 34.4)],
-    brows: "M22.4 32.8q2.6-1 5.2 0M36.4 32.8q2.6-1 5.2 0M21.6 30q3.2-.4 6.4.4M36 28.4q3.4-3 6.6-.6",
-    mouth: [{ d: "M27.4 47q3.6 1.6 8.2-2" }]
-  }
+/** The expression: eyes, brows and mouth as solid shapes in the dark tint, the same build for everyone. */
+const FACE_SHAPES: Record<Face, Shape[]> = {
+  glim: [...ovals(), brows([21.6, 30.6, 28, 30], [36, 30, 42.4, 30.6]), { d: "M26.6 45.4h10.8c0 3.4-2.4 5.6-5.4 5.6s-5.4-2.2-5.4-5.6Z", fill: "ink" }],
+  lach: [
+    { d: "M22 37.6q3-3.6 6 0M36 37.6q3-3.6 6 0", colour: "ink" },
+    brows([21.6, 29.6, 28, 28.8], [36, 28.8, 42.4, 29.6]),
+    { d: "M25 44.4h14c0 4.8-3.2 7.8-7 7.8s-7-3-7-7.8Z", fill: "ink" },
+    { d: "M28.6 50.6q3.4-2.6 6.8 0-1.4 1.6-3.4 1.6t-3.4-1.6Z", fill: TONGUE }
+  ],
+  knipoog: [
+    { d: "M22 37q3 2.2 6 0", colour: "ink" },
+    { e: [39, 36.5, 2.3, 2.9], fill: "ink" },
+    brows([21.6, 31.4, 28, 31.4], [36, 29.6, 42.4, 29]),
+    { d: "M27 46q5.4 4.4 10.4-.6", colour: "ink" }
+  ],
+  verbaasd: [
+    { c: [25, 36.5, 3.1], fill: "ink" },
+    { c: [39, 36.5, 3.1], fill: "ink" },
+    { c: [25.9, 35.6, 0.9], fill: WHITE, only: "big" },
+    { c: [39.9, 35.6, 0.9], fill: WHITE, only: "big" },
+    brows([21.6, 28.6, 28, 27.6], [36, 27.6, 42.4, 28.6]),
+    { e: [32, 47.6, 2.4, 3], fill: "ink" }
+  ],
+  tevreden: [
+    { d: "M22 36q3 3 6 0M36 36q3 3 6 0", colour: "ink" },
+    brows([21.8, 30.6, 28, 30.6], [36, 30.6, 42.2, 30.6]),
+    { d: "M28 46.4q4 2.8 8 0", colour: "ink" }
+  ],
+  giechel: [
+    { d: "M22.6 34.6l4.4 2.2-4.4 2.2M41.4 34.6l-4.4 2.2 4.4 2.2", colour: "ink" },
+    brows([21.6, 29.4, 28, 28.6], [36, 28.6, 42.4, 29.4]),
+    { d: "M25.4 44.4h13.2c-.6 5-3.2 7.6-6.6 7.6s-6-2.6-6.6-7.6Z", fill: "ink" },
+    { d: "M28.8 50.4q3.2-2.4 6.4 0-1.4 1.6-3.2 1.6t-3.2-1.6Z", fill: TONGUE }
+  ],
+  schalks: [
+    // Half-closed: the top of each oval cut off by a level lid.
+    { d: "M22.6 36h4.8c0 2-1 3.2-2.4 3.2s-2.4-1.2-2.4-3.2ZM36.6 36h4.8c0 2-1 3.2-2.4 3.2s-2.4-1.2-2.4-3.2Z", fill: "ink" },
+    brows([21.6, 31.4, 28, 31.4], [36, 29.6, 42.4, 28]),
+    { d: "M27.4 47q3.6 1.8 8.2-1.8", colour: "ink" }
+  ]
 };
 
-/** Blush for everyone; a laughter line by each eye, a line on the forehead and the nose only large. */
+/** Nose and blush for everyone; laughter lines only large. */
 const FACE_COMMON: Shape[] = [
-  { c: [22.6, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.45 },
-  { c: [41.4, 41.8, 3], fill: BLUSH, stroke: "none", opacity: 0.45 },
-  { d: "M19.4 34l-1.8-.4M44.6 34l1.8-.4M27.8 25.8q4.2-1.2 8.4 0", stroke: "fine" },
-  { d: "M32.4 36.2c-1.4 2.4-2.6 4.6-1.2 5.2.9.4 1.8.3 2.6-.1", only: "big" }
+  { e: [21, 43, 3.6, 2.4], fill: BLUSH, opacity: 0.6 },
+  { e: [43, 43, 3.6, 2.4], fill: BLUSH, opacity: 0.6 },
+  { e: [32, 41.4, 2.4, 1.8], fill: "mid" },
+  { d: "M18.4 36.6l-1.6-.4M45.6 36.6l1.6-.4M28.4 25.8q3.6-.9 7.2 0", stroke: "fine" }
 ];
 
 const EXTRA_SHAPES: Record<Extra, { under?: Shape[]; over?: Shape[] }> = {
   geen: {},
-  // Over the mouth but under the hair, in the colour of the hair.
-  snor: { under: [{ d: "M32 42.6c-1.8-1.6-6.2-1.8-8.4 1.4 2.8 1.2 6 .8 8.4-.8 2.4 1.6 5.6 2 8.4.8-2.2-3.2-6.6-3-8.4-1.4Z", fill: "hair" }] },
+  // Under the nose, over the mouth, in a slightly deeper shade of the hair.
+  snor: { under: [{ d: "M32 43.2c-1.8-1.6-6.4-1.8-8.6 1.6 2.8 1.2 6.2.8 8.6-.8 2.4 1.6 5.8 2 8.6.8-2.2-3.4-6.8-3.2-8.6-1.6Z", fill: "moustache" }] },
   bril: {
-    over: [
-      { c: [25, 34, 4.6], fill: WHITE, opacity: 0.22, stroke: "none", only: "big" },
-      { c: [39, 34, 4.6], fill: WHITE, opacity: 0.22, stroke: "none", only: "big" },
-      { d: "M29.6 34a4.6 4.6 0 1 1-9.2 0 4.6 4.6 0 1 1 9.2 0M43.6 34a4.6 4.6 0 1 1-9.2 0 4.6 4.6 0 1 1 9.2 0M29.6 33.6q2.4-1.6 4.8 0M20.4 33.4l-6-.8M43.6 33.4l6-.8" }
-    ]
+    over: [{ d: "M30 36.5a5 5 0 1 1-10 0 5 5 0 1 1 10 0M44 36.5a5 5 0 1 1-10 0 5 5 0 1 1 10 0M30 36q2-1.4 4 0M20 35.6l-7-.8M44 35.6l7-.8", colour: "ink" }]
   },
   // Half-moon reading glasses low on the nose; large, they hang on a beaded cord.
   leesbril: {
     over: [
-      { d: "M22.4 37.4h6.4q-.2 3.6-3.2 3.6t-3.2-3.6ZM35.2 37.4h6.4q-.2 3.6-3.2 3.6t-3.2-3.6Z", fill: WHITE, opacity: 0.9 },
-      { d: "M28.8 37.8q3.2-1.4 6.4 0" },
-      { d: "M22.4 37.8Q15.4 46 18 56.4M41.6 37.8Q48.6 46 46 56.4", stroke: "feature", colour: "accent", dash: true, only: "big" }
+      { d: "M22 39.4h7q-.2 4-3.5 4t-3.5-4ZM35 39.4h7q-.2 4-3.5 4t-3.5-4Z", fill: WHITE, opacity: 0.55 },
+      { d: "M22 39.4h7q-.2 4-3.5 4t-3.5-4ZM35 39.4h7q-.2 4-3.5 4t-3.5-4ZM29 39.8q3-1.4 6 0", colour: "ink" },
+      { d: "M22 39.8Q14.6 48 17.6 58M42 39.8Q49.4 48 46.4 58", colour: "accent", dash: true, only: "big" }
     ]
   },
   parels: {
     over: [
-      { c: [12.6, 41.8, 1.5], fill: WHITE, stroke: "fine" },
-      { c: [51.4, 41.8, 1.5], fill: WHITE, stroke: "fine" }
+      { c: [10.6, 42.4, 1.7], fill: WHITE, only: "big" },
+      { c: [53.4, 42.4, 1.7], fill: WHITE, only: "big" }
     ]
   }
 };
@@ -447,41 +453,52 @@ const SMALL_BELOW = 44;
 /** The drawing as SVG markup: the large one, or from SMALL_BELOW down its own simpler version. */
 export function avatarSvg(look: AvatarLook, size = 64): string {
   const small = size < SMALL_BELOW;
-  // A clear step between the contour and what is inside it; small has a stronger contour and no detail.
-  const width = small ? { outline: 2.9, feature: 2.1, fine: 0 } : { outline: 1.7, feature: 1.25, fine: 0.7 };
-  const face = small ? SMALL_COLOURS[COLOURS.indexOf(look.colour)] ?? look.colour : look.colour;
-  const token = (v: string | undefined) => (v === "face" ? face : v === "hair" ? look.tone : v === "accent" ? look.accent : v);
-  const filled = (s: Shape) => s.fill === "face" || s.fill === "hair" || s.fill === "accent";
+  const index = Math.max(0, COLOURS.indexOf(look.colour));
+  const face = small ? FULL[index] : look.colour;
+  const colours: Record<string, string> = {
+    face,
+    hair: look.tone,
+    accent: look.accent,
+    ink: mix(face, DEEP, 0.62),
+    mid: mix(face, DEEP, 0.2),
+    moustache: mix(look.tone, DEEP, 0.12)
+  };
+  const token = (v: string | undefined) => (v ? (colours[v] ?? v) : undefined);
+  const width = { feature: small ? 2.8 : 2.2, fine: 1.1 };
   const draw = (s: Shape) => {
-    const weight = s.stroke ?? (filled(s) ? "outline" : "feature");
-    if ((small && (s.only === "big" || weight === "fine")) || (!small && s.only === "small")) return "";
-    const fill = token(s.fill) ?? "none";
-    // The hairband is a thick coloured line with no outline.
+    // Filled shapes never get an outline; "fine" detail (lines or small shapes) only shows large.
+    const weight = s.fill ? "none" : (s.stroke ?? "feature");
+    if ((small && (s.only === "big" || s.stroke === "fine")) || (!small && s.only === "small")) return "";
+    // The hairband and brows are thick coloured strokes; detail lines are the dark tint, half see-through.
     const band = s.stroke === "none" && s.colour === "accent" && !s.fill;
-    const stroke = band ? look.accent : weight === "none" ? "none" : (token(s.colour) ?? K);
-    const w = band ? (small ? 3.8 : 3) : weight === "none" ? 0 : width[weight];
-    const attrs = `fill="${fill}" stroke="${stroke}"${stroke === "none" ? "" : ` stroke-width="${w}"`}${s.opacity !== undefined ? ` opacity="${s.opacity}"` : ""}${
-      s.dash ? ' stroke-dasharray="0.1 2"' : ""
+    const stroke = band ? look.accent : weight === "none" ? "none" : (token(s.colour) ?? colours.ink);
+    const w = band ? (small ? 3.8 : 3) : s.brow ? BROW + (small ? 0.6 : 0) : weight === "none" ? 0 : width[weight];
+    const opacity = s.opacity ?? (weight === "fine" && !s.colour ? 0.45 : undefined);
+    const attrs = `fill="${token(s.fill) ?? "none"}" stroke="${stroke}"${stroke === "none" ? "" : ` stroke-width="${w}"`}${opacity !== undefined ? ` opacity="${opacity}"` : ""}${
+      s.dash ? ' stroke-dasharray="0.1 2.2"' : ""
     }`;
-    return s.c ? `<circle cx="${s.c[0]}" cy="${s.c[1]}" r="${s.c[2]}" ${attrs}/>` : `<path d="${s.d}" ${attrs}/>`;
+    if (s.c) return `<circle cx="${s.c[0]}" cy="${s.c[1]}" r="${s.c[2]}" ${attrs}/>`;
+    if (s.e) return `<ellipse cx="${s.e[0]}" cy="${s.e[1]}" rx="${s.e[2]}" ry="${s.e[3]}" ${attrs}/>`;
+    return `<path d="${s.d}" ${attrs}/>`;
   };
   const hair = HAIR_SHAPES[look.hair];
   const extra = EXTRA_SHAPES[look.extra];
-  const expression = FACE_SHAPES[look.face];
-  const shapes: Shape[] = [
-    ...(hair.back ?? []),
-    ...(NO_EARS.has(look.hair) ? [] : [{ d: EARS, fill: "face" }, { d: "M12.6 35q1.6-.4 2 1.4M51.4 35q-1.6-.4-2 1.4", stroke: "fine" as const }]),
-    { d: HEAD, fill: "face" },
-    ...FACE_COMMON,
-    ...expression.eyes,
-    { d: expression.brows, only: "big" },
-    ...(expression.fine ? [{ d: expression.fine, stroke: "fine" as const }] : []),
-    ...expression.mouth,
-    ...(extra.under ?? []),
-    ...hair.front,
-    ...(extra.over ?? [])
-  ];
-  return `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" stroke-linecap="round" stroke-linejoin="round">${shapes.map(draw).join("")}</svg>`;
+  const group = (shapes: Shape[] | undefined) => (shapes?.length ? `<g transform="${HAIR_FIT}">${shapes.map(draw).join("")}</g>` : "");
+  // Identical people share an id, which is harmless: their clip paths are the same.
+  const clip = `oc-av-${small ? "s" : "l"}-${hash(JSON.stringify(look)).toString(36)}`;
+  const ears = NO_EARS.has(look.hair) ? "" : [{ e: [11.4, 38.4, 3.6, 4.6], fill: "mid" } as Shape, { e: [52.6, 38.4, 3.6, 4.6], fill: "mid" } as Shape].map(draw).join("");
+  const body = [
+    `<circle cx="32" cy="32" r="32" fill="${colours.ink}"/>`,
+    group(hair.back),
+    ears,
+    draw({ d: HEAD, fill: "face" }),
+    ...[...FACE_COMMON, ...FACE_SHAPES[look.face], ...(extra.under ?? [])].map(draw),
+    group(hair.front),
+    ...(extra.over ?? []).map(draw)
+  ].join("");
+  // Small zooms in on the face, so the eyes and mouth are bigger; the round frame comes from the disc.
+  const view = small ? "4 5 56 56" : "0 0 64 64";
+  return `<svg viewBox="${view}" xmlns="http://www.w3.org/2000/svg" stroke-linecap="round" stroke-linejoin="round"><clipPath id="${clip}"><circle cx="32" cy="32" r="32"/></clipPath><g clip-path="url(#${clip})">${body}</g></svg>`;
 }
 
 /** The face on its own. The name goes in the title; next to a written name it is hidden for screen readers. */
@@ -490,7 +507,7 @@ export function Avatar({ name, size = 24, className = "", decorative = true }: {
   const svg = useMemo(() => avatarSvg(look, size), [look.hair, look.colour, look.face, look.extra, look.tone, look.accent, size]);
   return (
     <span
-      className={`inline-block shrink-0 ${className}`}
+      className={`inline-block shrink-0 overflow-hidden rounded-full ${className}`}
       style={{ width: size, height: size }}
       role={decorative ? undefined : "img"}
       aria-hidden={decorative ? true : undefined}

@@ -63,18 +63,21 @@ Het aangepaste aantal dozen wordt niet opgeslagen. Het geldt alleen voor die pri
 
 ## 2. Poppetjes met naam in plaats van "Jij"
 
-- Iedereen krijgt een klein getekend oudje: een hoofd in een egale fantasiekleur, wit of grijs haar, en fijne lijntjes in donker chocoladebruin (`#403634`). Lachrimpels, walletjes en blosjes maken er een oudje van in plaats van een kleuter.
+- Iedereen krijgt een klein getekend oudje in vlakke kleur, **zonder outlines**. Het contrast doet het werk, niet de lijnen.
+  - Een rond vlak in een donkere tint van de gezichtskleur.
+  - Daarop een breed, zacht-rechthoekig gezicht. Alle gezichten hebben dezelfde vorm, zodat ze als één familie voelen.
+  - Ogen, wenkbrauwen en mond zijn dichte vormen in diezelfde donkere tint. De wenkbrauwen zijn korte balkjes, geen lijntjes. De neus en de oren zijn een iets donkerder vlak van de gezichtskleur.
+  - Wit of grijs haar, of een hoed, pet, muts of hoofddoek in een van de andere vijf kleuren.
 - **Palet:** warm en nostalgisch, als een kinderboekillustratie. Zes iets vergrijsde kleuren: lavendel, saliegroen, perzik, honinggeel, mistblauw en oudroze. Bewust geen huidtinten, zodat niemand op huidskleur wordt ingedeeld. Alle blosjes zijn hetzelfde zachte zalmroze (`#D99294`).
 - **Wat varieert:**
   - 12 kapsels en hoofddeksels: permanentje, knotje, kaal met plukjes, pet, dameshoedje met bloem, scheiding, bob, lang haar met haarband, baret, hoofddoek, kuif en muts met pompon
-  - 6 kleuren voor het hoofd, 4 tinten wit tot grijs voor het haar, 4 gedempte kleuren voor hoed, pet, muts, hoofddoek en haarband
+  - 6 kleuren voor het gezicht (en daarmee het vlak erachter), 4 tinten wit tot grijs voor het haar
   - 7 gezichten: glimlach, schaterlach, knipoog, verbaasd, tevreden met de ogen dicht, giechel en schalks
-  - soms een ronde bril, een leesbril aan een koordje, een snor of parel-oorbellen
+  - soms een ronde bril, een leesbril, een snor of parel-oorbellen
 - **Twee tekeningen van dezelfde persoon.** De kleine is geen verkleinde kopie, maar een eigen, eenvoudigere versie.
-  - **Groot** (44 px en meer: profiel, panelen) heeft wenkbrauwen, rimpels, plukjes, de neus, het bloemetje op de hoed en het koordje van de leesbril.
-  - **Klein** (onder 44 px: rooster, lijsten, naamlabels) heeft een sterke buitenlijn en rustige binnenlijnen. Er staan alleen ogen en mond in, plus de grote kenmerken: kapsel of hoed, bril en snor. De kleuren zijn een stap voller, zodat ze op 26 px nog uit elkaar te houden zijn.
-  - In beide tekeningen is de buitenlijn dikker dan de lijnen binnenin, zodat een rimpeltje nooit even zwaar weegt als de rand van het hoofd.
-- De felle kleuren zijn alleen voor de poppetjes. Ze vallen buiten de merkkleuren, net als de kleuren in de discozaal.
+  - **Groot** (44 px en meer: profiel, panelen) heeft ook kleine details: lachlijntjes, plukjes, naden in de pet, het bloemetje op de hoed, het koordje van de leesbril en de parels.
+  - **Klein** (onder 44 px: rooster, lijsten, naamlabels) heeft alleen de grote vormen. De kleuren zijn een stap voller, en de tekening zoomt in op het gezicht, zodat ogen en mond groter zijn.
+- De kleuren zijn alleen voor de poppetjes. Ze vallen buiten de merkkleuren, net als de kleuren in de discozaal.
 - **Dezelfde naam geeft overal hetzelfde poppetje**, op elk apparaat. Het poppetje volgt uit de naam; er wordt niets opgeslagen.
 - **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 72 mensen zijn.
   - Het dashboard maakt een lijst van alle namen die het kent: vrijwilligers, inpakkers, bezorgers, wie heeft afgeleverd, en wie is ingelogd.

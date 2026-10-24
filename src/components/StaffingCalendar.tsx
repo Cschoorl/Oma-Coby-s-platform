@@ -48,9 +48,9 @@ function inferYear(): number {
 
 /**
  * Month-style calendar: per season day how many people signed up per role, against the target.
- * Shows counts only, so it can also be shown on public pages.
+ * Shows counts only, so it can also be shown on public pages. With `onPick` the days are buttons.
  */
-export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
+export function StaffingCalendar({ counts, selected, onPick }: { counts: SignupCounts; selected?: string; onPick?: (day: string) => void }) {
   const dates = seasonDates();
   if (dates.length === 0) return null;
 
@@ -89,7 +89,12 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
             const active = inSeason.has(date.toDateString());
             const key = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
             return (
-              <div key={date.toISOString()} className={`min-h-[92px] rounded-md p-1.5 ${active ? "bg-meel/70" : "bg-transparent"}`}>
+              <Cell
+                key={date.toISOString()}
+                pick={active && onPick ? () => onPick(key) : undefined}
+                className={`min-h-[92px] rounded-md p-1.5 text-left ${active ? "bg-meel/70" : "bg-transparent"} ${selected === key ? "ring-2 ring-krent" : ""} ${active && onPick ? "hover:bg-gouwe-50" : ""}`}
+                pressed={selected === key}
+              >
                 <p className={`text-xs font-bold ${active ? "text-krent" : "text-muted/50"}`}>
                   {date.getDate()} {date.getDate() === 1 || date === cells[0] ? MONTHS[date.getMonth()].slice(0, 3) : ""}
                 </p>
@@ -113,12 +118,21 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
                     ))}
                   </div>
                 ) : null}
-              </div>
+              </Cell>
             );
           })}
         </div>
       </div>
       <p className="mt-2 text-xs text-muted">o = ochtend, m = middag, a = avond. Telt aanmeldingen (beschikbaarheid), niet het definitieve rooster.</p>
     </div>
+  );
+}
+
+function Cell({ pick, pressed, className, children }: { pick?: () => void; pressed: boolean; className: string; children: React.ReactNode }) {
+  if (!pick) return <div className={className}>{children}</div>;
+  return (
+    <button type="button" className={`${className} block w-full align-top`} onClick={pick} aria-pressed={pressed}>
+      {children}
+    </button>
   );
 }

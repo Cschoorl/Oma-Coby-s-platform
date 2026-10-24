@@ -1,7 +1,7 @@
 import type { SignupCounts } from "../data/backend";
 import type { Volunteer, VolunteerRole } from "../types/dashboard";
 import { VOLUNTEER_ROLES } from "../types/dashboard";
-import { OPTION_TARGETS, SIGNUP_OPTIONS, STAFFING_TARGETS } from "../config";
+import { OPTION_TARGETS, SIGNUP_OPTIONS, STAFFING_TARGETS, optionKeyFor } from "../config";
 
 export type StaffingStatus = "weinig" | "bijna" | "genoeg";
 
@@ -19,7 +19,7 @@ export function dayKey(option: string): string {
 
 /** People needed for one option: from the agenda when set, else the default for the task. */
 export function targetFor(role: VolunteerRole, option: string): number {
-  return OPTION_TARGETS[optionKey(option)] ?? STAFFING_TARGETS[role];
+  return OPTION_TARGETS[optionKeyFor(role, option)] ?? STAFFING_TARGETS[role];
 }
 
 export function staffingStatus(count: number, target: number): StaffingStatus {

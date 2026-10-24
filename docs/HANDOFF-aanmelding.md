@@ -70,7 +70,7 @@ De aanmelding gaat naar `backend.registerVolunteer` met dezelfde velden als het 
 planning: { mode, flexible, maxShifts, reminder, driving? }
 ```
 
-- **Demo-modus** (`src/data/backend.ts`): alles komt in `localStorage` onder `omacoby-demo-v4`.
+- **Demo-modus** (`src/data/backend.ts`): alles komt in `localStorage` onder `omacoby-demo-v5`.
 - **Apps Script** (`apps-script/Code.gs`): de aanmelding komt in het tabblad *Formulierreacties 1*.
   - De bestaande formulierkolommen worden gevuld zoals bij het Google Formulier.
   - Zes kolommen zet het script achteraan als ze er nog niet staan, op het moment dat ze voor het eerst een waarde krijgen:

@@ -271,7 +271,7 @@ export function isValidIban(value: string): boolean {
 
 export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
 
-const DEMO_KEY = "omacoby-demo-v4";
+const DEMO_KEY = "omacoby-demo-v5";
 
 interface DemoStore {
   version: number;
@@ -315,9 +315,46 @@ function demoVolunteers(): Volunteer[] {
       email: "chris@example.nl",
       remark: "Liefst samen met Bram",
       roles: { inpakken: none, fietskoerier: none, autokoerier: { wants: true, days: ["Donderdag 31 december: middag"] }, oliebollenbar: { wants: true, days: ["Woensdag 30 december"] } }
-    }
+    },
+    ...DEMO_HELPERS.map(([name, inpakken, auto, bar, planning], i): Volunteer => ({
+      ...base,
+      id: `demo-${i + 4}`,
+      name,
+      phone: `06000000${String(i + 10).padStart(2, "0")}`,
+      email: `${name.split(" ")[0].toLowerCase()}@example.nl`,
+      remark: i === 2 ? "Op de 24e pas vanaf 9 uur." : "",
+      roles: {
+        inpakken: inpakken.length ? { wants: true, days: inpakken.map((d) => demoDay(d)) } : none,
+        fietskoerier: none,
+        autokoerier: auto.length ? { wants: true, days: auto.map((d) => `${demoDay(d)}: ochtend`) } : none,
+        oliebollenbar: bar.length ? { wants: true, days: bar.map((d) => demoDay(d)) } : none
+      },
+      planning
+    }))
   ];
 }
+
+/** "Dinsdag 15 december" for a December day of the demo season. */
+function demoDay(day: number): string {
+  const names = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
+  return `${names[new Date(2026, 11, day, 12).getDay()]} ${day} december`;
+}
+
+/** Name, inpak days, bezorg days, bar days and planning answers, so the overviews have something to show. */
+const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["planning"]]> = [
+  ["Ria de Vries", [15, 16, 17, 22, 23], [], [], { mode: "taak", flexible: true, maxShifts: 4, reminder: "whatsapp" }],
+  ["Henk de Boer", [], [18, 19, 21, 22, 23, 24], [], { mode: "taak", flexible: false, maxShifts: 3, driving: "auto", reminder: "whatsapp" }],
+  ["Fatima El Amrani", [23, 24, 30, 31], [], [27, 28], { mode: "dag", flexible: true, maxShifts: 4, reminder: "mail" }],
+  ["Truus Dekker", [15, 16, 17, 18, 19, 20, 21, 22, 23, 24], [], [], { mode: "flexibel", flexible: true, maxShifts: 6, reminder: "whatsapp" }],
+  ["Ahmed Yilmaz", [], [22, 23, 24, 29, 30, 31], [], { mode: "taak", flexible: true, maxShifts: 4, driving: "auto", reminder: "whatsapp" }],
+  ["Sanne Mulder", [19, 20], [], [19, 20, 27], { mode: "dag", flexible: true, maxShifts: 3, reminder: "geen" }],
+  ["Kees Smit", [29, 30, 31], [29, 30, 31], [], { mode: "dag", flexible: true, maxShifts: 2, driving: "rijbewijs", reminder: "mail" }],
+  ["Lotte Bos", [], [], [20, 21, 27, 28], { mode: "taak", flexible: false, maxShifts: 3, reminder: "whatsapp" }],
+  ["Noor Kaya", [22, 23, 24], [], [], { mode: "taak", flexible: true, maxShifts: 3, reminder: "whatsapp" }],
+  ["Wim Peters", [], [15, 16, 17, 18], [], { mode: "taak", flexible: false, maxShifts: 4, driving: "auto", reminder: "geen" }],
+  ["Ineke Vos", [30, 31], [], [30], { mode: "dag", flexible: true, maxShifts: 2, reminder: "whatsapp" }],
+  ["Jan Bakker", [15, 22, 29], [15, 22, 29], [], { mode: "flexibel", flexible: true, maxShifts: 3, driving: "auto", reminder: "mail" }]
+];
 
 function emptyStore(): DemoStore {
   return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {} };

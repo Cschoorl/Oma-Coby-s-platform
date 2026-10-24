@@ -12,7 +12,6 @@ import {
   Icon,
   Note,
   Notice,
-  Oval,
   ProgressBar,
   Segmented,
   Sticker,
@@ -29,7 +28,11 @@ import {
   toast
 } from "../../components/ui";
 import { appLink } from "../../lib/router";
+import { NameTag, firstName } from "../../components/Avatar";
 import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
+import { minBoxes } from "../../utils/boxes";
+import { byRoute, labelsFor, loadAutoPrint, printLabels } from "./labels";
+import { LabelPanel, boxPlan } from "./LabelPanel";
 
 interface PackingPageProps {
   state: DashboardState;
@@ -53,6 +56,8 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("alle");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The order whose label panel is open stays in the list, also when the filter would hide it now it is packed.
+  const [labelOrder, setLabelsFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (dates.length > 0 && !dates.includes(date)) setDate(pickInitialDate(dates));
@@ -94,12 +99,16 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 
   const visibleOrders = dayOrders.filter((order) => {
     const p = packingOf(state, order.id);
+    if (order.id === labelOrder) return true;
     if (typeFilter !== "alle" && order.customerType !== typeFilter) return false;
     if (filter === "open") return !p.packedBy;
     if (filter === "mine") return p.claimedBy === session.name && !p.packedBy;
     if (filter === "done") return Boolean(p.packedBy);
     return true;
   });
+
+  const typedOrders = dayOrders.filter((o) => typeFilter === "alle" || o.customerType === typeFilter);
+  const dayLabels = typedOrders.reduce((sum, o) => sum + minBoxes(o.withRaisins) + minBoxes(o.withoutRaisins), 0);
 
   async function act(key: string, change: () => Promise<unknown>): Promise<boolean> {
     setBusy(key);
@@ -251,15 +260,28 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
               <Icon name="print" />
               Pakbonnen
             </a>
+            <button
+              type="button"
+              className={ghostButton}
+              disabled={dayLabels === 0}
+              title="Alle doos-labels van deze leverdag, in routevolgorde, voor de DYMO"
+              onClick={() => void printLabels(byRoute(state, typedOrders).flatMap((o) => labelsFor(state, o)))}
+            >
+              <Icon name="print" />
+              Labels ({dayLabels})
+            </button>
           </div>
         </div>
 
         {error ? <Notice tone="error">{error}</Notice> : null}
 
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid items-start gap-3 lg:grid-cols-2">
           {visibleOrders.map((order) => (
             <PackingCard
               key={order.id}
+              state={state}
+              labelsOpen={labelOrder === order.id}
+              onLabels={(open) => setLabelsFor(open ? order.id : null)}
               order={order}
               note={effectiveNote(order, state.meta[order.id])}
               courier={effectiveCourier(order, state.meta[order.id])}
@@ -343,6 +365,9 @@ function BakeLine({ toBake, packed }: { toBake: number; packed: number }) {
 }
 
 interface PackingCardProps {
+  state: DashboardState;
+  labelsOpen: boolean;
+  onLabels: (open: boolean) => void;
   order: Order;
   note: string;
   courier: string;
@@ -352,7 +377,7 @@ interface PackingCardProps {
   onAct: (key: string, change: () => Promise<unknown>) => Promise<boolean>;
 }
 
-function PackingCard({ order, note, courier, packing, session, busy, onAct }: PackingCardProps) {
+function PackingCard({ state, labelsOpen, onLabels, order, note, courier, packing, session, busy, onAct }: PackingCardProps) {
   // Ticks show immediately; the server answer (or an error) settles them afterwards.
   const [optimistic, setOptimistic] = useState<Partial<Record<PackingPart, boolean>>>({});
   const [askReopen, setAskReopen] = useState(false);
@@ -386,7 +411,6 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
   const meta = [
     order.fulfilment === "afhalen" ? `Afhalen${order.pickupLocation ? ` · ${order.pickupLocation}` : ""}` : courier ? `Bezorger: ${courier}` : "Bezorger nog niet ingedeeld",
     order.plannedTime,
-    order.packaging,
     flyers ? "met flyers" : ""
   ].filter(Boolean);
 
@@ -394,7 +418,9 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
     const pieces = order.withRaisins + order.withoutRaisins;
     if (await onAct(`${order.id}-complete`, () => backend.complete(session, order.id))) {
       setJustDone(true);
+      onLabels(true);
       toast(`Ingepakt! ${oudjesLine(pieces)}`);
+      if (loadAutoPrint()) void printLabels(labelsFor(state, order));
     }
   }
 
@@ -412,7 +438,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {order.customerType === "zakelijk" ? <Badge tone="zacht">Zakelijk</Badge> : null}
           {order.customerType === "barter" ? <Badge tone="zacht">Barter</Badge> : null}
-          {mine && !done ? <Oval>Jij</Oval> : claimedByOther && !done ? <Badge tone="aandacht">{packing.claimedBy} is bezig</Badge> : null}
+          {mine && !done ? <NameTag name={session.name} mine short /> : claimedByOther && !done ? <NameTag name={packing.claimedBy} short suffix="is bezig" /> : null}
         </div>
       </div>
       {done ? <Sticker tone="kerst" slap={justDone} className="pointer-events-none absolute -top-3 right-3">Ingepakt!</Sticker> : null}
@@ -459,6 +485,8 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
         })}
       </div>
 
+      {!done ? <p className="-mt-1 text-xs text-muted">Verdeel in {boxPlan(order)}.</p> : null}
+
       {done ? (
         askReopen ? (
           <ConfirmPanel
@@ -474,13 +502,23 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
             <p>Deze order heropenen om iets aan te passen? Hij komt dan op jouw naam te staan.</p>
           </ConfirmPanel>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              Ingepakt door <b className="text-krent">{packing.packedBy}</b> · {packing.packedAt.slice(11, 16) || packing.packedAt}
-            </p>
-            <button type="button" className={textAction} disabled={isBusy} onClick={() => setAskReopen(true)}>
-              Heropenen om aan te passen
-            </button>
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                Ingepakt door <NameTag name={packing.packedBy} mine={packing.packedBy === session.name} /> {packing.packedAt.slice(11, 16) || packing.packedAt}
+              </p>
+              <span className="flex flex-wrap items-center gap-3">
+                {!labelsOpen ? (
+                  <button type="button" className={textAction} onClick={() => onLabels(true)}>
+                    Labels printen
+                  </button>
+                ) : null}
+                <button type="button" className={textAction} disabled={isBusy} onClick={() => setAskReopen(true)}>
+                  Heropenen om aan te passen
+                </button>
+              </span>
+            </div>
+            {labelsOpen ? <LabelPanel state={state} order={order} onClose={() => onLabels(false)} /> : null}
           </div>
         )
       ) : (
@@ -500,7 +538,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
               </button>
             </>
           ) : null}
-          {claimedByOther ? <p className="text-xs text-muted">{packing.claimedBy} pakt deze in.</p> : null}
+          {claimedByOther ? <p className="text-xs text-muted">{firstName(packing.claimedBy)} pakt deze in.</p> : null}
           {claimedByOther && session.role === "beheer" ? (
             <button type="button" className={textAction} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
               Vrijgeven (beheer)

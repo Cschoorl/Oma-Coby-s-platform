@@ -1,188 +1,112 @@
 import { useMemo, useState } from "react";
-import type { Order } from "../../types/order";
-import type { AgendaShift } from "../../types/agenda";
-import { parseAgendaShifts, parseVolunteerShifts, seasonMonth } from "../../utils/agendaParser";
 import type { Volunteer } from "../../types/dashboard";
 import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { NameTag } from "../../components/Avatar";
 import { countSignups } from "../../utils/staffing";
-import { Card, CopyButton, EmptyState, Icon, SectionTitle, inputClass, taskClass, textAction } from "../../components/ui";
+import { Card, CopyButton, EmptyState, Icon, SectionTitle, inputClass, secondaryButton, textAction, todayIso } from "../../components/ui";
+import { formDay } from "../routes/routeUtils";
+import { daysOf, planningDays, seasonOrder, type SeasonDayInfo } from "../volunteers/availability";
+import { DayRoster } from "../volunteers/PlanningViews";
 
-const START_HOUR = 9;
-const END_HOUR = 17;
-const CALENDAR_HEIGHT = 960; // pixels for 9:00 - 17:00
-
-function toMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+/** Today when it is a season day, else the next season day, else the first. */
+function initialDay(days: SeasonDayInfo[]): string {
+  const today = formDay(todayIso());
+  return days.find((d) => seasonOrder(d.key) >= seasonOrder(today))?.key ?? days[0]?.key ?? "";
 }
 
-/** Puts overlapping shifts side by side: returns each shift's lane and the day's lane count. */
-function assignLanes(items: AgendaShift[]): { lanes: Map<string, number>; laneCount: number } {
-  const laneEnds: number[] = [];
-  const lanes = new Map<string, number>();
-  const sorted = [...items].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
-  for (const shift of sorted) {
-    const start = toMinutes(shift.startTime);
-    let lane = laneEnds.findIndex((end) => end <= start);
-    if (lane === -1) lane = laneEnds.length;
-    laneEnds[lane] = toMinutes(shift.endTime);
-    lanes.set(shift.id, lane);
-  }
-  return { lanes, laneCount: Math.max(1, laneEnds.length) };
-}
+const short = (d: SeasonDayInfo) => `${d.weekday} ${d.day} ${d.month.slice(0, 3)}`;
 
-function formatHour(hour: number): string {
-  return `${String(hour).padStart(2, "0")}:00`;
-}
+/**
+ * For everyone with a code: where is still room, and who is there on a day. Pick a day in the
+ * calendar; below it, per task, everyone who can, with their own outfit. You see yourself by name.
+ */
+export function AgendaPage({ volunteers, contactEmail, me }: { volunteers: Volunteer[]; contactEmail: string; me: string }) {
+  const days = useMemo(() => planningDays(volunteers), [volunteers]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const day = picked && days.some((d) => d.key === picked) ? picked : initialDay(days);
+  const index = days.findIndex((d) => d.key === day);
+  const current = days[index];
 
-export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order[]; volunteers: Volunteer[]; contactEmail: string }) {
-  const [query, setQuery] = useState<string>("");
-
-  // Signups from the volunteer form are leading; older order rows with schedules are the fallback.
-  const shifts = useMemo<AgendaShift[]>(
-    () => (volunteers.length > 0 ? parseVolunteerShifts(volunteers) : parseAgendaShifts(orders)),
-    [orders, volunteers]
-  );
-
-  const filtered = useMemo(() => {
+  const mine = volunteers.find((v) => v.name.trim().toLowerCase() === me.trim().toLowerCase());
+  const found = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return shifts;
-    return shifts.filter((s) => {
-      return s.personName.toLowerCase().includes(q) || s.role.toLowerCase().includes(q) || (s.locationName ?? "").toLowerCase().includes(q);
-    });
-  }, [query, shifts]);
+    return q ? volunteers.filter((v) => v.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name, "nl")) : [];
+  }, [query, volunteers]);
 
-  const columns = useMemo(() => {
-    const map = new Map<string, AgendaShift[]>();
-    for (const shift of filtered) {
-      const key = shift.dateLabel;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(shift);
-    }
-    return Array.from(map.entries()).sort((a, b) => {
-      const one = a[1][0];
-      const two = b[1][0];
-      if (!one || !two) return 0;
-      if (one.monthIndex !== two.monthIndex) return seasonMonth(one.monthIndex) - seasonMonth(two.monthIndex);
-      return one.dayOfMonth - two.dayOfMonth;
-    });
-  }, [filtered]);
+  const dayChips = (v: Volunteer) => {
+    const theirs = daysOf(v);
+    return days
+      .filter((d) => theirs.includes(d.key))
+      .map((d) => (
+        <button
+          key={d.key}
+          type="button"
+          onClick={() => setPicked(d.key)}
+          className={`rounded px-2 py-0.5 text-[11px] font-bold ${d.key === day ? "bg-krent text-meel" : "bg-vul text-krent hover:bg-vul-2"}`}
+        >
+          {short(d)}
+        </button>
+      ));
+  };
 
-  const hourLines = useMemo(() => {
-    const out: number[] = [];
-    for (let h = START_HOUR; h <= END_HOUR; h += 1) out.push(h);
-    return out;
-  }, []);
-
-  function eventTopPx(shift: AgendaShift): number {
-    const dayStart = START_HOUR * 60;
-    const dayEnd = END_HOUR * 60;
-    const minutes = Math.max(dayStart, Math.min(dayEnd, toMinutes(shift.startTime)));
-    const ratio = (minutes - dayStart) / (dayEnd - dayStart);
-    return ratio * CALENDAR_HEIGHT;
-  }
-
-  function eventHeightPx(shift: AgendaShift): number {
-    const dayStart = START_HOUR * 60;
-    const dayEnd = END_HOUR * 60;
-    const start = Math.max(dayStart, Math.min(dayEnd, toMinutes(shift.startTime)));
-    const end = Math.max(dayStart, Math.min(dayEnd, toMinutes(shift.endTime)));
-    const ratio = Math.max(0.08, (end - start) / (dayEnd - dayStart));
-    return ratio * CALENDAR_HEIGHT;
+  if (volunteers.length === 0) {
+    return <EmptyState title="Nog niemand ingepland." text="Oma Coby bakt ze niet alleen. Zodra vrijwilligers zich aanmelden, verschijnen ze hier." />;
   }
 
   return (
     <section className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      {volunteers.length > 0 ? (
-        <Card>
-          <SectionTitle title="Waar is nog plek?" subtitle="Met een ! zijn er die dag nog weinig mensen. Kun je dan? Laat het de planning weten." />
-          <StaffingCalendar counts={countSignups(volunteers)} />
+      {mine ? (
+        <Card className="flex flex-wrap items-center gap-3">
+          <NameTag name={mine.name} mine />
+          <p className="text-sm text-krent">Je kunt op {daysOf(mine).length} dagen:</p>
+          <div className="flex flex-wrap gap-1">{dayChips(mine)}</div>
         </Card>
       ) : null}
-      {shifts.length === 0 ? (
-        <EmptyState title="Nog niemand ingepland." text="Oma Coby bakt ze niet alleen. Zodra vrijwilligers zich aanmelden, verschijnen ze hier." />
-      ) : (
+
+      <Card>
+        <SectionTitle title="Waar is nog plek?" subtitle="Met een ! zijn er die dag nog weinig mensen. Klik een dag om te zien wie er is." />
+        <StaffingCalendar counts={countSignups(volunteers)} selected={day} onPick={setPicked} />
+      </Card>
+
+      {current ? (
         <Card>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <label className="relative min-w-[240px] flex-1 sm:max-w-sm">
-              <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek een naam of taak" aria-label="Zoek in de agenda" type="search" className={`${inputClass} pl-9`} />
-            </label>
-            <p className="text-sm text-muted">
-              <b className="tabular-nums text-krent">{filtered.length}</b> ingepland
-            </p>
-          </div>
-          <div className="mb-3 flex flex-wrap gap-1.5 text-[11px] font-bold">
-            {(["Inpakken", "Fietskoerier", "Autokoerier", "Oliebollenbar"] as const).map((r) => (
-              <span key={r} className={`rounded px-2 py-0.5 ${taskClass[r.toLowerCase()]}`}>
-                {r}
-              </span>
-            ))}
-          </div>
-          {columns.length === 0 ? (
-            <EmptyState title="Niemand gevonden." text="Probeer een andere naam of taak." />
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="min-w-[900px]">
-                <div className="grid grid-cols-[72px_repeat(var(--cols),minmax(0,1fr))]" style={{ ["--cols" as string]: columns.length }}>
-                  <div className="border-b border-lijn-2 p-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                    Tijd
-                  </div>
-                  {columns.map(([dateLabel]) => (
-                    <div key={dateLabel} className="border-b border-lijn-2 p-2 text-center">
-                      <p className="text-sm font-bold text-krent">{dateLabel}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-[72px_repeat(var(--cols),minmax(0,1fr))]" style={{ ["--cols" as string]: columns.length }}>
-                  <div className="relative border-r border-lijn" style={{ height: `${CALENDAR_HEIGHT}px` }}>
-                    {hourLines.map((hour) => {
-                      const top = ((hour - START_HOUR) / (END_HOUR - START_HOUR)) * CALENDAR_HEIGHT;
-                      return (
-                        <div key={hour} className="absolute left-0 right-0 -translate-y-1/2 pr-2 text-right text-xs tabular-nums text-muted" style={{ top }}>
-                          {formatHour(hour)}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {columns.map(([dateLabel, items]) => {
-                    const { lanes, laneCount } = assignLanes(items);
-                    return (
-                    <div key={dateLabel} className="relative border-r border-lijn last:border-r-0" style={{ height: `${CALENDAR_HEIGHT}px` }}>
-                      {hourLines.map((hour) => {
-                        const top = ((hour - START_HOUR) / (END_HOUR - START_HOUR)) * CALENDAR_HEIGHT;
-                        return <div key={hour} className="absolute left-0 right-0 border-t border-lijn/70" style={{ top }} />;
-                      })}
-
-                      {items.map((shift) => (
-                        <article
-                          key={shift.id}
-                          className={`absolute overflow-hidden rounded-md p-2 ${taskClass[shift.role.toLowerCase()] ?? taskClass.inpakken}`}
-                          style={{
-                            top: `${eventTopPx(shift)}px`,
-                            height: `${eventHeightPx(shift)}px`,
-                            left: `calc(${((lanes.get(shift.id) ?? 0) / laneCount) * 100}% + 2px)`,
-                            width: `calc(${100 / laneCount}% - 4px)`
-                          }}
-                        >
-                          <p className="truncate text-xs font-bold">{shift.personName}</p>
-                          <p className="text-[11px] tabular-nums">
-                            {shift.startTime}–{shift.endTime}
-                          </p>
-                          <p className="text-[11px] opacity-80">{shift.role}</p>
-                        </article>
-                      ))}
-                    </div>
-                    );
-                  })}
-                </div>
-              </div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Wie is er</p>
+              <h2 className="font-serif text-xl font-bold leading-tight text-krent">{current.label}</h2>
             </div>
-          )}
+            <div className="flex gap-1.5">
+              <button type="button" className={secondaryButton} disabled={index <= 0} onClick={() => setPicked(days[index - 1].key)} aria-label="Vorige dag">
+                ←
+              </button>
+              <button type="button" className={secondaryButton} disabled={index >= days.length - 1} onClick={() => setPicked(days[index + 1].key)} aria-label="Volgende dag">
+                →
+              </button>
+            </div>
+          </div>
+          <DayRoster volunteers={volunteers} day={day} me={me} suggest={false} />
         </Card>
-      )}
+      ) : null}
+
+      <Card>
+        <SectionTitle title="Zoek iemand" subtitle="Op welke dagen kan iemand? Klik een dag om te zien wie er nog meer is." />
+        <label className="relative block max-w-sm">
+          <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Zoek een naam" aria-label="Zoek een vrijwilliger" type="search" className={`${inputClass} pl-9`} />
+        </label>
+        {query.trim() ? (
+          <ul className="mt-3 grid">
+            {found.map((v) => (
+              <li key={v.id} className="flex flex-wrap items-center gap-2 border-b border-lijn py-2.5 last:border-0">
+                <NameTag name={v.name} mine={v === mine} />
+                <span className="flex flex-wrap gap-1">{dayChips(v)}</span>
+              </li>
+            ))}
+            {found.length === 0 ? <li className="py-2 text-sm text-muted">Niemand gevonden met die naam.</li> : null}
+          </ul>
+        ) : null}
+      </Card>
 
       <p className="text-center text-sm text-muted">
         Niet kunnen of anders plannen? Mail naar{" "}
@@ -194,4 +118,3 @@ export function AgendaPage({ orders, volunteers, contactEmail }: { orders: Order
     </section>
   );
 }
-

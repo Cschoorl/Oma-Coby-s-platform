@@ -36,17 +36,27 @@ const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
  */
 export const SIGNUP_OPTIONS: Record<VolunteerRole, string[]> = { ...DEFAULT_OPTIONS };
 
+/**
+ * Key for times and targets: task plus option. Inpakken and the Oliebollenbar can have the very same
+ * option ("Dinsdag 15 december"), so the option alone would give the bar the inpak time.
+ */
+export function optionKeyFor(role: VolunteerRole, option: string): string {
+  return `${role}|${option.trim().toLowerCase()}`;
+}
+
 /** Shift times until the agenda gives its own. */
 const DEFAULT_TIMES: Record<string, string> = Object.fromEntries([
-  ...DEFAULT_OPTIONS.inpakken.map((o) => [o.toLowerCase(), "6:30–12:00"]),
-  ...DEFAULT_OPTIONS.autokoerier.map((o) => [o.toLowerCase(), "9:00–12:00"])
+  ...DEFAULT_OPTIONS.inpakken.map((o) => [optionKeyFor("inpakken", o), "6:30–12:00"]),
+  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), "9:00–12:00"])
 ]);
 
-/** Time per option ("6:30–12:00"), keyed by the lowercased option. */
+/** Time per task and option ("6:30–12:00"), keyed by optionKeyFor. Use optionTime to read it. */
 export const OPTION_TIMES: Record<string, string> = { ...DEFAULT_TIMES };
 
-/** People needed per option when the agenda says so, keyed by the lowercased option; else STAFFING_TARGETS. */
+/** People needed per task and option when the agenda says so, keyed by optionKeyFor; else STAFFING_TARGETS. */
 export const OPTION_TARGETS: Record<string, number> = {};
+
+export const optionTime = (role: VolunteerRole, option: string): string => OPTION_TIMES[optionKeyFor(role, option)] ?? "";
 
 const PART_ORDER = ["", "ochtend", "middag", "avond"];
 
@@ -77,8 +87,8 @@ export function applyAgenda(slots: AgendaSlot[]): void {
       const label = agendaLabel(slot);
       if (options.includes(label)) continue;
       options.push(label);
-      if (slot.time) OPTION_TIMES[label.toLowerCase()] = slot.time;
-      if (slot.needed) OPTION_TARGETS[label.toLowerCase()] = slot.needed;
+      if (slot.time) OPTION_TIMES[optionKeyFor(role, label)] = slot.time;
+      if (slot.needed) OPTION_TARGETS[optionKeyFor(role, label)] = slot.needed;
     }
     SIGNUP_OPTIONS[role] = role === "fietskoerier" ? [] : options;
   }
@@ -120,3 +130,12 @@ export const BIKE_MAX_PIECES = 300;
 export const ROUTE_START_TIMES: Record<string, string> = { ochtend: "09:00", middag: "12:00", avond: "17:00", "": "09:00" };
 
 export const CONTACT_EMAIL = "planning@omacobysoliebollenbar.nl";
+
+/** At most this many oliebollen in one box. MET and ZONDER never share a box. */
+export const MAX_PER_DOOS = 50;
+
+/**
+ * Label roll in the DYMO LabelWriter 450: 99014 shipping labels, 54 × 101 mm, printed landscape.
+ * Change both numbers when another roll goes in (e.g. 99019: 59 × 190 mm).
+ */
+export const LABEL_SIZE = { name: "DYMO 99014", widthMm: 101, heightMm: 54 };

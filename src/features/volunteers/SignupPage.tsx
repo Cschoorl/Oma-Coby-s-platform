@@ -5,7 +5,7 @@ import type { ReminderChannel, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
-import { CONTACT_EMAIL, OPTION_TIMES, SIGNUP_OPTIONS, applyAgenda } from "../../config";
+import { CONTACT_EMAIL, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
 import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
 
 /*
@@ -39,7 +39,7 @@ function listOrCount(items: string[], plural: string): string {
 
 /** The shift time of a task when all its moments share one ("6:30–12:00"), else "". */
 function sharedTime(role: VolunteerRole): string {
-  const times = new Set(SIGNUP_OPTIONS[role].map((o) => OPTION_TIMES[o.trim().toLowerCase()] ?? ""));
+  const times = new Set(SIGNUP_OPTIONS[role].map((o) => optionTime(role, o)));
   return times.size === 1 ? [...times][0] : "";
 }
 
@@ -906,7 +906,7 @@ function OptionGrid({ role, quiet, value, onChange }: { role: VolunteerRole; qui
               const on = value.includes(o);
               const part = optionPart(o);
               const text = o.match(/\(([^)]+)\)/)?.[1] ?? (part ? partLabel[part] : "Hele dag");
-              const time = OPTION_TIMES[o.trim().toLowerCase()];
+              const time = optionTime(role, o);
               return (
                 <button
                   key={o}

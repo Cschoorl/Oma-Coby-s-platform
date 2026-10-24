@@ -3,6 +3,7 @@ import { backend, type Session } from "../../data/backend";
 import type { DashboardState } from "../../types/dashboard";
 import { OrderFilters } from "../orders/OrderFilters";
 import { Badge, Card, CopyButton, EmptyState, Icon, Notice, OliebolLoader, SectionTitle, StatStrip, fieldLabel, formatDayLabel, formatNumber, ghostButton, inputClass, pickInitialDate, primaryButton, secondaryButton, toast } from "../../components/ui";
+import { Avatar } from "../../components/Avatar";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
 import { courierCandidates, courierOrders, couriersOn, deliveryOrders, findVolunteer, guessMode, isRouteStale, orderPart, orderedStops, routeKey, transportOn, whatsappNumber } from "./routeUtils";
@@ -180,11 +181,14 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             return (
               <Card key={courier} className="grid content-start gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-serif text-lg font-bold text-krent">{courier}</p>
-                    <p className="text-xs text-muted">
-                      {orders.length} {orders.length === 1 ? "stop" : "stops"} · {pieces} oliebollen · {done} van {orders.length} afgeleverd
-                    </p>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={courier} size={36} />
+                    <div>
+                      <p className="font-serif text-lg font-bold text-krent">{courier}</p>
+                      <p className="text-xs text-muted">
+                        {orders.length} {orders.length === 1 ? "stop" : "stops"} · {pieces} oliebollen · {done} van {orders.length} afgeleverd
+                      </p>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {route ? (

@@ -7,6 +7,7 @@ import { OrderFilters } from "../orders/OrderFilters";
 import { navigate } from "../../lib/router";
 import { effectiveCourier, effectiveNote, stopAddress } from "../../utils/orderUtils";
 import { routeKey } from "../routes/routeUtils";
+import { boxPlan } from "./LabelPanel";
 
 const typeLabel: Record<Order["customerType"], string> = { particulier: "Particulier", zakelijk: "Zakelijk", barter: "Barter", onbekend: "" };
 
@@ -79,7 +80,7 @@ export function PackingSlipsPage({ state, date: dateParam }: { state: DashboardS
                 ))}
               </div>
               <p className="mt-2 text-xs">
-                {[order.packaging, flyers ? "MET FLYERS" : "geen flyers", order.deliveryMoment].filter(Boolean).join(" · ")}
+                {[boxPlan(order), flyers ? "MET FLYERS" : "geen flyers", order.deliveryMoment].filter(Boolean).join(" · ")}
               </p>
               {order.fulfilment === "bezorgen" ? (
                 <p className="mt-1 text-xs">

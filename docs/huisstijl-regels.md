@@ -37,8 +37,14 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 2. Kaarten: papier op meel, 10px hoek (`rounded-kaart`), zachte schaduw (`shadow-zacht`), geen rand. Op schermen wijken we hiermee bewust af van het rechte drukwerk uit het brandbook.
 3. Randen alleen voor invoervelden, de focusring en een staat die aandacht vraagt (de volgende stop bij Bezorgen).
 4. Tweede knoppen, filters, leverdagen, keuze-chips en afvinktegels zijn zachte vlakken zonder rand (`bg-vul`); actief = wit pilletje met schaduw, of krent.
-5. Knoppen en velden 6px hoek, badges 4px. Het schuine ovaal (`Sticker`, `Oval`) alleen voor JIJ, initialen, mijlpalen en succes.
+5. Knoppen en velden 6px hoek, badges 4px. Het schuine ovaal (`Sticker`, `Oval`) alleen voor mijlpalen en succes.
 6. Tikvlakken minimaal 44px op schermen die op telefoon worden gebruikt (Bezorgen, Inpakken, Aanmelden, Kosten).
+
+## Personen
+
+1. Een persoon staat er altijd met naam en eigen poppetje (`Avatar`, `NameTag` in `src/components/Avatar.tsx`), nooit als "Jij".
+2. Het poppetje is een buste in een outfit (schort, kersttrui, streepjestrui, stippenjurk, tuinbroek, colbert met strik, ruitjeshemd, hoodie, koksbuis, jas met sjaal) in een merkkleur. Dezelfde naam geeft overal hetzelfde poppetje; binnen het dashboard krijgt iedereen een eigen combinatie van outfit en kleur.
+3. Wie ingelogd is, staat in een gouwe ouwe-pilletje (`NameTag mine`); anderen in een zacht vlak.
 
 ## Gedrag
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { backend, type Session } from "./data/backend";
-import type { Role } from "./types/dashboard";
+import type { DashboardState, Role } from "./types/dashboard";
 import { AgendaPage } from "./features/agenda/AgendaPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { CostsPage } from "./features/costs/CostsPage";
@@ -13,6 +13,7 @@ import { StatsPage } from "./features/stats/StatsPage";
 import { SignupPage } from "./features/volunteers/SignupPage";
 import { VolunteersPage } from "./features/volunteers/VolunteersPage";
 import { Notice, Skeleton, Toaster } from "./components/ui";
+import { Avatar, setAvatarRoster } from "./components/Avatar";
 import logoUrl from "./assets/logo-oliebollenbar.svg";
 import { CONTACT_EMAIL, applyAgenda } from "./config";
 import { navigate, useRoute } from "./lib/router";
@@ -35,8 +36,8 @@ const NAV: NavItem[] = [
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
   { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren. Achter de discobal-knop: de discozaal.", roles: ["beheer"] },
-  { path: "/vrijwilligers", label: "Vrijwilligers", description: "Aanmeldingen en bezetting per dag.", roles: ["beheer"] },
-  { path: "/agenda", label: "Agenda", description: "Wie wanneer beschikbaar is.", roles: ["beheer", "inpakker", "bezorger"] },
+  { path: "/vrijwilligers", label: "Vrijwilligers", description: "Wie kan wanneer: per vrijwilliger en per dag, met contactgegevens.", roles: ["beheer"] },
+  { path: "/agenda", label: "Agenda", description: "Waar nog plek is en wie er op een dag is.", roles: ["beheer", "inpakker", "bezorger"] },
   { path: "/kosten", label: "Kosten", description: "Bon declareren en de status volgen; beheer keurt goed en betaalt uit.", roles: ["beheer", "inpakker", "bezorger"] },
   { path: "/pakbonnen", label: "Pakbonnen", description: "Per order een pakbon om te printen en bij de doos te leggen.", roles: ["beheer", "inpakker"], hidden: true }
 ];
@@ -72,6 +73,18 @@ function DemoPill() {
       Demo
     </span>
   );
+}
+
+/** Everyone with a name in the dashboard: volunteers, packers, couriers and whoever is logged in. */
+function rosterNames(state: DashboardState, me: string): string[] {
+  return [
+    me,
+    ...state.volunteers.map((v) => v.name),
+    ...Object.values(state.packing).flatMap((p) => [p.claimedBy, p.packedBy]),
+    ...Object.values(state.meta).map((m) => m.courier),
+    ...state.orders.map((o) => o.supplierName),
+    ...Object.values(state.delivery).map((d) => d.deliveredBy)
+  ];
 }
 
 function App() {
@@ -121,6 +134,8 @@ function App() {
   let page: React.ReactNode = null;
   // The signup options and targets follow the Agenda tab of the Sheet.
   if (state) applyAgenda(state.agenda);
+  // Everyone the dashboard knows gets their own outfit; see components/Avatar.tsx.
+  if (state) setAvatarRoster(rosterNames(state, session.name));
   if (state) {
     switch (current?.path) {
       case "/inpakken":
@@ -148,7 +163,7 @@ function App() {
         page = <PackingSlipsPage state={state} date={route.params.get("datum")} />;
         break;
       case "/agenda":
-        page = <AgendaPage orders={state.orders} volunteers={state.volunteers} contactEmail={CONTACT_EMAIL} />;
+        page = <AgendaPage volunteers={state.volunteers} contactEmail={CONTACT_EMAIL} me={session.name} />;
         break;
     }
   }
@@ -167,8 +182,11 @@ function App() {
               <span className={`inline-block h-2 w-2 rounded-full ${liveDot}`} />
               <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}</span>
             </span>
-            <span className="hidden text-krent sm:inline">
-              <b>{session.name}</b> · {roleLabel[session.role]}
+            <span className="hidden items-center gap-1.5 text-krent sm:inline-flex">
+              <Avatar name={session.name} size={26} />
+              <span>
+                <b>{session.name}</b> · {roleLabel[session.role]}
+              </span>
             </span>
             <button type="button" className="hidden rounded-md px-2 py-1 font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent sm:inline" onClick={logout}>
               Uitloggen
@@ -218,7 +236,8 @@ function App() {
               <span className="font-display text-[22px] leading-6 tracking-normal text-feest">×</span>
               Uitloggen
             </button>
-            <p className="col-span-3 pt-1 text-center text-xs text-muted">
+            <p className="col-span-3 flex items-center justify-center gap-1.5 pt-1 text-xs text-muted">
+              <Avatar name={session.name} size={22} />
               Ingelogd als <b className="text-krent">{session.name}</b> · {roleLabel[session.role]}
             </p>
           </nav>

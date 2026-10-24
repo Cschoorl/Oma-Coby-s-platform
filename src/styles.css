@@ -95,3 +95,18 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* DYMO-labels: alleen zichtbaar tijdens het printen, één label per pagina (zie printLabels). */
+#oc-labels { display: none; }
+@media print {
+  body.oc-labels-printing { background: #fff; min-height: 0; }
+  body.oc-labels-printing > *:not(#oc-labels) { display: none !important; }
+  body.oc-labels-printing #oc-labels { display: block; }
+  body.oc-labels-printing .oc-label { break-after: page; page-break-after: always; }
+  body.oc-labels-printing .oc-label:last-child { break-after: auto; page-break-after: auto; }
+}
+
+/* Zijpaneel schuift kort in; uit bij "minder beweging". */
+@keyframes oc-drawer { from { transform: translateX(24px); } to { transform: none; } }
+.oc-drawer { animation: oc-drawer 0.18s ease-out; }
+@media (prefers-reduced-motion: reduce) { .oc-drawer { animation: none; } }

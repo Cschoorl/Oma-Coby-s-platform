@@ -1,5 +1,5 @@
 import type { SignupCounts } from "../../data/backend";
-import type { ReminderChannel, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
+import type { Driving, ReminderChannel, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES } from "../../types/dashboard";
 import { SIGNUP_OPTIONS } from "../../config";
 import { countFor, dayKey, staffingStatus, targetFor } from "../../utils/staffing";
@@ -28,6 +28,8 @@ export interface Answers {
   cargoBike: boolean;
   flexible: boolean | null;
   maxShifts: number | null;
+  /** Asked when they want to bezorgen; "nee" takes autokoerier off their tasks. */
+  driving: Driving | "nee" | null;
   reminder: ReminderChannel | null;
 }
 
@@ -40,6 +42,7 @@ export const emptyAnswers = (): Answers => ({
   cargoBike: false,
   flexible: null,
   maxShifts: null,
+  driving: null,
   reminder: null
 });
 

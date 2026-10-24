@@ -81,19 +81,23 @@ export interface Volunteer {
 /** How someone signed up: with a task in mind, a day in mind, or "put me where you need me". */
 export type SignupMode = "taak" | "dag" | "flexibel";
 export type ReminderChannel = "whatsapp" | "mail" | "geen";
+export type Driving = "auto" | "rijbewijs";
 
 /** The planning answers of the step-by-step signup, written to their own columns in the sheet. */
 export interface SignupPlanning {
   mode: SignupMode;
   /** True: we may also put them on another task or moment where it is busier. */
   flexible: boolean;
-  /** At most this many times this season; at most the number of days they chose. */
+  /** At most this many days this season (one shift a day); at most the number of days they chose. */
   maxShifts: number;
+  /** Bezorgers only: a driving licence and a car, or a licence without a car of their own. */
+  driving?: Driving;
   /** A message 24 hours before each shift. */
   reminder: ReminderChannel;
 }
 
-export const maxShiftsLabel = (n: number) => `${n} keer`;
+export const maxShiftsLabel = (n: number) => `${n} ${n === 1 ? "dag" : "dagen"}`;
+export const drivingLabel: Record<Driving, string> = { auto: "Rijbewijs en auto", rijbewijs: "Rijbewijs, geen auto" };
 export const reminderLabel: Record<ReminderChannel, string> = { whatsapp: "WhatsApp", mail: "Mail", geen: "Geen" };
 
 export type CostStatus = "ingediend" | "goedgekeurd" | "afgekeurd" | "uitbetaald";

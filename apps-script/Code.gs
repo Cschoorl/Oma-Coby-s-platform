@@ -104,7 +104,8 @@ const CONFIG = {
     // From the step-by-step signup on the platform; the old Google Form has none of these.
     mode: ['hoe aangemeld'],
     flexible: ['mag ingedeeld worden waar nodig'],
-    maxShifts: ['hoe vaak maximaal'],
+    maxShifts: ['maximaal aantal dagen', 'hoe vaak maximaal'],
+    driving: ['rijbewijs'],
     reminder: ['herinnering 24 uur van tevoren']
   }
 };
@@ -125,14 +126,16 @@ const EXTRA_VOLUNTEER_HEADERS = {
   address: 'Adres',
   mode: 'Hoe aangemeld',
   flexible: 'Mag ingedeeld worden waar nodig',
-  maxShifts: 'Hoe vaak maximaal',
+  maxShifts: 'Maximaal aantal dagen',
+  driving: 'Rijbewijs',
   reminder: 'Herinnering 24 uur van tevoren'
 };
 
 /** How the planning answers read in the sheet, and back. */
 const PLANNING_TEXT = {
   mode: { taak: 'Taak in gedachten', dag: 'Dag in gedachten', flexibel: 'Maakt niet uit' },
-  reminder: { whatsapp: 'WhatsApp', mail: 'Mail', geen: 'Nee' }
+  reminder: { whatsapp: 'WhatsApp', mail: 'Mail', geen: 'Nee' },
+  driving: { auto: 'Rijbewijs en auto', rijbewijs: 'Rijbewijs, geen auto' }
 };
 
 function planningKey_(map, text) {
@@ -544,7 +547,9 @@ const HANDLERS = {
     if (planning) {
       values.mode = PLANNING_TEXT.mode[planning.mode] || '';
       values.flexible = planning.flexible ? 'Ja' : 'Nee';
-      values.maxShifts = Number(planning.maxShifts) > 0 ? Math.round(Number(planning.maxShifts)) + ' keer' : '';
+      const max = Math.round(Number(planning.maxShifts));
+      values.maxShifts = max > 0 ? max + (max === 1 ? ' dag' : ' dagen') : '';
+      values.driving = PLANNING_TEXT.driving[planning.driving] || '';
       values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
     }
 
@@ -841,20 +846,21 @@ function readVolunteers_() {
       roles: roles,
       cargoBike: truthy_(cell(row, 'cargoBike')),
       remark: cell(row, 'remark'),
-      planning: readPlanning_(cell(row, 'mode'), cell(row, 'flexible'), cell(row, 'maxShifts'), cell(row, 'reminder'))
+      planning: readPlanning_(cell(row, 'mode'), cell(row, 'flexible'), cell(row, 'maxShifts'), cell(row, 'reminder'), cell(row, 'driving'))
     };
   }).filter(function (v) { return v.name; });
 }
 
 /** The planning columns of one row; undefined for rows from the old Google Form. */
-function readPlanning_(mode, flexible, maxShifts, reminder) {
+function readPlanning_(mode, flexible, maxShifts, reminder, driving) {
   const m = planningKey_(PLANNING_TEXT.mode, mode);
   if (!m) return undefined;
   return {
     mode: m,
     flexible: truthy_(flexible),
-    // "3 keer" → 3; empty means no maximum given, so as many as they chose.
+    // "3 dagen" → 3; empty means no maximum given, so as many as they chose.
     maxShifts: parseInt(String(maxShifts), 10) || 0,
+    driving: planningKey_(PLANNING_TEXT.driving, driving) || undefined,
     reminder: planningKey_(PLANNING_TEXT.reminder, reminder) || 'geen'
   };
 }

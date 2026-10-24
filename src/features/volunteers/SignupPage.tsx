@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
 import { countFor, dayKey, labelQuietOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
 import type { ReminderChannel, VolunteerRole } from "../../types/dashboard";
-import { ACTIVE_ROLES, VOLUNTEER_ROLES, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
+import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
 import { CONTACT_EMAIL, OPTION_TIMES, SIGNUP_OPTIONS, applyAgenda } from "../../config";
@@ -17,7 +17,7 @@ import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, 
  * She never makes promises about the rooster; that comes later.
  */
 
-type StepId = "name" | "mode" | "roles" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "reminder" | "contact" | "check";
+type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "reminder" | "contact" | "check";
 
 const partLabel: Record<Part, string> = { ochtend: "Ochtend", middag: "Middag", avond: "Avond" };
 
@@ -75,16 +75,18 @@ function countDays(roles: ReturnType<typeof toRoles>): number {
 }
 
 function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): StepId[] {
-  const ids: StepId[] = ["name", "mode"];
+  const ids: StepId[] = ["mode"];
   if (!a.mode) return ids;
+  // Bezorgen needs a driving licence: asked straight after choosing it, before any days for it.
+  const license: StepId[] = a.roles.includes("autokoerier") ? ["license"] : [];
   if (a.mode === "taak") {
-    ids.push("roles", ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
+    ids.push("roles", ...license, ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
     if (suggestions.length > 0) ids.push("suggest");
   } else {
     ids.push("days");
     // Only a question on days with more than one shift; with one morning shift there is nothing to ask.
     if (daysWithChoice(a.days).length > 0) ids.push("parts");
-    ids.push("dayroles");
+    ids.push("dayroles", ...license);
   }
   // "Zet me maar in waar het nodig is" already answers this one.
   if (a.mode !== "flexibel") ids.push("flexible");
@@ -94,8 +96,14 @@ function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): Ste
   return ids;
 }
 
-/** How long Oma "types" before a message: a beat, a little longer for longer messages. */
-const typingMs = (text: string) => 450 + Math.min(text.length * 8, 450);
+/** How long Oma "types" before her message: a short beat, so it reads as a reply and never as waiting. */
+const typingMs = (text: string) => 350 + Math.min(text.length * 5, 350);
+
+/** Her reaction to the last answer and the next question as one message, not two: fewer bubbles, less chatter. */
+function joinLines(reaction: string | undefined, say: string[]): string[] {
+  if (!reaction) return say;
+  return [`${reaction} ${say[0]}`, ...say.slice(1)];
+}
 
 /** Standalone signup page (no login). Saved to the same tab as the Google Form, plus the planning columns. */
 export function SignupPage() {
@@ -104,11 +112,12 @@ export function SignupPage() {
   const [a, setA] = useState<Answers>(emptyAnswers);
   /** Quiet moments the volunteer added when Oma asked, as "role|option". */
   const [extra, setExtra] = useState<string[]>([]);
-  const [at, setAt] = useState<StepId>("name");
+  const [at, setAt] = useState<StepId>("mode");
   /** How many of Oma's messages for the current step are shown; the rest are still being "typed". */
   const [revealed, setRevealed] = useState(0);
   /** Going back with "Wijzig" shows the question at once: no typing a second time. */
   const instant = useRef(false);
+  const opened = useRef(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -148,27 +157,34 @@ export function SignupPage() {
   const index = Math.max(0, ids.indexOf(at));
   const current = ids[index];
   const first = firstName.trim().split(" ")[0];
+  /** "Zet me maar in" and "Maakt niet uit" offer every task on their days, but no bezorgen without a licence. */
+  const offered = (list: string[]) => rolesOnDays(list).filter((r) => !(r === "autokoerier" && a.driving === "nee"));
 
   const days = seasonDays();
   const dayLabel = (key: string) => shortDay(days.find((d) => d.key === key)?.label ?? key);
   const pickedCount = (r: VolunteerRole) => a.picks[r].length;
 
-  /** What Oma says per step, how the answer reads back, and her short reaction to it. */
-  const copy: Record<StepId, { say: string[]; answer: () => string; react?: () => string }> = {
-    name: {
-      say: ["Hoi, ik ben Oma Coby!", "Wat fijn dat je wilt helpen met mijn oliebollen. Ik stel je een paar korte vragen, dan weet ik waar ik je kan gebruiken.", "Hoe mag ik je noemen?"],
-      answer: () => first,
-      react: () => `Leuk je te ontmoeten, ${first}!`
-    },
+  /*
+   * What Oma says per step, how the answer reads back, and her reaction to it. A reaction is only
+   * there when it adds something (warmth after a choice, a promise she keeps); it opens her next message.
+   */
+  const copy: Record<StepId, { say: string[]; answer: () => string; react?: () => string | undefined }> = {
     mode: {
-      say: ["Heb je al een idee wat je wilt doen, of wanneer je kunt?"],
+      // Opening: who she is (and that she is digital), what this is, how long; then straight to the first question.
+      say: ["Hoi! Oma Coby hier, nou ja, mijn digitale versie. Een paar korte vragen en ik weet waar ik je kan gebruiken.", "Weet je al wat je wilt doen, of wanneer je kunt?"],
       answer: () => (a.mode === "taak" ? "Ik weet wat ik wil doen" : a.mode === "dag" ? "Ik weet wanneer ik kan" : "Zet me maar in waar het nodig is"),
-      react: () => (a.mode === "taak" ? "Lekker duidelijk." : a.mode === "dag" ? "Handig. Dan kijken we wat er die dag te doen is." : "Daar word ik blij van! Dan zoek ik een plekje waar je het hardst nodig bent.")
+      react: () => (a.mode === "flexibel" ? "Daar word ik blij van!" : undefined)
     },
     roles: {
       say: ["Wat zou je het liefst doen? Meer dan één mag."],
       answer: () => a.roles.map((r) => volunteerRoleLabel[r]).join(", "),
-      react: () => (a.roles.includes("inpakken") ? "Inpakken! Dan zie ik je vroeg, de koffie staat klaar." : a.roles.includes("autokoerier") ? "Top, met de auto kom je overal." : "Achter de bar, gezellig!")
+      react: () => (a.roles.includes("inpakken") ? "Lekker, de koffie staat klaar." : undefined)
+    },
+    license: {
+      say: ["Voor bezorgen heb je een rijbewijs nodig. Heb je dat, en kun je een auto gebruiken?"],
+      answer: () => (a.driving === "auto" ? "Rijbewijs én auto" : a.driving === "rijbewijs" ? "Rijbewijs, geen auto" : "Geen rijbewijs"),
+      react: () =>
+        a.driving === "rijbewijs" ? "Genoteerd, daar houd ik rekening mee." : a.driving === "nee" ? "Geen probleem, dan laat ik bezorgen zitten." : undefined
     },
     ...(Object.fromEntries(
       VOLUNTEER_ROLES.map((r) => {
@@ -183,62 +199,60 @@ export function SignupPage() {
           `picks-${r}`,
           {
             say: [ask],
-            answer: () => listOrCount(a.picks[r].map(shortOption), "momenten"),
-            react: () => (pickedCount(r) >= 3 ? `${pickedCount(r)} keer, wat een toppertje.` : "Genoteerd.")
+            answer: () => listOrCount(a.picks[r].map(shortOption), "dagen"),
+            react: () => (pickedCount(r) >= 3 ? "Wat een toppertje." : undefined)
           }
         ];
       })
-    ) as Record<`picks-${VolunteerRole}`, { say: string[]; answer: () => string; react: () => string }>),
+    ) as Record<`picks-${VolunteerRole}`, { say: string[]; answer: () => string; react: () => string | undefined }>),
     suggest: {
       say: ["Ik zit nog een beetje krap op een paar momenten. Kun je er misschien ook een? Helemaal goed als het niet uitkomt."],
       answer: () => (extra.length ? `Ja: ${extra.map((k) => shortOption(k.split("|")[1])).join(", ")}` : "Nee, zo is het goed"),
-      react: () => (extra.length ? "Je bent een schat." : "Helemaal goed.")
+      react: () => (extra.length ? "Je bent een schat." : undefined)
     },
     days: {
       say: [a.mode === "dag" ? "Op welke dagen kun je?" : "Welke dagen ben je beschikbaar? Hoe meer dagen, hoe makkelijker ik je ergens kwijt kan."],
-      answer: () => listOrCount(a.days.map(dayLabel), "dagen"),
-      react: () => (a.days.length === 1 ? "Eén dag is ook goud waard." : `${a.days.length} dagen, heerlijk.`)
+      answer: () => listOrCount(a.days.map(dayLabel), "dagen")
     },
     parts: {
       say: ["Op sommige dagen is er meer dan één dienst. Wanneer kun je dan?"],
       answer: () =>
         daysWithChoice(a.days)
           .map((d) => `${dayLabel(d)}: ${(a.parts[d] ?? []).map((p) => partLabel[p].toLowerCase()).join(" en ")}`)
-          .join(", "),
-      react: () => "Genoteerd."
+          .join(", ")
     },
     dayroles: {
       say:
         a.mode === "dag"
           ? [a.days.length === 1 ? "En wat wil je die dag doen?" : "En wat wil je op die dagen doen?"]
-          : ["Ik heb je bij alles ingevuld. Haal weg wat je niet kunt of wilt. Geen auto? Dan haal je autokoerier weg."],
-      answer: () => (a.mode === "dag" && a.roles.length === rolesOnDays(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", ")),
-      react: () => "Prima."
+          : ["Ik heb je bij alles ingevuld. Haal weg wat je niet kunt of wilt."],
+      answer: () => (a.mode === "dag" && a.roles.length === offered(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", "))
     },
     flexible: {
       say: ["Als het ergens anders drukker is, mag ik je daar dan ook neerzetten?"],
       answer: () => (a.flexible ? "Ja, prima" : "Liever niet"),
-      react: () => (a.flexible ? "Daar word ik blij van." : "Ook goed. Afspraak is afspraak.")
+      react: () => (a.flexible ? "Fijn!" : "Afspraak is afspraak.")
     },
     max: {
-      say: [`Je kunt op ${chosenDays} dagen. Hoe vaak wil je maximaal helpen?`],
-      answer: () => (maxShifts === chosenDays ? `Alle ${chosenDays} dagen` : maxShiftsLabel(maxShifts)),
+      // She counts for them: the number of days they ticked, so nobody has to count their own.
+      say: [`Je kunt op ${chosenDays} dagen. Op hoeveel daarvan wil je helpen?`],
+      answer: () => (maxShifts === chosenDays ? `Alle ${chosenDays}` : maxShiftsLabel(maxShifts)),
       react: () => (maxShifts === chosenDays ? "Jij bent een kanjer." : `Afgesproken, hooguit ${maxShiftsLabel(maxShifts)}.`)
     },
     reminder: {
       say: ["Zal ik je de dag ervoor even herinneren? Dan weet je waar en hoe laat."],
       answer: () => (a.reminder === "whatsapp" ? "Ja, via WhatsApp" : a.reminder === "mail" ? "Ja, via mail" : "Hoeft niet"),
-      react: () => (a.reminder === "whatsapp" ? "Komt goed, ik app je." : a.reminder === "mail" ? "Komt goed, je krijgt een mailtje." : "Prima. Je rooster krijg je sowieso.")
+      react: () => (a.reminder === "whatsapp" ? "Komt goed, ik app je." : a.reminder === "mail" ? "Komt goed, je krijgt een mailtje." : "Prima, je rooster krijg je sowieso.")
     },
     contact: {
-      say: [`Bijna klaar, ${first}! Hoe kan ik je bereiken?`],
-      answer: () => [`${first} ${lastName}`.trim(), phone || email].filter(Boolean).join(" · "),
-      react: () => "Dankjewel."
+      say: ["Bijna klaar! Hoe heet je, en hoe kan ik je bereiken?"],
+      answer: () => [`${firstName.trim()} ${lastName.trim()}`.trim(), phone || email].filter(Boolean).join(" · "),
+      react: () => `Dankjewel, ${first}!`
     },
     check: { say: ["Ik zet het even op een rijtje. Klopt dit zo?"], answer: () => "" }
   };
 
-  const lines = [index > 0 ? copy[ids[index - 1]].react?.() : undefined, ...copy[current].say].filter((x): x is string => !!x);
+  const lines = joinLines(index > 0 ? copy[ids[index - 1]].react?.() : undefined, copy[current].say);
   const typing = revealed < lines.length;
 
   // Oma "types" her messages one by one; with less motion, or after "Wijzig", they show at once.
@@ -249,8 +263,10 @@ export function SignupPage() {
       setRevealed(lines.length);
       return;
     }
-    setRevealed(0);
-    let shown = 0;
+    // On opening the page her greeting is simply there; only the question after it gets the dots.
+    let shown = current === "mode" && index === 0 && !opened.current ? 1 : 0;
+    opened.current = true;
+    setRevealed(shown);
     let timer = 0;
     const next = () => {
       timer = window.setTimeout(() => {
@@ -259,7 +275,7 @@ export function SignupPage() {
         if (shown < lines.length) next();
       }, typingMs(lines[shown]));
     };
-    next();
+    if (shown < lines.length) next();
     return () => window.clearTimeout(timer);
     // Only when the step changes: answers given meanwhile must not restart the typing.
   }, [current]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -277,14 +293,21 @@ export function SignupPage() {
   function advance(next: Partial<Answers> = {}) {
     const after = { ...a, ...next };
     // "Zet me maar in": open to every task on their days, unless they untick one.
-    if (after.mode === "flexibel" && after.roles.length === 0 && after.days.length > 0) after.roles = rolesOnDays(after.days);
+    if (after.mode === "flexibel" && after.roles.length === 0 && after.days.length > 0) after.roles = rolesOnDays(after.days).filter((r) => !(r === "autokoerier" && after.driving === "nee"));
     // Days with more than one shift start with all of them ticked; untick what does not fit.
     const open = daysWithChoice(after.days).filter((d) => !after.parts[d]);
     if (open.length) after.parts = { ...after.parts, ...Object.fromEntries(open.map((d) => [d, partsOnDay(d)])) };
     setA(after);
     setError(null);
     const list = stepIds(after, suggestions, countDays(withExtra(after, extra)));
-    setAt(list[Math.min(list.indexOf(current) + 1, list.length - 1)]);
+    // No licence and bezorgen was their only task: back to choosing what they would like to do.
+    if (after.roles.length === 0 && current === "license") {
+      setAt(after.mode === "taak" ? "roles" : "dayroles");
+      return;
+    }
+    // The licence step leaves the list once bezorgen is gone, so continue from where it stood.
+    const from = current === "license" && !list.includes("license") ? list.indexOf(after.mode === "taak" ? "roles" : "dayroles") : list.indexOf(current);
+    setAt(list[Math.min(from + 1, list.length - 1)]);
   }
 
   function goTo(id: StepId) {
@@ -293,8 +316,10 @@ export function SignupPage() {
     setAt(id);
   }
 
-  const contactProblem = !lastName.trim()
-    ? `Vul je achternaam in, dan verwar ik je niet met een andere ${first || "vrijwilliger"}.`
+  const contactProblem = !firstName.trim()
+    ? "Vul je voornaam in."
+    : !lastName.trim()
+    ? `Vul je achternaam in, dan verwar ik je niet met een andere ${first}.`
     : a.reminder === "whatsapp" && !phone.trim()
       ? "Vul je telefoonnummer in, dan kan ik je appen."
       : a.reminder === "mail" && !email.trim()
@@ -308,11 +333,6 @@ export function SignupPage() {
   /** The answer controls for each step, and whether "Verder" can be pressed (none: a quick reply answers). */
   function composer(id: StepId): { content: ReactNode; next?: { ready: boolean; label?: string } } {
     switch (id) {
-      case "name":
-        return {
-          content: <Field label="Je voornaam" value={firstName} onChange={setFirstName} autoComplete="given-name" autoFocus />,
-          next: { ready: !!firstName.trim() }
-        };
       case "mode":
         return {
           content: (
@@ -331,6 +351,20 @@ export function SignupPage() {
         return {
           content: <RolePicker roles={ACTIVE_ROLES} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />,
           next: { ready: a.roles.length > 0 }
+        };
+      case "license":
+        return {
+          content: (
+            <QuickReplies
+              value={a.driving}
+              onPick={(driving) => advance({ driving, roles: driving === "nee" ? a.roles.filter((r) => r !== "autokoerier") : a.roles })}
+              options={[
+                ["auto", "Rijbewijs én auto"],
+                ["rijbewijs", "Rijbewijs, geen auto"],
+                ["nee", "Geen rijbewijs"]
+              ]}
+            />
+          )
         };
       case "suggest":
         return {
@@ -400,7 +434,7 @@ export function SignupPage() {
         };
       }
       case "dayroles": {
-        const available = rolesOnDays(a.days);
+        const available = offered(a.days);
         return {
           content: (
             <div className="grid gap-2">
@@ -437,7 +471,7 @@ export function SignupPage() {
               onPick={(n) => advance({ maxShifts: Number(n) })}
               options={[
                 ...[1, 2, 3, 5].filter((n) => n < chosenDays).map((n): [string, string] => [String(n), maxShiftsLabel(n)]),
-                [String(chosenDays), `Alle ${chosenDays} dagen`]
+                [String(chosenDays), `Alle ${chosenDays}`]
               ]}
             />
           )
@@ -461,7 +495,8 @@ export function SignupPage() {
           content: (
             <div className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Achternaam *" value={lastName} onChange={setLastName} autoComplete="family-name" autoFocus />
+                <Field label="Voornaam *" value={firstName} onChange={setFirstName} autoComplete="given-name" autoFocus />
+                <Field label="Achternaam *" value={lastName} onChange={setLastName} autoComplete="family-name" />
                 <Field label={`Telefoonnummer${a.reminder === "whatsapp" ? " *" : ""}`} value={phone} onChange={setPhone} type="tel" autoComplete="tel" />
                 <Field label={`E-mailadres${a.reminder === "mail" ? " *" : ""}`} value={email} onChange={setEmail} type="email" autoComplete="email" />
                 <Field label="Woonplaats" value={city} onChange={setCity} autoComplete="address-level2" />
@@ -472,7 +507,7 @@ export function SignupPage() {
                   </div>
                 ) : null}
               </div>
-              {contactProblem && (lastName || phone || email) ? <p className="text-xs text-muted">{contactProblem}</p> : null}
+              {contactProblem && (firstName || lastName || phone || email) ? <p className="text-xs text-muted">{contactProblem}</p> : null}
             </div>
           ),
           next: { ready: !contactProblem }
@@ -489,6 +524,12 @@ export function SignupPage() {
                     <dd className="text-krent">{roles[r].days.map(shortOption).join(", ")}</dd>
                   </div>
                 ))}
+                {roles.autokoerier.wants && a.driving && a.driving !== "nee" ? (
+                  <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
+                    <dt className="font-bold text-krent">Rijbewijs</dt>
+                    <dd className="text-krent">{drivingLabel[a.driving]}</dd>
+                  </div>
+                ) : null}
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">Planning</dt>
                   <dd className="text-krent">
@@ -564,7 +605,13 @@ export function SignupPage() {
         cargoBike: false,
         remark,
         consent,
-        planning: { mode: a.mode, flexible: a.mode === "flexibel" || a.flexible === true, maxShifts, reminder: a.reminder }
+        planning: {
+          mode: a.mode,
+          flexible: a.mode === "flexibel" || a.flexible === true,
+          maxShifts,
+          reminder: a.reminder,
+          driving: roles.autokoerier.wants && a.driving && a.driving !== "nee" ? a.driving : undefined
+        }
       });
       setDone(true);
       rollOliebol();
@@ -615,7 +662,7 @@ export function SignupPage() {
         {/* The conversation so far. */}
         {ids.slice(0, index).map((id, k) => (
           <div key={id} className="grid gap-1.5">
-            <OmaSays lines={[k > 0 ? copy[ids[k - 1]].react?.() : undefined, ...copy[id].say].filter((x): x is string => !!x)} />
+            <OmaSays lines={joinLines(k > 0 ? copy[ids[k - 1]].react?.() : undefined, copy[id].say)} />
             <div className="flex items-center justify-end gap-2">
               <button type="button" className={`${textAction} text-xs`} onClick={() => goTo(id)}>
                 Wijzig

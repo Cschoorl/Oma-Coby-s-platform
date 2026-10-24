@@ -46,7 +46,7 @@ function sharedTime(role: VolunteerRole): string {
 function roleBlurb(role: VolunteerRole): string {
   const time = sharedTime(role).replace("–", " tot ");
   if (role === "inpakken") return time ? `Van ${time} in Aalsmeer, met koffie.` : "Oliebollen in zakken en dozen in Aalsmeer.";
-  if (role === "autokoerier") return time ? `Rondbrengen met de auto, van ${time}.` : "Rondbrengen met je eigen of een geleende auto.";
+  if (role === "autokoerier") return time ? `Rondbrengen met je eigen auto, van ${time}.` : "Rondbrengen met je eigen auto.";
   return "Achter de bar bij een evenement.";
 }
 
@@ -82,6 +82,17 @@ function offeredRoles(a: Answers): VolunteerRole[] {
 /** They chose every task there is: "somewhere else" does not exist, so they can be put wherever it is busy. */
 const openToAll = (a: Answers) => a.roles.length > 0 && offeredRoles(a).every((r) => a.roles.includes(r));
 
+/** Where she can use someone who cannot bezorgen: the pop-up (the Oliebollenbar) and inpakken, as far as they are on. */
+function otherTasks(a: Answers): string {
+  const roles = offeredRoles(a);
+  const bar = roles.includes("oliebollenbar");
+  const pack = roles.includes("inpakken");
+  if (bar && pack) return "In onze pop-up, de Oliebollenbar, of aan de inpaktafel kan ik je goed gebruiken.";
+  if (bar) return "In onze pop-up, de Oliebollenbar, kan ik je goed gebruiken.";
+  if (pack) return "Aan de inpaktafel kan ik je goed gebruiken.";
+  return "Op je dagen is er verder nog niets; kies gerust andere dagen.";
+}
+
 /** "inpakken en bezorgen": the tasks as Oma says them in a sentence. */
 function taskNames(roles: VolunteerRole[]): string {
   const names = ACTIVE_ROLES.filter((r) => roles.includes(r)).map((r) => (r === "autokoerier" ? "bezorgen" : r === "oliebollenbar" ? "de Oliebollenbar" : volunteerRoleLabel[r].toLowerCase()));
@@ -91,7 +102,7 @@ function taskNames(roles: VolunteerRole[]): string {
 function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): StepId[] {
   const ids: StepId[] = ["mode"];
   if (!a.mode) return ids;
-  // Bezorgen needs a driving licence: asked straight after choosing it, before any days for it.
+  // Bezorgen needs a licence and a car of their own: asked straight after choosing it, before any days for it.
   const license: StepId[] = a.roles.includes("autokoerier") ? ["license"] : [];
   // Right after the task choice, while it is fresh; "Zet me maar in" and choosing every task already answer it.
   const flexible: StepId[] = a.mode !== "flexibel" && !openToAll(a) ? ["flexible"] : [];
@@ -127,6 +138,8 @@ export function SignupPage() {
   /** Quiet moments the volunteer added when Oma asked, as "role|option". */
   const [extra, setExtra] = useState<string[]>([]);
   const [at, setAt] = useState<StepId>("mode");
+  /** Bezorgen was their only task and they have no licence and car: back to the task choice, with the other tasks named. */
+  const [bounced, setBounced] = useState(false);
   /** How many of Oma's messages for the current step are shown; the rest are still being "typed". */
   const [revealed, setRevealed] = useState(0);
   /** Going back with "Wijzig" shows the question at once: no typing a second time. */
@@ -192,15 +205,15 @@ export function SignupPage() {
       react: () => (a.mode === "flexibel" ? "Daar word ik blij van!" : undefined)
     },
     roles: {
-      say: ["Wat zou je het liefst doen? Meer dan één mag."],
+      say: bounced ? [`Zonder rijbewijs én auto lukt bezorgen helaas niet. ${otherTasks(a)}`, "Wat zou je dan willen doen?"] : ["Wat zou je het liefst doen? Meer dan één mag."],
       answer: () => a.roles.map((r) => volunteerRoleLabel[r]).join(", "),
       react: () => (a.roles.includes("inpakken") ? "Lekker, de koffie staat klaar." : undefined)
     },
     license: {
-      say: ["Voor bezorgen heb je een rijbewijs nodig. Heb je dat, en kun je een auto gebruiken?"],
-      answer: () => (a.driving === "auto" ? "Rijbewijs én auto" : a.driving === "rijbewijs" ? "Rijbewijs, geen auto" : "Geen rijbewijs"),
-      react: () =>
-        a.driving === "rijbewijs" ? "Genoteerd, daar houd ik rekening mee." : a.driving === "nee" ? "Geen probleem, dan laat ik bezorgen zitten." : undefined
+      // We have no cars of our own: bezorgen takes both. Without them she points to the other tasks.
+      say: ["Bezorgen doe je met je eigen auto, wij hebben zelf geen auto's. Heb je een rijbewijs én een auto?"],
+      answer: () => (a.driving === "auto" ? "Ja, rijbewijs én auto" : "Nee, niet allebei"),
+      react: () => (a.driving === "nee" ? "Geen probleem, dan laat ik bezorgen zitten." : undefined)
     },
     ...(Object.fromEntries(
       VOLUNTEER_ROLES.map((r) => {
@@ -238,8 +251,9 @@ export function SignupPage() {
           .join(", ")
     },
     dayroles: {
-      say:
-        a.mode === "dag"
+      say: bounced
+        ? [`Zonder rijbewijs én auto lukt bezorgen helaas niet. ${otherTasks(a)}`, "Wat wil je dan doen?"]
+        : a.mode === "dag"
           ? [a.days.length === 1 ? "En wat wil je die dag doen?" : "En wat wil je op die dagen doen?"]
           : ["Ik heb je bij alles ingevuld. Haal weg wat je niet kunt of wilt."],
       answer: () => (a.mode === "dag" && a.roles.length === offered(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", "))
@@ -319,6 +333,7 @@ export function SignupPage() {
     const list = stepIds(after, suggestions, countDays(withExtra(after, extra)));
     // No licence and bezorgen was their only task: back to choosing what they would like to do.
     if (after.roles.length === 0 && current === "license") {
+      setBounced(true);
       setAt(after.mode === "taak" ? "roles" : "dayroles");
       return;
     }
@@ -366,7 +381,7 @@ export function SignupPage() {
         };
       case "roles":
         return {
-          content: <RolePicker roles={ACTIVE_ROLES} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />,
+          content: <RolePicker roles={offeredRoles(a)} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />,
           next: { ready: a.roles.length > 0 }
         };
       case "license":
@@ -376,9 +391,8 @@ export function SignupPage() {
               value={a.driving}
               onPick={(driving) => advance({ driving, roles: driving === "nee" ? a.roles.filter((r) => r !== "autokoerier") : a.roles })}
               options={[
-                ["auto", "Rijbewijs én auto"],
-                ["rijbewijs", "Rijbewijs, geen auto"],
-                ["nee", "Geen rijbewijs"]
+                ["auto", "Ja, rijbewijs én auto"],
+                ["nee", "Nee, niet allebei"]
               ]}
             />
           )

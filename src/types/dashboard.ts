@@ -81,6 +81,7 @@ export interface Volunteer {
 /** How someone signed up: with a task in mind, a day in mind, or "put me where you need me". */
 export type SignupMode = "taak" | "dag" | "flexibel";
 export type ReminderChannel = "whatsapp" | "mail" | "geen";
+/** Bezorgen takes a licence and a car of their own; "rijbewijs" (no car) only appears in older signups. */
 export type Driving = "auto" | "rijbewijs";
 
 /** The planning answers of the step-by-step signup, written to their own columns in the sheet. */

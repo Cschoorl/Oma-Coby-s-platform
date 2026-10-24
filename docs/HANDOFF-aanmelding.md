@@ -43,7 +43,7 @@ Na elke route volgen dezelfde stappen:
 
 Details van de stappen:
 
-- **Rijbewijs.** Keuze uit *Rijbewijs én auto*, *Rijbewijs, geen auto* of *Geen rijbewijs*. Bij "geen rijbewijs" valt bezorgen af. Was dat je enige taak, dan ga je terug naar de taakkeuze.
+- **Rijbewijs én auto.** We hebben zelf geen auto's, dus bezorgen kan alleen met een rijbewijs én een eigen auto. Keuze uit *Ja, rijbewijs én auto* of *Nee, niet allebei*. Bij "nee" valt bezorgen af en verdwijnt het uit de taakkeuze. Was dat je enige taak, dan wijst Oma je op de pop-up (de Oliebollenbar) en het inpakken, en kies je opnieuw. Oudere aanmeldingen kunnen nog "Rijbewijs, geen auto" hebben; dat wordt gewoon getoond.
 - **"Mag ik je ergens anders neerzetten"** noemt de gekozen taak, bijvoorbeeld: "Je hebt gekozen voor inpakken. Als het bij een andere taak drukker is, mag ik je daar dan ook neerzetten?" Hij wordt overgeslagen bij de route `flexibel`, en ook als je alle taken hebt gekozen. In die twee gevallen wordt hij opgeslagen als *ja*.
 - **Krappe momenten.** Op dagen met weinig aanmeldingen staat een rode stip, maar alleen als hooguit de helft van de dagen krap is. In de route `taak` stelt Oma tot vier krappe momenten voor die je kunt toevoegen. In de route `flexibel` toont de samenvatting de drie momenten waar het meest nodig is.
 
@@ -110,7 +110,7 @@ Het opslaan van de herinneringskeuze is gebouwd. Het versturen van herinneringen
 ## Wat wel en niet getest is
 
 - **Getest in demo-modus** op de lokale dev-server, alle drie de routes tot en met de samenvatting:
-  - taak met "geen rijbewijs"
+  - taak met "nee, niet allebei" (rijbewijs én auto)
   - dag met "Maakt niet uit"
   - flexibel
   - dagdelen per dag, met een tijdelijke agenda met meer diensten op een dag

@@ -43,7 +43,7 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 ## Personen
 
 1. Een persoon staat er altijd met naam en eigen poppetje (`Avatar`, `NameTag` in `src/components/Avatar.tsx`), nooit als "Jij".
-2. Het poppetje is getekend in de doodle-stijl van corporate memphis: een egale gekleurde cirkel met losse zwarte lijntjes voor het haar of de hoed, het gezicht en soms een bril of snor. Het haar mag buiten de cirkel steken. De felle kleuren zijn alleen voor de poppetjes, net als bij de discozaal.
+2. Het poppetje is een getekend oudje: een hoofd in een egale, wat ongewone kleur, wit of grijs haar of een hoed, en fijne zwarte lijntjes voor een gezicht met uitdrukking, lachrimpels en blosjes. Soms een bril, leesbril, snor of parels. Lief, niet kinderachtig. De kleuren zijn alleen voor de poppetjes, net als bij de discozaal.
 3. Dezelfde naam geeft overal hetzelfde poppetje. Binnen het dashboard krijgt iedereen een eigen combinatie van haar en kleur.
 4. Wie ingelogd is, staat in een gouwe ouwe-pilletje (`NameTag mine`); anderen in een zacht vlak.
 

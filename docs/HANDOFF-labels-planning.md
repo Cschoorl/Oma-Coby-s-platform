@@ -63,17 +63,18 @@ Het aangepaste aantal dozen wordt niet opgeslagen. Het geldt alleen voor die pri
 
 ## 2. Poppetjes met naam in plaats van "Jij"
 
-- Iedereen krijgt een klein getekend poppetje in de doodle-stijl van corporate memphis: een egale gekleurde cirkel met losse zwarte lijntjes.
+- Iedereen krijgt een klein getekend oudje: een hoofd in een egale, wat ongewone kleur (lila, mint, koraal, mosterd), wit of grijs haar, en fijne zwarte lijntjes. Lachrimpels, walletjes en blosjes maken er een oudje van in plaats van een kleuter.
 - **Wat varieert:**
-  - 11 kapsels en hoeden: krul, lus, zwiep, lang haar, pet, baret, cowboyhoed, pony, kuif, golf en kaal
-  - 8 kleuren
-  - 6 gezichten: lach, open mond, neus, knipoog, blij en opzij
-  - soms een ronde of hoekige bril, of een snor
+  - 12 kapsels en hoofddeksels: permanentje, knotje, kaal met plukjes, pet, dameshoedje met bloem, scheiding, bob, lang haar met haarband, baret, hoofddoek, kuif en muts met pompon
+  - 8 kleuren voor het hoofd, 4 tinten wit tot grijs voor het haar, 4 kleuren voor hoed, pet, muts, hoofddoek en haarband
+  - 7 gezichten: glimlach, schaterlach, knipoog, verbaasd, tevreden met de ogen dicht, giechel en schalks
+  - soms een ronde bril, een leesbril aan een koordje, een snor of parel-oorbellen
+- Onder de 40 px worden de lijnen iets dikker en vallen de rimpels weg, zodat het naast een naam leesbaar blijft.
 - De felle kleuren zijn alleen voor de poppetjes. Ze vallen buiten de merkkleuren, net als de kleuren in de discozaal.
 - **Dezelfde naam geeft overal hetzelfde poppetje**, op elk apparaat. Het poppetje volgt uit de naam; er wordt niets opgeslagen.
-- **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 88 mensen zijn.
+- **Iedereen krijgt een eigen combinatie van kapsel en kleur**, zolang er niet meer dan 96 mensen zijn.
   - Het dashboard maakt een lijst van alle namen die het kent: vrijwilligers, inpakkers, bezorgers, wie heeft afgeleverd, en wie is ingelogd.
-  - De kapsels worden eerlijk verdeeld. De eerste elf mensen hebben allemaal een ander kapsel, daarna komt een tweede ronde in andere kleuren.
+  - De kapsels worden eerlijk verdeeld. De eerste twaalf mensen hebben allemaal een ander kapsel, daarna komt een tweede ronde in andere kleuren.
   - Komt er iemand bij, dan verandert het poppetje van anderen meestal niet. Het kan wel gebeuren.
 - **Waar het staat:**
   - **Inpakken:** "Jij" is vervangen door je voornaam met poppetje, in een gouwe ouwe-pilletje. Bij een ander staat er bijvoorbeeld "Ria is bezig". Bij *Ingepakt door* staat het poppetje met de naam.
@@ -142,5 +143,6 @@ Opgezet zoals roostertools (Eitje, Planday) beschikbaarheid tonen: een rij per p
   - telefoonbreedte (375 px): de pagina schuift niet zijwaarts, het overzicht scrollt binnen de kaart
 - **Printformaat getest via PDF, niet op een echte printer.** Headless Chrome maakte een PDF van de labels. Een order met 120 MET en 30 ZONDER gaf vier pagina's van 100,9 × 54,0 mm, één label per pagina.
 - **Niet getest op een echte DYMO LabelWriter 450.** Of de driver het formaat 99014 goed oppakt, moet aan de inpaktafel worden geprobeerd.
+- **Aanmelding, bezorgen alleen met rijbewijs én auto:** in de browser nagelopen met alleen Autokoerier (terug naar de taakkeuze, Oma noemt de pop-up en het inpakken, Autokoerier staat er niet meer tussen) en met Inpakken plus Autokoerier (gaat door met alleen inpakken).
 - **Niet getest tegen de echte Google Sheet.** Er is niets aan `apps-script/Code.gs` veranderd.
 - **Er zijn geen automatische tests** voor deze onderdelen.

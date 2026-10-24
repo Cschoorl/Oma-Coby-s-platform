@@ -28,7 +28,7 @@ export interface Answers {
   cargoBike: boolean;
   flexible: boolean | null;
   maxShifts: number | null;
-  /** Asked when they want to bezorgen; "nee" takes autokoerier off their tasks. */
+  /** Asked when they want to bezorgen: licence and own car ("auto"), or "nee", which takes autokoerier off their tasks. */
   driving: Driving | "nee" | null;
   reminder: ReminderChannel | null;
 }

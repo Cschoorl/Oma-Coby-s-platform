@@ -85,6 +85,13 @@ body {
 @keyframes oc-loader-roll { from { transform: translateX(-26px); } to { transform: translateX(114px); } }
 @keyframes oc-loader-spin { to { transform: rotate(669deg); } }
 
+/* Oma typt: drie puntjes die om de beurt oplichten (zie OmaSays op de aanmeldpagina). */
+.oc-typing { display: inline-flex; gap: 4px; }
+.oc-typing span { width: 6px; height: 6px; border-radius: 50%; background: #6d5a4f; opacity: 0.35; animation: oc-typing 1s ease-in-out infinite; }
+.oc-typing span:nth-child(2) { animation-delay: 0.15s; }
+.oc-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes oc-typing { 0%, 60%, 100% { opacity: 0.35; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

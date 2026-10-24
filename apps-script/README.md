@@ -104,11 +104,11 @@ in de plaats ervan delen.
 
   | datum | taak | dagdeel | tijd | locatie | nodig |
   |---|---|---|---|---|---|
-  | 2026-12-29 | inpakken | ochtend | 07:30–12:00 | | 4 |
-  | 2026-12-30 | fietskoerier | middag | 12:00–16:00 | | 3 |
+  | 2026-12-29 | inpakken | | 06:30–12:00 | | 4 |
+  | 2026-12-30 | autokoerier | ochtend | 09:00–12:00 | | 3 |
   | 2026-12-26 | oliebollenbar | | 14:00–18:00 | Pick-up Schaatsbaan | 6 |
 
-  - `taak` is `inpakken`, `fietskoerier`, `autokoerier` of `oliebollenbar`.
+  - `taak` is `inpakken`, `autokoerier` of `oliebollenbar`. De fietskoerier doet niet meer mee; regels met `fietskoerier` worden overgeslagen.
   - `dagdeel` is `ochtend`, `middag`, `avond` of leeg (hele dag).
   - `datum` mag ook "26 december" zijn.
   - `nodig` leeg = standaard (4).

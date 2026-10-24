@@ -2,26 +2,22 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
 import { countFor, dayKey, labelQuietOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
 import type { MaxShifts, ReminderChannel, VolunteerRole } from "../../types/dashboard";
-import { VOLUNTEER_ROLES, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
-import { Card, Notice, OliebolLoader, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
+import { ACTIVE_ROLES, VOLUNTEER_ROLES, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
+import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
 import { CONTACT_EMAIL, OPTION_TIMES, SIGNUP_OPTIONS, applyAgenda } from "../../config";
-import { emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOn, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
+import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
 
 /*
- * The signup as a short conversation: Oma asks one question at a time, answers are buttons,
- * and earlier answers stay visible above like a chat, each with "Wijzig".
- * Three ways in: a task in mind, a day in mind, or "put me where you are needed".
+ * The signup as a conversation with Oma Coby. She introduces herself, asks one thing at a time,
+ * reacts briefly to each answer, and earlier answers stay visible above like a chat, each with "Wijzig".
+ * Answers are buttons (quick replies), never free text: then we know exactly what goes into the sheet.
+ *
+ * Persona: Oma Coby, warm and a bit cheeky, short sentences, je/jij, the volunteer's first name.
+ * She never makes promises about the rooster; that comes later.
  */
 
-type StepId = "mode" | "roles" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "reminder" | "contact" | "check";
-
-const roleBlurb: Record<VolunteerRole, string> = {
-  inpakken: "Oliebollen in zakken en dozen, vanaf 07:30 in Aalsmeer.",
-  fietskoerier: "Bestellingen rondbrengen in Amsterdam, hooguit 3 uurtjes.",
-  autokoerier: "Rondbrengen met je eigen of een geleende auto.",
-  oliebollenbar: "Achter de bar bij een evenement."
-};
+type StepId = "name" | "mode" | "roles" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "reminder" | "contact" | "check";
 
 const partLabel: Record<Part, string> = { ochtend: "Ochtend", middag: "Middag", avond: "Avond" };
 
@@ -37,40 +33,66 @@ function shortOption(option: string): string {
   return [shortDay(option.split(/[:(]/)[0].trim()), part, location].filter(Boolean).join(" ");
 }
 
-function listOrCount(items: string[], noun: [string, string]): string {
-  if (items.length <= 3) return items.join(", ");
-  return `${items.length} ${noun[1]}`;
+function listOrCount(items: string[], plural: string): string {
+  return items.length <= 3 ? items.join(", ") : `${items.length} ${plural}`;
+}
+
+/** The shift time of a task when all its moments share one ("6:30–12:00"), else "". */
+function sharedTime(role: VolunteerRole): string {
+  const times = new Set(SIGNUP_OPTIONS[role].map((o) => OPTION_TIMES[o.trim().toLowerCase()] ?? ""));
+  return times.size === 1 ? [...times][0] : "";
+}
+
+function roleBlurb(role: VolunteerRole): string {
+  const time = sharedTime(role).replace("–", " tot ");
+  if (role === "inpakken") return time ? `Van ${time} in Aalsmeer, met koffie.` : "Oliebollen in zakken en dozen in Aalsmeer.";
+  if (role === "autokoerier") return time ? `Rondbrengen met de auto, van ${time}.` : "Rondbrengen met je eigen of een geleende auto.";
+  return "Achter de bar bij een evenement.";
+}
+
+/** True when a task has more than one shift on some day: then its moments need a dagdeel column. */
+function hasParts(role: VolunteerRole): boolean {
+  const days = SIGNUP_OPTIONS[role].map(dayKey);
+  return new Set(days).size < days.length;
 }
 
 type Suggestion = { role: VolunteerRole; option: string };
 
 function stepIds(a: Answers, suggestions: Suggestion[]): StepId[] {
-  const ids: StepId[] = ["mode"];
+  const ids: StepId[] = ["name", "mode"];
   if (!a.mode) return ids;
   if (a.mode === "taak") {
-    ids.push("roles", ...VOLUNTEER_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
+    ids.push("roles", ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
     if (suggestions.length > 0) ids.push("suggest");
   } else {
     ids.push("days");
-    // Only a question when there is something to choose: one dagdeel (or none) needs no answer.
-    if (partsOn(a.days).length > 1) ids.push("parts");
+    // Only a question on days with more than one shift; with one morning shift there is nothing to ask.
+    if (daysWithChoice(a.days).length > 0) ids.push("parts");
     ids.push("dayroles");
   }
-  // "Maakt niet uit" already says: put me where you need me.
+  // "Zet me maar in waar het nodig is" already answers this one.
   if (a.mode !== "flexibel") ids.push("flexible");
   ids.push("max", "reminder", "contact", "check");
   return ids;
 }
+
+/** How long Oma "types" before a message: a beat, a little longer for longer messages. */
+const typingMs = (text: string) => 450 + Math.min(text.length * 8, 450);
 
 /** Standalone signup page (no login). Saved to the same tab as the Google Form, plus the planning columns. */
 export function SignupPage() {
   const [counts, setCounts] = useState<SignupCounts | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [a, setA] = useState<Answers>(emptyAnswers);
-  /** Quiet moments the volunteer added when we asked, as "role|option". */
+  /** Quiet moments the volunteer added when Oma asked, as "role|option". */
   const [extra, setExtra] = useState<string[]>([]);
-  const [at, setAt] = useState<StepId>("mode");
-  const [name, setName] = useState("");
+  const [at, setAt] = useState<StepId>("name");
+  /** How many of Oma's messages for the current step are shown; the rest are still being "typed". */
+  const [revealed, setRevealed] = useState(0);
+  /** Going back with "Wijzig" shows the question at once: no typing a second time. */
+  const instant = useRef(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
@@ -80,8 +102,7 @@ export function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  const questionRef = useRef<HTMLHeadingElement>(null);
-  const started = useRef(false);
+  const composerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // The agenda decides which days and dagdelen can be chosen; until it arrives the defaults show.
@@ -103,35 +124,7 @@ export function SignupPage() {
   const ids = stepIds(a, suggestions);
   const index = Math.max(0, ids.indexOf(at));
   const current = ids[index];
-
-  // Move focus to each new question, so keyboard and screen reader users follow the conversation.
-  useEffect(() => {
-    if (!started.current) {
-      started.current = true;
-      return;
-    }
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    questionRef.current?.focus({ preventScroll: true });
-    questionRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-  }, [current]);
-
-  const update = (next: Partial<Answers>) => setA((prev) => ({ ...prev, ...next }));
-
-  /** Next step, worked out from the answers as they will be after this change. */
-  function advance(next: Partial<Answers> = {}) {
-    const after = { ...a, ...next };
-    // "Maakt niet uit": open to every task on their days, unless they untick one.
-    if (after.mode === "flexibel" && after.roles.length === 0 && after.days.length > 0) after.roles = rolesOnDays(after.days);
-    setA(after);
-    setError(null);
-    const list = stepIds(after, suggestions);
-    setAt(list[Math.min(list.indexOf(current) + 1, list.length - 1)]);
-  }
-
-  function back() {
-    setError(null);
-    if (index > 0) setAt(ids[index - 1]);
-  }
+  const first = firstName.trim().split(" ")[0];
 
   const roles = useMemo(() => {
     const base = toRoles(a);
@@ -143,144 +136,187 @@ export function SignupPage() {
     return base;
   }, [a, extra]);
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!a.mode || (a.flexible === null && a.mode !== "flexibel") || !a.maxShifts || !a.reminder) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await backend.registerVolunteer({
-        name,
-        address,
-        city,
-        phone,
-        email,
-        roles,
-        cargoBike: a.cargoBike,
-        remark,
-        consent,
-        planning: { mode: a.mode, flexible: a.mode === "flexibel" || a.flexible === true, maxShifts: a.maxShifts, reminder: a.reminder }
-      });
-      setDone(true);
-      rollOliebol();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Aanmelden mislukt.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (done) {
-    const firstName = name.trim().split(" ")[0];
-    return (
-      <section className="grid overflow-hidden rounded-kaart bg-papier shadow-zacht sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
-        {/* Portrait card: the photo of Oma Coby is 4:5, so the card follows it instead of cropping her to a strip. */}
-        <div className="relative">
-          <img src={omaUrl} alt="Oma Coby met een bord oliebollen" className="aspect-[4/5] h-full w-full object-cover object-top" />
-          <Sticker slap className="absolute bottom-4 right-4">Bedankt!</Sticker>
-        </div>
-        <div className="grid content-center gap-2 p-5 sm:p-7">
-          <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Bedankt, {firstName}!</h1>
-          <p className="text-krent">Je bent nu officieel Oma's hulpje. We maken het rooster zodra we weten hoeveel bestellingen er zijn, en laten je weten waar en wanneer we je verwachten.</p>
-          {a.reminder && a.reminder !== "geen" ? (
-            <p className="text-sm text-krent">Een dag van tevoren krijg je nog een herinnering via {a.reminder === "whatsapp" ? "WhatsApp" : "mail"}.</p>
-          ) : null}
-          <p className="text-sm text-muted">
-            Vragen of iets wijzigen? Mail naar{" "}
-            <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>
-              {CONTACT_EMAIL}
-            </a>
-            .
-          </p>
-          <p className="text-xs text-muted">Met 10 oliebollen laat je 1 oudje rock en rollen.</p>
-        </div>
-      </section>
-    );
-  }
-
   const days = seasonDays();
   const dayLabel = (key: string) => shortDay(days.find((d) => d.key === key)?.label ?? key);
+  const pickedCount = (r: VolunteerRole) => a.picks[r].length;
 
-  /** What Oma asks, and how the answer reads back in the conversation. */
-  const step: Record<StepId, { ask: string; hint?: string; answer: () => string }> = {
-    mode: {
-      ask: "Fijn dat je wilt helpen! Heb je al iets in gedachten?",
-      answer: () => (a.mode === "taak" ? "Ik weet al wat ik wil doen" : a.mode === "dag" ? "Ik weet al wanneer ik kan" : "Maakt niet uit, zet me in waar het nodig is")
+  /** What Oma says per step, how the answer reads back, and her short reaction to it. */
+  const copy: Record<StepId, { say: string[]; answer: () => string; react?: () => string }> = {
+    name: {
+      say: ["Hoi, ik ben Oma Coby!", "Wat fijn dat je wilt helpen met mijn oliebollen. Ik stel je een paar korte vragen, dan weet ik waar ik je kan gebruiken.", "Hoe mag ik je noemen?"],
+      answer: () => first,
+      react: () => `Leuk je te ontmoeten, ${first}!`
     },
-    roles: { ask: "Wat zou je het liefst doen?", hint: "Meer dan één mag.", answer: () => a.roles.map((r) => volunteerRoleLabel[r]).join(", ") },
+    mode: {
+      say: ["Heb je al een idee wat je wilt doen, of wanneer je kunt?"],
+      answer: () => (a.mode === "taak" ? "Ik weet wat ik wil doen" : a.mode === "dag" ? "Ik weet wanneer ik kan" : "Zet me maar in waar het nodig is"),
+      react: () => (a.mode === "taak" ? "Lekker duidelijk." : a.mode === "dag" ? "Handig. Dan kijken we wat er die dag te doen is." : "Daar word ik blij van! Dan zoek ik een plekje waar je het hardst nodig bent.")
+    },
+    roles: {
+      say: ["Wat zou je het liefst doen? Meer dan één mag."],
+      answer: () => a.roles.map((r) => volunteerRoleLabel[r]).join(", "),
+      react: () => (a.roles.includes("inpakken") ? "Inpakken! Dan zie ik je vroeg, de koffie staat klaar." : a.roles.includes("autokoerier") ? "Top, met de auto kom je overal." : "Achter de bar, gezellig!")
+    },
     ...(Object.fromEntries(
-      VOLUNTEER_ROLES.map((r) => [
-        `picks-${r}`,
-        {
-          ask: `Wanneer kun je ${r === "inpakken" ? "inpakken" : r === "oliebollenbar" ? "in de Oliebollenbar staan" : `als ${volunteerRoleLabel[r].toLowerCase()} rijden`}?`,
-          hint: "Kies alles wat kan. Wij delen je in waar we je het hardst nodig hebben.",
-          answer: () => listOrCount(a.picks[r].map(shortOption), ["moment", "momenten"])
-        }
-      ])
-    ) as Record<`picks-${VolunteerRole}`, { ask: string; hint: string; answer: () => string }>),
+      VOLUNTEER_ROLES.map((r) => {
+        const time = sharedTime(r).replace("–", " tot ");
+        const ask =
+          r === "inpakken"
+            ? `${time ? `Inpakken doen we van ${time} in Aalsmeer. ` : ""}Welke dagen kun je?`
+            : r === "autokoerier"
+              ? `${time ? `Bezorgen is 's ochtends, van ${time}. ` : ""}Welke dagen kun je rijden?`
+              : "Op welke dagen kun je in de Oliebollenbar staan?";
+        return [
+          `picks-${r}`,
+          {
+            say: [ask],
+            answer: () => listOrCount(a.picks[r].map(shortOption), "momenten"),
+            react: () => (pickedCount(r) >= 3 ? `${pickedCount(r)} keer, wat een toppertje.` : "Genoteerd.")
+          }
+        ];
+      })
+    ) as Record<`picks-${VolunteerRole}`, { say: string[]; answer: () => string; react: () => string }>),
     suggest: {
-      ask: "Op deze momenten zitten we nog krap. Kun je er misschien ook een?",
-      hint: "Helemaal goed als het niet uitkomt.",
-      answer: () => (extra.length ? `Ja: ${extra.map((k) => shortOption(k.split("|")[1])).join(", ")}` : "Nee, zo is het goed")
+      say: ["Ik zit nog een beetje krap op een paar momenten. Kun je er misschien ook een? Helemaal goed als het niet uitkomt."],
+      answer: () => (extra.length ? `Ja: ${extra.map((k) => shortOption(k.split("|")[1])).join(", ")}` : "Nee, zo is het goed"),
+      react: () => (extra.length ? "Je bent een schat." : "Helemaal goed.")
     },
     days: {
-      ask: a.mode === "dag" ? "Op welke dag of dagen kun je?" : "Welke dagen ben je beschikbaar?",
-      hint: a.mode === "flexibel" ? "Kies alles wat kan. Hoe meer dagen, hoe makkelijker we je ergens kwijt kunnen." : "Meer dan één mag.",
-      answer: () => listOrCount(a.days.map(dayLabel), ["dag", "dagen"])
+      say: [a.mode === "dag" ? "Op welke dagen kun je?" : "Welke dagen ben je beschikbaar? Hoe meer dagen, hoe makkelijker ik je ergens kwijt kan."],
+      answer: () => listOrCount(a.days.map(dayLabel), "dagen"),
+      react: () => (a.days.length === 1 ? "Eén dag is ook goud waard." : `${a.days.length} dagen, heerlijk.`)
     },
     parts: {
-      ask: "Hoe laat kun je dan?",
-      hint: "Inpakken en de bar zijn hele dagen; dit geldt voor het bezorgen.",
-      answer: () => (a.parts.length === 0 || a.parts.length === partsOn(a.days).length ? "Hele dag" : a.parts.map((p) => partLabel[p]).join(" en "))
+      say: ["Op sommige dagen is er meer dan één dienst. Wanneer kun je dan?"],
+      answer: () =>
+        daysWithChoice(a.days)
+          .map((d) => `${dayLabel(d)}: ${(a.parts[d] ?? []).map((p) => partLabel[p].toLowerCase()).join(" en ")}`)
+          .join(", "),
+      react: () => "Genoteerd."
     },
-    dayroles:
-      a.mode === "dag"
-        ? { ask: "En wat wil je die dag doen?", hint: "Meer dan één mag.", answer: () => (a.roles.length === rolesOnDays(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", ")) }
-        : { ask: "Is er iets wat je níet kunt of wilt?", hint: "Vink uit wat niet past. Geen auto? Dan haal je autokoerier weg.", answer: () => a.roles.map((r) => volunteerRoleLabel[r]).join(", ") },
+    dayroles: {
+      say:
+        a.mode === "dag"
+          ? ["En wat wil je die dag doen?"]
+          : ["Ik heb je bij alles ingevuld. Haal weg wat je niet kunt of wilt. Geen auto? Dan haal je autokoerier weg."],
+      answer: () => (a.mode === "dag" && a.roles.length === rolesOnDays(a.days).length ? "Maakt niet uit" : a.roles.map((r) => volunteerRoleLabel[r]).join(", ")),
+      react: () => "Prima."
+    },
     flexible: {
-      ask: "Mogen we je ook ergens anders indelen als het daar drukker is?",
-      answer: () => (a.flexible ? "Ja, zet me in waar het nodig is" : "Liever alleen wat ik koos")
+      say: ["Als het ergens anders drukker is, mag ik je daar dan ook neerzetten?"],
+      answer: () => (a.flexible ? "Ja, prima" : "Liever niet"),
+      react: () => (a.flexible ? "Daar word ik blij van." : "Ook goed. Afspraak is afspraak.")
     },
-    max: { ask: "Hoe vaak wil je maximaal helpen dit seizoen?", answer: () => (a.maxShifts ? maxShiftsLabel[a.maxShifts] : "") },
+    max: {
+      say: ["Hoe vaak wil je dit seizoen maximaal helpen?"],
+      answer: () => (a.maxShifts ? maxShiftsLabel[a.maxShifts] : ""),
+      react: () => (a.maxShifts === "vaker" ? "Jij bent een kanjer." : "Afgesproken.")
+    },
     reminder: {
-      ask: "Zullen we je een dag van tevoren een herinnering sturen?",
-      answer: () => (a.reminder === "whatsapp" ? "Ja, via WhatsApp" : a.reminder === "mail" ? "Ja, via mail" : "Nee, hoeft niet")
+      say: ["Zal ik je de dag ervoor even herinneren? Dan weet je waar en hoe laat."],
+      answer: () => (a.reminder === "whatsapp" ? "Ja, via WhatsApp" : a.reminder === "mail" ? "Ja, via mail" : "Hoeft niet"),
+      react: () => (a.reminder === "whatsapp" ? "Komt goed, ik app je." : a.reminder === "mail" ? "Komt goed, je krijgt een mailtje." : "Prima. Je rooster krijg je sowieso.")
     },
-    contact: { ask: "Bijna klaar! Hoe heet je en hoe kunnen we je bereiken?", answer: () => name.trim() },
-    check: { ask: "Klopt dit zo?", answer: () => "" }
+    contact: {
+      say: [`Bijna klaar, ${first}! Hoe kan ik je bereiken?`],
+      answer: () => [`${first} ${lastName}`.trim(), phone || email].filter(Boolean).join(" · "),
+      react: () => "Dankjewel."
+    },
+    check: { say: ["Ik zet het even op een rijtje. Klopt dit zo?"], answer: () => "" }
   };
 
-  const contactProblem = !name.trim()
-    ? "Vul je naam in."
+  const lines = [index > 0 ? copy[ids[index - 1]].react?.() : undefined, ...copy[current].say].filter((x): x is string => !!x);
+  const typing = revealed < lines.length;
+
+  // Oma "types" her messages one by one; with less motion, or after "Wijzig", they show at once.
+  useEffect(() => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || instant.current) {
+      instant.current = false;
+      setRevealed(lines.length);
+      return;
+    }
+    setRevealed(0);
+    let shown = 0;
+    let timer = 0;
+    const next = () => {
+      timer = window.setTimeout(() => {
+        shown += 1;
+        setRevealed(shown);
+        if (shown < lines.length) next();
+      }, typingMs(lines[shown]));
+    };
+    next();
+    return () => window.clearTimeout(timer);
+    // Only when the step changes: answers given meanwhile must not restart the typing.
+  }, [current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once Oma has asked, bring the answer buttons into view and hand them the focus.
+  useEffect(() => {
+    if (typing) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    composerRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "nearest" });
+    // A text field focuses itself (autoFocus); otherwise the answers get the focus.
+    if (!composerRef.current?.querySelector("input:not([type=checkbox])")) composerRef.current?.focus({ preventScroll: true });
+  }, [typing, current]);
+
+  /** Next step, worked out from the answers as they will be after this change. */
+  function advance(next: Partial<Answers> = {}) {
+    const after = { ...a, ...next };
+    // "Zet me maar in": open to every task on their days, unless they untick one.
+    if (after.mode === "flexibel" && after.roles.length === 0 && after.days.length > 0) after.roles = rolesOnDays(after.days);
+    // Days with more than one shift start with all of them ticked; untick what does not fit.
+    const open = daysWithChoice(after.days).filter((d) => !after.parts[d]);
+    if (open.length) after.parts = { ...after.parts, ...Object.fromEntries(open.map((d) => [d, partsOnDay(d)])) };
+    setA(after);
+    setError(null);
+    const list = stepIds(after, suggestions);
+    setAt(list[Math.min(list.indexOf(current) + 1, list.length - 1)]);
+  }
+
+  function goTo(id: StepId) {
+    instant.current = true;
+    setError(null);
+    setAt(id);
+  }
+
+  const contactProblem = !lastName.trim()
+    ? `Vul je achternaam in, dan verwar ik je niet met een andere ${first || "vrijwilliger"}.`
     : a.reminder === "whatsapp" && !phone.trim()
-      ? "Vul je telefoonnummer in voor de herinnering via WhatsApp."
+      ? "Vul je telefoonnummer in, dan kan ik je appen."
       : a.reminder === "mail" && !email.trim()
-        ? "Vul je e-mailadres in voor de herinnering via mail."
+        ? "Vul je e-mailadres in, dan kan ik je mailen."
         : !phone.trim() && !email.trim()
           ? "Vul een telefoonnummer of e-mailadres in."
           : null;
 
   const quietDayMarks = counts && labelQuietDays(counts) ? quietDays(counts) : [];
 
-  function body(id: StepId): { content: ReactNode; next?: { ready: boolean; label?: string } } {
+  /** The answer controls for each step, and whether "Verder" can be pressed (none: a quick reply answers). */
+  function composer(id: StepId): { content: ReactNode; next?: { ready: boolean; label?: string } } {
     switch (id) {
+      case "name":
+        return {
+          content: <Field label="Je voornaam" value={firstName} onChange={setFirstName} autoComplete="given-name" autoFocus />,
+          next: { ready: !!firstName.trim() }
+        };
       case "mode":
         return {
           content: (
-            <Choices
+            <QuickReplies
               value={a.mode}
               onPick={(mode) => advance({ mode, flexible: mode === "flexibel" ? true : a.flexible })}
               options={[
-                ["taak", "Ik weet al wat ik wil doen", "Inpakken, bezorgen of achter de bar."],
-                ["dag", "Ik weet al wanneer ik kan", "Je kiest een dag, wij laten zien wat er die dag te doen is."],
-                ["flexibel", "Maakt niet uit, zet me in waar het nodig is", "Je geeft je beschikbaarheid, wij kijken waar we je het hardst nodig hebben."]
+                ["taak", "Ik weet wat ik wil doen"],
+                ["dag", "Ik weet wanneer ik kan"],
+                ["flexibel", "Zet me maar in waar het nodig is"]
               ]}
             />
           )
         };
       case "roles":
         return {
-          content: <RolePicker roles={VOLUNTEER_ROLES} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />,
+          content: <RolePicker roles={ACTIVE_ROLES} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />,
           next: { ready: a.roles.length > 0 }
         };
       case "suggest":
@@ -292,7 +328,7 @@ export function SignupPage() {
                 const n = counts ? countFor(counts, s.role, s.option) : 0;
                 const on = extra.includes(key);
                 return (
-                  <Toggle key={key} on={on} onClick={() => setExtra((x) => (on ? x.filter((k) => k !== key) : [...x, key]))}>
+                  <Toggle key={key} on={on} onClick={() => setExtra((x) => (x.includes(key) ? x.filter((k) => k !== key) : [...x, key]))}>
                     <span className="font-bold">{shortOption(s.option)}</span>
                     <span className={`block text-xs ${on ? "text-meel/80" : "text-muted"}`}>
                       {volunteerRoleLabel[s.role]} · {n === 0 ? "nog niemand" : `pas ${n} ${n === 1 ? "aanmelding" : "aanmeldingen"}`}
@@ -324,22 +360,30 @@ export function SignupPage() {
           next: { ready: a.days.length > 0 }
         };
       case "parts": {
-        const options = partsOn(a.days);
+        const choice = daysWithChoice(a.days);
         return {
           content: (
-            <ChipGrid
-              items={options.map((p) => ({ key: p, label: partLabel[p], sub: p === "ochtend" ? "vanaf 9:00" : p === "middag" ? "vanaf 12:00" : undefined }))}
-              value={a.parts}
-              onChange={(change) =>
-                setA((prev) => {
-                  const next = change(prev.parts);
-                  return { ...prev, parts: options.filter((p) => next.includes(p)) };
-                })
-              }
-              columns="grid-cols-2 sm:grid-cols-3"
-            />
+            <div className="grid gap-1.5">
+              {choice.map((day) => (
+                <div key={day} className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-2">
+                  <span className="text-sm font-bold text-krent">{dayLabel(day)}</span>
+                  <ChipGrid
+                    columns="grid-cols-3"
+                    items={partsOnDay(day).map((p) => ({ key: p, label: partLabel[p] }))}
+                    value={a.parts[day] ?? []}
+                    onChange={(change) =>
+                      setA((prev) => {
+                        const next = change(prev.parts[day] ?? []);
+                        return { ...prev, parts: { ...prev.parts, [day]: partsOnDay(day).filter((p) => next.includes(p)) } };
+                      })
+                    }
+                  />
+                </div>
+              ))}
+              <p className="text-xs text-muted">Kun je op een dag toch niet? Haal die dag dan weg bij de vorige vraag.</p>
+            </div>
           ),
-          next: { ready: a.parts.length > 0 }
+          next: { ready: choice.every((d) => (a.parts[d] ?? []).length > 0) }
         };
       }
       case "dayroles": {
@@ -347,7 +391,7 @@ export function SignupPage() {
         return {
           content: (
             <div className="grid gap-2">
-              <RolePicker roles={available} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} cargoBike={a.cargoBike} onCargoBike={(v) => update({ cargoBike: v })} />
+              <RolePicker roles={available} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />
               {a.mode === "dag" && a.roles.length < available.length ? (
                 <button type="button" className={`${textAction} justify-self-start text-sm`} onClick={() => advance({ roles: available })}>
                   Maakt niet uit, alles is goed
@@ -355,18 +399,18 @@ export function SignupPage() {
               ) : null}
             </div>
           ),
-          next: { ready: a.roles.length > 0 && a.roles.some((r) => optionsFor(r, a.days, a.parts).length > 0) }
+          next: { ready: a.roles.some((r) => optionsFor(r, a.days, a.parts).length > 0) }
         };
       }
       case "flexible":
         return {
           content: (
-            <Choices
+            <QuickReplies
               value={a.flexible === null ? null : a.flexible ? "ja" : "nee"}
               onPick={(v) => advance({ flexible: v === "ja" })}
               options={[
-                ["ja", "Ja, zet me in waar het nodig is", "Dan kunnen we het rooster het best rond krijgen."],
-                ["nee", "Liever alleen wat ik koos", "Ook goed! Dan houden we ons daaraan."]
+                ["ja", "Ja, prima"],
+                ["nee", "Liever niet"]
               ]}
             />
           )
@@ -374,13 +418,13 @@ export function SignupPage() {
       case "max":
         return {
           content: (
-            <Choices<MaxShifts>
+            <QuickReplies<MaxShifts>
               value={a.maxShifts}
               onPick={(maxShifts) => advance({ maxShifts })}
               options={[
-                ["1", "1 keer", "Eén dag of dagdeel."],
-                ["2-3", "2 à 3 keer", ""],
-                ["vaker", "Zo vaak als nodig", "Je kunt altijd nog nee zeggen."]
+                ["1", "1 keer"],
+                ["2-3", "2 à 3 keer"],
+                ["vaker", "Zo vaak als nodig"]
               ]}
             />
           )
@@ -388,184 +432,264 @@ export function SignupPage() {
       case "reminder":
         return {
           content: (
-            <Choices<ReminderChannel>
+            <QuickReplies<ReminderChannel>
               value={a.reminder}
               onPick={(reminder) => advance({ reminder })}
               options={[
-                ["whatsapp", "Ja, via WhatsApp", "24 uur van tevoren: waar, hoe laat en met wie."],
-                ["mail", "Ja, via mail", "24 uur van tevoren: waar, hoe laat en met wie."],
-                ["geen", "Nee, hoeft niet", "Je rooster krijg je sowieso."]
+                ["whatsapp", "Ja, via WhatsApp"],
+                ["mail", "Ja, via mail"],
+                ["geen", "Hoeft niet"]
               ]}
             />
           )
         };
-      default:
-        if (id.startsWith("picks-")) {
-          const role = id.slice(6) as VolunteerRole;
-          return {
-            content: (
-              <div className="grid gap-2">
-                {role === "fietskoerier" ? <CargoBike value={a.cargoBike} onChange={(v) => update({ cargoBike: v })} /> : null}
-                {loaded && SIGNUP_OPTIONS[role].length === 0 ? <p className="text-sm text-muted">Hiervoor staan nog geen momenten in de agenda.</p> : null}
-                <OptionGrid role={role} counts={counts} value={a.picks[role]} onChange={(change) => setA((prev) => ({ ...prev, picks: { ...prev.picks, [role]: change(prev.picks[role]) } }))} />
+      case "contact":
+        return {
+          content: (
+            <div className="grid gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Achternaam *" value={lastName} onChange={setLastName} autoComplete="family-name" autoFocus />
+                <Field label={`Telefoonnummer${a.reminder === "whatsapp" ? " *" : ""}`} value={phone} onChange={setPhone} type="tel" autoComplete="tel" />
+                <Field label={`E-mailadres${a.reminder === "mail" ? " *" : ""}`} value={email} onChange={setEmail} type="email" autoComplete="email" />
+                <Field label="Woonplaats" value={city} onChange={setCity} autoComplete="address-level2" />
+                {roles.autokoerier.wants ? (
+                  <div className="sm:col-span-2">
+                    <Field label="Adres" value={address} onChange={setAddress} autoComplete="street-address" placeholder="Straat en huisnummer" />
+                    <p className="mt-1 text-xs text-muted">Handig voor bezorgers: dan plan ik een route bij jou in de buurt.</p>
+                  </div>
+                ) : null}
               </div>
-            ),
-            next: { ready: a.picks[role].length > 0 }
-          };
-        }
-        return { content: null };
+              {contactProblem && (lastName || phone || email) ? <p className="text-xs text-muted">{contactProblem}</p> : null}
+            </div>
+          ),
+          next: { ready: !contactProblem }
+        };
+      case "check": {
+        const neediest = counts && a.mode === "flexibel" ? neediestFor(counts, a) : [];
+        return {
+          content: (
+            <div className="grid gap-3">
+              <dl className="grid gap-1.5 text-sm">
+                {ACTIVE_ROLES.filter((r) => roles[r].wants).map((r) => (
+                  <div key={r} className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
+                    <dt className="font-bold text-krent">{volunteerRoleLabel[r]}</dt>
+                    <dd className="text-krent">{roles[r].days.map(shortOption).join(", ")}</dd>
+                  </div>
+                ))}
+                <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
+                  <dt className="font-bold text-krent">Planning</dt>
+                  <dd className="text-krent">
+                    {a.mode === "flexibel" || a.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen wat ik koos"} · maximaal {a.maxShifts ? maxShiftsLabel[a.maxShifts].toLowerCase() : "–"}
+                  </dd>
+                </div>
+              </dl>
+              {neediest.length > 0 ? (
+                <p className="text-sm text-muted">
+                  Hier heb ik je nu het hardst nodig: <span className="text-krent">{neediest.map((n) => `${shortOption(n.option)} (${volunteerRoleLabel[n.role].toLowerCase()})`).join(", ")}</span>.
+                </p>
+              ) : null}
+              <label className="grid gap-1 text-sm">
+                <span className={fieldLabel}>Wil je nog iets kwijt?</span>
+                <textarea className={`${inputClass} min-h-[70px]`} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Vragen, ideeën, of met wie je graag samen wilt" />
+              </label>
+              <label className="flex items-start gap-2 text-sm text-krent">
+                <input type="checkbox" className="mt-1 accent-[#69873c]" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />
+                Ik geef toestemming om mijn gegevens te bewaren voor de planning van deze oliebollenactie. Na de actie worden ze verwijderd.
+              </label>
+            </div>
+          )
+        };
+      }
+      default: {
+        const role = id.slice(6) as VolunteerRole;
+        const quiet = (o: string) => !!counts && labelQuietOptions(counts, role) && staffingStatus(countFor(counts, role, o), targetFor(role, o)) === "weinig";
+        const setPicks = (change: (prev: string[]) => string[]) => setA((prev) => ({ ...prev, picks: { ...prev.picks, [role]: change(prev.picks[role]) } }));
+        return {
+          content: (
+            <div className="grid gap-2">
+              {loaded && SIGNUP_OPTIONS[role].length === 0 ? <p className="text-sm text-muted">Hiervoor staan nog geen momenten in de agenda.</p> : null}
+              {hasParts(role) ? (
+                <OptionGrid role={role} quiet={quiet} value={a.picks[role]} onChange={setPicks} />
+              ) : (
+                // One shift a day: just the days, like a calendar.
+                <ChipGrid
+                  items={SIGNUP_OPTIONS[role].map((o) => ({ key: o, label: shortDay(o.split(/[:(]/)[0].trim()), sub: o.match(/\(([^)]+)\)/)?.[1], mark: quiet(o) }))}
+                  value={a.picks[role]}
+                  // Keep the agenda order, so the sheet reads the same as a Google Form answer.
+                  onChange={(change) => setPicks((prev) => SIGNUP_OPTIONS[role].filter((o) => change(prev).includes(o)))}
+                />
+              )}
+              {SIGNUP_OPTIONS[role].some(quiet) ? <MarkLegend /> : null}
+            </div>
+          ),
+          next: { ready: a.picks[role].length > 0 }
+        };
+      }
     }
   }
 
-  const contactStep = (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Naam + achternaam *" value={name} onChange={setName} autoComplete="name" />
-      <Field label={`Telefoonnummer${a.reminder === "whatsapp" ? " *" : ""}`} value={phone} onChange={setPhone} type="tel" autoComplete="tel" />
-      <Field label={`E-mailadres${a.reminder === "mail" ? " *" : ""}`} value={email} onChange={setEmail} type="email" autoComplete="email" />
-      <Field label="Woonplaats" value={city} onChange={setCity} autoComplete="address-level2" />
-      {roles.fietskoerier.wants || roles.autokoerier.wants ? (
-        <div className="sm:col-span-2">
-          <Field label="Adres" value={address} onChange={setAddress} autoComplete="street-address" placeholder="Straat en huisnummer" />
-          <p className="mt-1 text-xs text-muted">Handig voor bezorgers: dan plannen we een route bij jou in de buurt.</p>
-        </div>
-      ) : null}
-    </div>
-  );
+  const view = composer(current);
 
-  const neediest = counts && a.mode === "flexibel" ? neediestFor(counts, a) : [];
-  const checkStep = (
-    <div className="grid gap-3">
-      <dl className="grid gap-1.5 text-sm">
-        {VOLUNTEER_ROLES.filter((r) => roles[r].wants).map((r) => (
-          <div key={r} className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
-            <dt className="font-bold text-krent">{volunteerRoleLabel[r]}</dt>
-            <dd className="text-krent">{roles[r].days.map(shortOption).join(", ")}</dd>
-          </div>
-        ))}
-        <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
-          <dt className="font-bold text-krent">Planning</dt>
-          <dd className="text-krent">
-            {a.mode === "flexibel" || a.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen wat ik koos"} · maximaal {a.maxShifts ? maxShiftsLabel[a.maxShifts].toLowerCase() : "–"}
-          </dd>
-        </div>
-      </dl>
-      {neediest.length > 0 ? (
-        <p className="text-sm text-muted">
-          Hier hebben we je nu het hardst nodig: <span className="text-krent">{neediest.map((n) => `${shortOption(n.option)} (${volunteerRoleLabel[n.role].toLowerCase()})`).join(", ")}</span>.
-        </p>
-      ) : null}
-      <label className="grid gap-1 text-sm">
-        <span className={fieldLabel}>Wil je nog iets kwijt?</span>
-        <textarea className={`${inputClass} min-h-[70px]`} value={remark} onChange={(e) => setRemark(e.target.value)} placeholder="Vragen, ideeën, of met wie je graag samen wilt" />
-      </label>
-      <label className="flex items-start gap-2 text-sm text-krent">
-        <input type="checkbox" className="mt-1 accent-[#69873c]" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />
-        Ik geef toestemming om mijn gegevens te bewaren voor de planning van deze oliebollenactie. Na de actie worden ze verwijderd.
-      </label>
-    </div>
-  );
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    // Enter in a text field means "Verder" until the last step.
+    if (current !== "check") {
+      if (view.next?.ready) advance();
+      return;
+    }
+    if (!a.mode || (a.flexible === null && a.mode !== "flexibel") || !a.maxShifts || !a.reminder) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await backend.registerVolunteer({
+        name: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        address,
+        city,
+        phone,
+        email,
+        roles,
+        cargoBike: false,
+        remark,
+        consent,
+        planning: { mode: a.mode, flexible: a.mode === "flexibel" || a.flexible === true, maxShifts: a.maxShifts, reminder: a.reminder }
+      });
+      setDone(true);
+      rollOliebol();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Aanmelden mislukt.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const view: { content: ReactNode; next?: { ready: boolean; label?: string } } =
-    current === "contact"
-      ? { content: contactStep, next: { ready: !contactProblem } }
-      : current === "check"
-        ? { content: checkStep, next: undefined }
-        : body(current);
+  if (done) {
+    return (
+      <section className="grid overflow-hidden rounded-kaart bg-papier shadow-zacht sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
+        {/* Portrait card: the photo of Oma Coby is 4:5, so the card follows it instead of cropping her to a strip. */}
+        <div className="relative">
+          <img src={omaUrl} alt="Oma Coby met een bord oliebollen" className="aspect-[4/5] h-full w-full object-cover object-top" />
+          <Sticker slap className="absolute bottom-4 right-4">Bedankt!</Sticker>
+        </div>
+        <div className="grid content-center gap-2 p-5 sm:p-7">
+          <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Dankjewel, {first}!</h1>
+          <p className="text-krent">Je bent nu officieel mijn hulpje. Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster en laat ik je weten waar en wanneer ik je verwacht.</p>
+          {a.reminder && a.reminder !== "geen" ? (
+            <p className="text-sm text-krent">De dag ervoor krijg je nog een herinnering via {a.reminder === "whatsapp" ? "WhatsApp" : "mail"}.</p>
+          ) : null}
+          <p className="text-sm text-muted">
+            Vragen of iets wijzigen? Mail naar{" "}
+            <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>
+              {CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+          <p className="text-xs text-muted">Met 10 oliebollen laat je 1 oudje rock en rollen.</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <form className="grid gap-4" onSubmit={submit}>
-      <div className="grid gap-1">
+      <div className="grid gap-0.5">
         <p className={fieldLabel}>Vrijwilligers gezocht</p>
-        <h1 className="font-display text-[44px] uppercase leading-none tracking-wide text-krent">
+        <h1 className="font-display text-[34px] uppercase leading-none tracking-wide text-krent">
           Help je <span className="text-feest">mee</span>?
         </h1>
-        <p className="text-oliebol">Een paar korte vragen, dan weten we waar we je kunnen inzetten. Duurt een minuutje of twee.</p>
       </div>
 
-      {!loaded ? <OliebolLoader /> : null}
+      <div className="grid gap-3" role="log" aria-live="polite" aria-label="Gesprek met Oma Coby">
+        {/* The conversation so far. */}
+        {ids.slice(0, index).map((id, k) => (
+          <div key={id} className="grid gap-1.5">
+            <OmaSays lines={[k > 0 ? copy[ids[k - 1]].react?.() : undefined, ...copy[id].say].filter((x): x is string => !!x)} />
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" className={`${textAction} text-xs`} onClick={() => goTo(id)}>
+                Wijzig
+              </button>
+              <p className="max-w-[80%] rounded-kaart rounded-br-sm bg-krent px-3 py-2 text-sm text-meel">{copy[id].answer()}</p>
+            </div>
+          </div>
+        ))}
+        {/* What Oma says now, one message at a time. */}
+        <OmaSays lines={lines.slice(0, revealed)} typing={typing} />
+      </div>
 
-      {/* The conversation so far. */}
-      {ids.slice(0, index).map((id) => (
-        <div key={id} className="grid gap-1.5">
-          <div className="flex items-end gap-2">
-            <Avatar />
-            <p className="max-w-[85%] rounded-kaart rounded-bl-sm bg-papier px-3 py-2 text-sm text-krent shadow-zacht">{step[id].ask}</p>
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <button type="button" className={`${textAction} text-xs`} onClick={() => setAt(id)}>
-              Wijzig
-            </button>
-            <p className="max-w-[80%] rounded-kaart rounded-br-sm bg-krent px-3 py-2 text-sm text-meel">{step[id].answer()}</p>
-          </div>
+      {!typing ? (
+        <div ref={composerRef} tabIndex={-1} className="outline-none" aria-label={lines[lines.length - 1]}>
+          <Card>
+            {view.content}
+            {error ? (
+              <div className="mt-3">
+                <Notice tone="error">{error}</Notice>
+              </div>
+            ) : null}
+            {view.next || current === "check" || index > 0 ? (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                {index > 0 ? (
+                  <button type="button" className={ghostButton} onClick={() => goTo(ids[index - 1])}>
+                    Terug
+                  </button>
+                ) : (
+                  <span />
+                )}
+                {current === "check" ? (
+                  <button type="submit" className={primaryButton} disabled={busy || !consent}>
+                    {busy ? "Versturen…" : "Aanmelden"}
+                  </button>
+                ) : view.next ? (
+                  <button type="button" className={primaryButton} disabled={!view.next.ready} onClick={() => advance()}>
+                    {view.next.label ?? "Verder"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </Card>
         </div>
-      ))}
-
-      {/* The current question. */}
-      <Card>
-        <div className="mb-3 flex items-start gap-3">
-          <Avatar large />
-          <div className="grid gap-0.5">
-            <p className={fieldLabel}>
-              {/* Until the first answer the length of the conversation is unknown. */}
-              Vraag {index + 1}
-              {ids.length > 1 ? ` van ${ids.length}` : ""}
-            </p>
-            <h2 ref={questionRef} tabIndex={-1} className="font-serif text-xl font-bold leading-tight text-krent outline-none" aria-live="polite">
-              {step[current].ask}
-            </h2>
-            {step[current].hint ? <p className="text-sm text-muted">{step[current].hint}</p> : null}
-          </div>
-        </div>
-        {view.content}
-        {error ? (
-          <div className="mt-3">
-            <Notice tone="error">{error}</Notice>
-          </div>
-        ) : null}
-        {current === "contact" && contactProblem && (name || phone || email) ? <p className="mt-2 text-xs text-muted">{contactProblem}</p> : null}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          {index > 0 ? (
-            <button type="button" className={ghostButton} onClick={back}>
-              Terug
-            </button>
-          ) : (
-            <span />
-          )}
-          {current === "check" ? (
-            <button type="submit" className={primaryButton} disabled={busy || !consent}>
-              {busy ? "Versturen…" : "Aanmelden"}
-            </button>
-          ) : view.next ? (
-            <button type="button" className={primaryButton} disabled={!view.next.ready} onClick={() => advance()}>
-              {view.next.label ?? "Verder"}
-            </button>
-          ) : null}
-        </div>
-      </Card>
+      ) : null}
     </form>
   );
 }
 
-function Avatar({ large = false }: { large?: boolean }) {
-  return <img src={omaUrl} alt="" className={`${large ? "h-10 w-10" : "h-7 w-7"} flex-none rounded-full object-cover object-top`} />;
+/** Oma's messages: her photo once beside the group, the newest at the bottom; "…" while she types. */
+function OmaSays({ lines, typing = false }: { lines: string[]; typing?: boolean }) {
+  if (lines.length === 0 && !typing) return null;
+  return (
+    <div className="flex items-end gap-2">
+      <img src={omaUrl} alt="" className="h-8 w-8 flex-none rounded-full object-cover object-top" />
+      <div className="grid max-w-[85%] justify-items-start gap-1">
+        {lines.map((line, i) => (
+          <p key={i} className="rounded-kaart rounded-bl-sm bg-papier px-3 py-2 text-sm text-krent shadow-zacht">
+            {line}
+          </p>
+        ))}
+        {typing ? (
+          <p className="oc-typing rounded-kaart rounded-bl-sm bg-papier px-3 py-3 shadow-zacht" aria-label="Oma typt…">
+            <span />
+            <span />
+            <span />
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
-/** One answer from a short list: picking it answers the question straight away. */
-function Choices<T extends string>({ value, options, onPick }: { value: T | null; options: Array<[T, string, string]>; onPick: (value: T) => void }) {
+/** Short answers as buttons; picking one answers straight away, like a quick reply in a chat. */
+function QuickReplies<T extends string>({ value, options, onPick }: { value: T | null; options: Array<[T, string]>; onPick: (value: T) => void }) {
   return (
-    <div className="grid gap-1.5">
-      {options.map(([key, title, sub]) => (
+    <div className="flex flex-wrap justify-end gap-1.5">
+      {options.map(([key, label]) => (
         <button
           key={key}
           type="button"
           aria-pressed={value === key}
           onClick={() => onPick(key)}
-          className={`rounded-lg px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-krent ${
+          className={`min-h-[40px] rounded-full px-4 py-2 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-krent ${
             value === key ? "bg-krent text-meel" : "bg-vul text-krent hover:bg-vul-2"
           }`}
         >
-          <span className="block font-bold">{title}</span>
-          {sub ? <span className={`block text-sm ${value === key ? "text-meel/80" : "text-muted"}`}>{sub}</span> : null}
+          {label}
         </button>
       ))}
     </div>
@@ -600,47 +724,19 @@ function Check({ on }: { on: boolean }) {
   );
 }
 
-function RolePicker({
-  roles,
-  value,
-  onChange,
-  cargoBike,
-  onCargoBike
-}: {
-  roles: VolunteerRole[];
-  value: VolunteerRole[];
-  onChange: (change: (prev: VolunteerRole[]) => VolunteerRole[]) => void;
-  cargoBike?: boolean;
-  onCargoBike?: (value: boolean) => void;
-}) {
+function RolePicker({ roles, value, onChange }: { roles: VolunteerRole[]; value: VolunteerRole[]; onChange: (change: (prev: VolunteerRole[]) => VolunteerRole[]) => void }) {
   return (
     <div className="grid gap-1.5">
       {roles.map((role) => {
         const on = value.includes(role);
         return (
-          <div key={role} className="grid gap-1.5">
-            <Toggle on={on} onClick={() => onChange((prev) => VOLUNTEER_ROLES.filter((r) => (r === role ? !prev.includes(r) : prev.includes(r))))}>
-              <span className="font-bold">{volunteerRoleLabel[role]}</span>
-              <span className={`block text-xs ${on ? "text-meel/80" : "text-muted"}`}>{roleBlurb[role]}</span>
-            </Toggle>
-            {role === "fietskoerier" && on && onCargoBike ? (
-              <div className="pl-4">
-                <CargoBike value={!!cargoBike} onChange={onCargoBike} />
-              </div>
-            ) : null}
-          </div>
+          <Toggle key={role} on={on} onClick={() => onChange((prev) => ACTIVE_ROLES.filter((r) => (r === role ? !prev.includes(r) : prev.includes(r))))}>
+            <span className="font-bold">{volunteerRoleLabel[role]}</span>
+            <span className={`block text-xs ${on ? "text-meel/80" : "text-muted"}`}>{roleBlurb(role)}</span>
+          </Toggle>
         );
       })}
     </div>
-  );
-}
-
-function CargoBike({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2 text-sm text-krent">
-      <input type="checkbox" className="accent-[#69873c]" checked={value} onChange={(e) => onChange(e.target.checked)} />
-      Ik kan een bakfiets lenen van iemand
-    </label>
   );
 }
 
@@ -664,6 +760,7 @@ function ChipGrid({
             key={item.key}
             type="button"
             aria-pressed={on}
+            aria-label={`${item.label}${item.sub ? `, ${item.sub}` : ""}${item.mark ? ", nog nodig" : ""}`}
             onClick={() => onChange((prev) => (prev.includes(item.key) ? prev.filter((k) => k !== item.key) : [...prev, item.key]))}
             className={`relative min-h-[44px] rounded-lg px-2 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-krent ${
               on ? "bg-krent font-bold text-meel" : "bg-vul text-krent hover:bg-vul-2"
@@ -671,7 +768,7 @@ function ChipGrid({
           >
             {item.label}
             {item.sub ? <span className={`block text-[11px] font-normal ${on ? "text-meel/80" : "text-muted"}`}>{item.sub}</span> : null}
-            {item.mark ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-feest" aria-label="nog nodig" /> : null}
+            {item.mark ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> : null}
           </button>
         );
       })}
@@ -682,16 +779,16 @@ function ChipGrid({
 function MarkLegend() {
   return (
     <p className="flex items-center gap-1.5 text-xs text-muted">
-      <span className="h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> Daar hebben we nog weinig mensen.
+      <span className="h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> Daar heb ik nog weinig mensen.
     </p>
   );
 }
 
 /**
- * The options of one task as a table: a row per day, a column per dagdeel.
- * Thirty checkboxes in a row were hard to scan; this reads like a rooster.
+ * A task with more than one shift on a day, as a table: a row per day, a column per dagdeel.
+ * Clicking the day ticks or unticks the whole day.
  */
-function OptionGrid({ role, counts, value, onChange }: { role: VolunteerRole; counts: SignupCounts | null; value: string[]; onChange: (change: (prev: string[]) => string[]) => void }) {
+function OptionGrid({ role, quiet, value, onChange }: { role: VolunteerRole; quiet: (option: string) => boolean; value: string[]; onChange: (change: (prev: string[]) => string[]) => void }) {
   const options = SIGNUP_OPTIONS[role];
   const rows: Array<{ day: string; label: string; options: string[] }> = [];
   for (const option of options) {
@@ -700,51 +797,46 @@ function OptionGrid({ role, counts, value, onChange }: { role: VolunteerRole; co
     if (row) row.options.push(option);
     else rows.push({ day, label: shortDay(option.split(/[:(]/)[0].trim()), options: [option] });
   }
-  const label = counts ? labelQuietOptions(counts, role) : false;
-  const quiet = (o: string) => !!counts && label && staffingStatus(countFor(counts, role, o), targetFor(role, o)) === "weinig";
   // Keep the agenda order, so the sheet reads the same as a Google Form answer.
   const toggle = (o: string) => onChange((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : options.filter((x) => x === o || prev.includes(x))));
   return (
-    <div className="grid gap-2">
-      <div className="grid gap-1">
-        {rows.map((r) => (
-          <div key={r.day} className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-2">
-            <button
-              type="button"
-              className="text-left text-sm font-bold text-krent hover:underline"
-              title={r.options.length > 1 ? "Hele dag aan of uit" : undefined}
-              onClick={() => onChange((prev) => (r.options.every((o) => prev.includes(o)) ? prev.filter((v) => !r.options.includes(v)) : options.filter((x) => prev.includes(x) || r.options.includes(x))))}
-            >
-              {r.label}
-            </button>
-            <div className="flex flex-wrap gap-1.5">
-              {r.options.map((o) => {
-                const on = value.includes(o);
-                const part = optionPart(o);
-                const text = o.match(/\(([^)]+)\)/)?.[1] ?? (part ? partLabel[part] : "Hele dag");
-                const time = OPTION_TIMES[o.trim().toLowerCase()];
-                return (
-                  <button
-                    key={o}
-                    type="button"
-                    aria-pressed={on}
-                    aria-label={`${o}${quiet(o) ? ", nog nodig" : ""}`}
-                    onClick={() => toggle(o)}
-                    className={`relative min-h-[40px] min-w-[96px] rounded-lg px-3 py-1.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-krent ${
-                      on ? "bg-krent font-bold text-meel" : "bg-vul text-krent hover:bg-vul-2"
-                    }`}
-                  >
-                    {text}
-                    {time ? <span className={`block text-[11px] font-normal ${on ? "text-meel/80" : "text-muted"}`}>{time}</span> : null}
-                    {quiet(o) ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> : null}
-                  </button>
-                );
-              })}
-            </div>
+    <div className="grid gap-1">
+      {rows.map((r) => (
+        <div key={r.day} className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-2">
+          <button
+            type="button"
+            className="text-left text-sm font-bold text-krent hover:underline"
+            title="Hele dag aan of uit"
+            onClick={() => onChange((prev) => (r.options.every((o) => prev.includes(o)) ? prev.filter((v) => !r.options.includes(v)) : options.filter((x) => prev.includes(x) || r.options.includes(x))))}
+          >
+            {r.label}
+          </button>
+          <div className="flex flex-wrap gap-1.5">
+            {r.options.map((o) => {
+              const on = value.includes(o);
+              const part = optionPart(o);
+              const text = o.match(/\(([^)]+)\)/)?.[1] ?? (part ? partLabel[part] : "Hele dag");
+              const time = OPTION_TIMES[o.trim().toLowerCase()];
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`${o}${quiet(o) ? ", nog nodig" : ""}`}
+                  onClick={() => toggle(o)}
+                  className={`relative min-h-[40px] min-w-[96px] rounded-lg px-3 py-1.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-krent ${
+                    on ? "bg-krent font-bold text-meel" : "bg-vul text-krent hover:bg-vul-2"
+                  }`}
+                >
+                  {text}
+                  {time ? <span className={`block text-[11px] font-normal ${on ? "text-meel/80" : "text-muted"}`}>{time}</span> : null}
+                  {quiet(o) ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> : null}
+                </button>
+              );
+            })}
           </div>
-        ))}
-      </div>
-      {options.some(quiet) ? <MarkLegend /> : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -755,7 +847,8 @@ function Field({
   onChange,
   type = "text",
   autoComplete,
-  placeholder
+  placeholder,
+  autoFocus
 }: {
   label: string;
   value: string;
@@ -763,11 +856,12 @@ function Field({
   type?: string;
   autoComplete?: string;
   placeholder?: string;
+  autoFocus?: boolean;
 }) {
   return (
     <label className="grid gap-1 text-sm">
       <span className={fieldLabel}>{label}</span>
-      <input className={inputClass} type={type} value={value} onChange={(e) => onChange(e.target.value)} autoComplete={autoComplete} placeholder={placeholder} />
+      <input className={inputClass} type={type} value={value} onChange={(e) => onChange(e.target.value)} autoComplete={autoComplete} placeholder={placeholder} autoFocus={autoFocus} />
     </label>
   );
 }

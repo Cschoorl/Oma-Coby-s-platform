@@ -1,6 +1,14 @@
 # Vrijwilligersaanmelding als gesprek
 
-De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) stelt één vraag tegelijk. Oma vraagt, je antwoordt met knoppen, en eerdere antwoorden blijven als chat erboven staan met *Wijzig*. De logica staat los in `signupFlow.ts`.
+De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een gesprek met Oma Coby. Ze stelt zich voor, vraagt één ding tegelijk en reageert kort op elk antwoord. Eerdere antwoorden blijven als chat erboven staan, elk met *Wijzig*. De logica staat los in `signupFlow.ts`.
+
+## Persona: Oma Coby
+
+- **Toon.** Warm, een beetje ondeugend, korte zinnen, je/jij. Ze spreekt je aan met je voornaam: "Leuk je te ontmoeten, Sanne!".
+- **Ritme.** Ze reageert kort op elk antwoord ("Genoteerd.", "Jij bent een kanjer.") en stelt dan de volgende vraag. Ze "typt" even met drie puntjes, net lang genoeg voor een gesprek maar nooit wachten. Bij "minder beweging" en na *Wijzig* staat alles meteen in beeld.
+- **Rustige start.** Eerst stelt ze zich voor en vraagt ze alleen je voornaam. Pas daarna komt de eerste keuze, als drie korte antwoordknoppen.
+- **Antwoorden zijn knoppen.** Korte keuzes zijn knoppen die meteen antwoorden. Meer kiezen gaat met vinkjes en *Verder*. Vrije tekst is er alleen voor naam, contact en opmerking.
+- **Geen beloftes.** Ze zegt nooit dat je ergens ingedeeld bent. Het rooster volgt later, en dat zegt ze ook.
 
 ## Waarom geen chatbot
 
@@ -8,24 +16,38 @@ We hebben gekozen voor een begeleid gesprek met knoppen in plaats van een chatbo
 
 - **Geen misverstanden.** Vrije tekst ("na de kerst kan ik wel") moet een taalmodel omzetten naar momenten in de agenda, en dat gaat soms mis. Bij knoppen weet je zeker wat er in de Sheet komt.
 - **Geen API-sleutel, kosten of persoonsgegevens naar een extern model** op een openbare pagina.
-- **Toegankelijk en snel op de telefoon.** Knoppen werken met toetsenbord en schermlezer, en zijn sneller dan typen.
-- **Toch het gevoel van een gesprek.** Oma stelt de vragen, en het pad past zich aan je antwoorden aan.
+- **Toegankelijk en snel op de telefoon.** Knoppen werken met toetsenbord en schermlezer: het gesprek is een `log` die nieuwe berichten voorleest.
 
 Een chatbot kan later alsnog als extra ingang, bijvoorbeeld via WhatsApp voor vragen. Hij zou dezelfde antwoorden invullen (`Answers` in `signupFlow.ts`).
 
+## Diensten
+
+Bestellingen worden vóór twaalf uur bezorgd. Er is dus één ochtenddienst per dag:
+
+| Taak | Tijd |
+| --- | --- |
+| Inpakken (Aalsmeer) | 6:30–12:00 |
+| Autokoerier | 9:00–12:00 |
+| Oliebollenbar | per evenement, uit het tabblad Agenda |
+
+De fietskoerier doet niet meer mee. De taak bestaat nog in de code (`VolunteerRole`), omdat aanmeldingen van vorig jaar hem hebben. Aanmelden, bezetting en totalen gebruiken alleen `ACTIVE_ROLES`. De agenda biedt hem ook niet meer aan als hij er nog in staat.
+
+Heeft een dag toch meer dan één dienst in de Agenda (bijvoorbeeld de bar 's middags en 's avonds), dan vraagt Oma per dag wanneer je kunt. Daarbij staat alles eerst aan en vink je uit wat niet past. Dagen met één dienst krijgen die vraag niet.
+
 ## Het gesprek
 
-1. **Heb je al iets in gedachten?**
-   - *Taak*: wat wil je doen? Daarna per taak een rooster: een rij per dag en een kolom per dagdeel. Tot slot nog een vraag naar krappe momenten (alleen als die er zijn).
-   - *Dag*: welke dagen? Hoe laat? Dit wordt alleen gevraagd als er iets te kiezen valt. Daarna: wat wil je die dag doen? Hier kan ook "maakt niet uit".
-   - *Maakt niet uit*: welke dagen ben je beschikbaar? Hoe laat? Alle taken staan aan; je vinkt uit wat niet past, bijvoorbeeld autokoerier zonder auto.
-2. **Mogen we je ook ergens anders indelen als het daar drukker is?** Bij "maakt niet uit" slaan we deze vraag over.
-3. **Hoe vaak wil je maximaal helpen?** Keuze uit 1 keer, 2 à 3 keer of zo vaak als nodig.
-4. **Een herinnering 24 uur van tevoren?** Via WhatsApp, via mail of niet.
-5. **Contactgegevens.** Telefoon is verplicht bij WhatsApp, mail bij mail. Het adres vragen we alleen aan bezorgers.
-6. **Klopt dit zo?** Een samenvatting, een opmerking, toestemming en dan versturen. Bij "maakt niet uit" zie je hier ook waar we je het hardst nodig hebben.
+1. **Hoi, ik ben Oma Coby. Hoe mag ik je noemen?** Je vult alleen je voornaam in.
+2. **Heb je al een idee wat je wilt doen, of wanneer je kunt?**
+   - *Ik weet wat ik wil doen*: welke taak? Daarna per taak de dagen. Tot slot nog een vraag naar krappe momenten (alleen als die er zijn).
+   - *Ik weet wanneer ik kan*: welke dagen? Wanneer, alleen op dagen met meer diensten. En wat wil je die dag doen? Hier kan ook "maakt niet uit".
+   - *Zet me maar in waar het nodig is*: welke dagen? Wanneer, alleen op dagen met meer diensten. Alle taken staan aan en je haalt weg wat niet past.
+3. **Mag ik je ook ergens anders neerzetten als het daar drukker is?** Na "zet me maar in" slaan we deze vraag over.
+4. **Hoe vaak wil je maximaal helpen?** Keuze uit 1 keer, 2 à 3 keer of zo vaak als nodig.
+5. **Zal ik je de dag ervoor herinneren?** Via WhatsApp, via mail of het hoeft niet.
+6. **Hoe kan ik je bereiken?** Achternaam, telefoon (verplicht bij WhatsApp) of mail (verplicht bij mail), woonplaats. Het adres vragen we alleen aan bezorgers.
+7. **Klopt dit zo?** Een samenvatting, een opmerking, toestemming en dan versturen.
 
-Het gesprek is 5 tot 10 vragen lang. Een rode stip betekent "nog weinig mensen". Die stip staat alleen bij de uitzonderingen: als bijna alles krap is, zegt een stip overal niets.
+Een rode stip betekent "nog weinig mensen". Die stip staat alleen bij de uitzonderingen: als bijna alles krap is, zegt een stip overal niets.
 
 ## Wat er in de Sheet komt
 

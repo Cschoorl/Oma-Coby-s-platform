@@ -24,9 +24,9 @@ const SHIFT_TIMES: Record<"ochtend" | "middag", { start: string; end: string }> 
 };
 
 const DEFAULT_ROLE_TIMES: Record<DeliveryRole, { start: string; end: string }> = {
-  Inpakken: { start: "09:00", end: "12:00" },
+  Inpakken: { start: "06:30", end: "12:00" },
   Fietskoerier: { start: "09:00", end: "12:00" },
-  Autokoerier: { start: "11:00", end: "16:00" },
+  Autokoerier: { start: "09:00", end: "12:00" },
   Oliebollenbar: { start: "11:00", end: "16:00" }
 };
 

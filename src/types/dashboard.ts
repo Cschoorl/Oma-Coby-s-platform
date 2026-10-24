@@ -41,6 +41,12 @@ export type VolunteerRole = "inpakken" | "fietskoerier" | "autokoerier" | "olieb
 
 export const VOLUNTEER_ROLES: VolunteerRole[] = ["inpakken", "fietskoerier", "autokoerier", "oliebollenbar"];
 
+/**
+ * Tasks people can sign up for this season. Fietskoerier no longer takes part; the type keeps it
+ * because signups from earlier years (and the sheet columns) still have it.
+ */
+export const ACTIVE_ROLES: VolunteerRole[] = ["inpakken", "autokoerier", "oliebollenbar"];
+
 export const volunteerRoleLabel: Record<VolunteerRole, string> = {
   inpakken: "Inpakken",
   fietskoerier: "Fietskoerier",

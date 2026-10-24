@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { backend, type AnonymizeResult, type Session } from "../../data/backend";
 import type { DashboardState, VolunteerRole } from "../../types/dashboard";
-import { VOLUNTEER_ROLES, maxShiftsLabel, reminderLabel, volunteerRoleLabel } from "../../types/dashboard";
+import { ACTIVE_ROLES, VOLUNTEER_ROLES, maxShiftsLabel, reminderLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Badge, Card, CopyButton, EmptyState, Icon, Notice, SectionTitle, StatStrip, dangerButton, fieldLabel, ghostButton, inputClass, taskClass, textAction } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { whatsappNumber } from "../routes/routeUtils";
@@ -68,11 +68,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
       <StatStrip
         items={[
           { label: "Aanmeldingen", value: state.volunteers.length },
-          ...VOLUNTEER_ROLES.map((r) => ({
-            label: volunteerRoleLabel[r],
-            value: count(r),
-            hint: r === "fietskoerier" ? `${state.volunteers.filter((v) => v.cargoBike).length} met bakfiets` : undefined
-          }))
+          ...ACTIVE_ROLES.map((r) => ({ label: volunteerRoleLabel[r], value: count(r) }))
         ]}
       />
 
@@ -85,7 +81,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
           </label>
           <select className={inputClass} value={role} onChange={(e) => setRole(e.target.value as VolunteerRole | "alle")}>
             <option value="alle">Alle taken</option>
-            {VOLUNTEER_ROLES.map((r) => (
+            {VOLUNTEER_ROLES.filter((r) => ACTIVE_ROLES.includes(r) || count(r) > 0).map((r) => (
               <option key={r} value={r}>
                 {volunteerRoleLabel[r]}
               </option>

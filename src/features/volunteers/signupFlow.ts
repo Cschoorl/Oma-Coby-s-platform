@@ -1,6 +1,6 @@
 import type { SignupCounts } from "../../data/backend";
 import type { MaxShifts, ReminderChannel, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
-import { VOLUNTEER_ROLES } from "../../types/dashboard";
+import { ACTIVE_ROLES, VOLUNTEER_ROLES } from "../../types/dashboard";
 import { SIGNUP_OPTIONS } from "../../config";
 import { countFor, dayKey, staffingStatus, targetFor } from "../../utils/staffing";
 
@@ -20,8 +20,11 @@ export interface Answers {
   picks: Record<VolunteerRole, string[]>;
   /** Dag and flexibel: the days they can, as day keys ("15 december"). */
   days: string[];
-  /** Dag and flexibel: the dagdelen they can; only asked when the chosen days have dagdelen. */
-  parts: Part[];
+  /**
+   * Dag and flexibel: per day the dagdelen they can. Only asked when a chosen day has more than one;
+   * a day without an entry means the whole day.
+   */
+  parts: Record<string, Part[]>;
   cargoBike: boolean;
   flexible: boolean | null;
   maxShifts: MaxShifts | null;
@@ -33,7 +36,7 @@ export const emptyAnswers = (): Answers => ({
   roles: [],
   picks: { inpakken: [], fietskoerier: [], autokoerier: [], oliebollenbar: [] },
   days: [],
-  parts: [],
+  parts: {},
   cargoBike: false,
   flexible: null,
   maxShifts: null,
@@ -54,8 +57,8 @@ export interface SeasonDay {
   weekday: string;
 }
 
-/** All days that have at least one option, in agenda order, for the given tasks (default: all). */
-export function seasonDays(roles: VolunteerRole[] = VOLUNTEER_ROLES): SeasonDay[] {
+/** All days that have at least one option, in season order, for the given tasks (default: this season's). */
+export function seasonDays(roles: VolunteerRole[] = ACTIVE_ROLES): SeasonDay[] {
   const seen = new Map<string, SeasonDay>();
   for (const role of VOLUNTEER_ROLES) {
     if (!roles.includes(role)) continue;
@@ -79,29 +82,36 @@ function seasonNumber(key: string): number {
   return (month < 6 ? month + 12 : month) * 31 + Number(d);
 }
 
-/** Tasks that have at least one option on any of these days. */
+/** This season's tasks that have at least one option on any of these days. */
 export function rolesOnDays(days: string[]): VolunteerRole[] {
-  return VOLUNTEER_ROLES.filter((role) => SIGNUP_OPTIONS[role].some((o) => days.includes(dayKey(o))));
+  return ACTIVE_ROLES.filter((role) => SIGNUP_OPTIONS[role].some((o) => days.includes(dayKey(o))));
 }
 
-/** Dagdelen that occur on these days for these tasks; empty when everything is a whole day. */
-export function partsOn(days: string[], roles: VolunteerRole[] = VOLUNTEER_ROLES): Part[] {
+/** Dagdelen on one day, over this season's tasks; empty when that day has only whole-day options. */
+export function partsOnDay(day: string): Part[] {
   const found = new Set<Part>();
-  for (const role of roles) {
+  for (const role of ACTIVE_ROLES) {
     for (const option of SIGNUP_OPTIONS[role]) {
       const part = optionPart(option);
-      if (part && days.includes(dayKey(option))) found.add(part);
+      if (part && dayKey(option) === day) found.add(part);
     }
   }
   return PART_ORDER.filter((p) => found.has(p));
 }
 
-/** The options of a task that fall on the chosen days and dagdelen. Whole-day options always fit. */
-export function optionsFor(role: VolunteerRole, days: string[], parts: Part[]): string[] {
+/** Days among these where there is a dagdeel to choose; with one shift a day there is nothing to ask. */
+export function daysWithChoice(days: string[]): string[] {
+  return days.filter((d) => partsOnDay(d).length > 1);
+}
+
+/** The options of a task on the chosen days and, per day, the chosen dagdelen. Whole-day options always fit. */
+export function optionsFor(role: VolunteerRole, days: string[], parts: Record<string, Part[]>): string[] {
   return SIGNUP_OPTIONS[role].filter((o) => {
-    if (!days.includes(dayKey(o))) return false;
+    const day = dayKey(o);
+    if (!days.includes(day)) return false;
     const part = optionPart(o);
-    return part === "" || parts.length === 0 || parts.includes(part);
+    const chosen = parts[day];
+    return part === "" || !chosen || chosen.includes(part);
   });
 }
 
@@ -115,24 +125,12 @@ export function toRoles(a: Answers): Record<VolunteerRole, RoleAvailability> {
   return result;
 }
 
-/** People still missing on a day, summed over all tasks and dagdelen. */
-export function dayShortfall(counts: SignupCounts, day: string): number {
-  let missing = 0;
-  for (const role of VOLUNTEER_ROLES) {
-    for (const option of SIGNUP_OPTIONS[role]) {
-      if (dayKey(option) !== day) continue;
-      missing += Math.max(0, targetFor(role, option) - countFor(counts, role, option));
-    }
-  }
-  return missing;
-}
-
 /** Days where at least one task has "weinig" people. */
 export function quietDays(counts: SignupCounts): string[] {
   return seasonDays()
     .map((d) => d.key)
     .filter((day) =>
-      VOLUNTEER_ROLES.some((role) =>
+      ACTIVE_ROLES.some((role) =>
         SIGNUP_OPTIONS[role].some((o) => dayKey(o) === day && staffingStatus(countFor(counts, role, o), targetFor(role, o)) === "weinig")
       )
     );

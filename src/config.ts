@@ -18,10 +18,14 @@ function dayLabel(year: number, month: number, day: number): string {
 const SEASON_YEAR = 2026;
 const SEASON_DAYS = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31].map((d) => dayLabel(SEASON_YEAR, 12, d));
 
+/*
+ * Orders are delivered before twelve, so there is one morning shift for everyone. Inpakkers start earlier.
+ * Fietskoerier no longer takes part: no options, also not when the agenda still lists it.
+ */
 const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
   inpakken: SEASON_DAYS,
-  fietskoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
-  autokoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
+  fietskoerier: [],
+  autokoerier: SEASON_DAYS.map((d) => `${d}: ochtend`),
   /** Events with location, e.g. "Zaterdag 26 december (Pick-up Schaatsbaan)". */
   oliebollenbar: SEASON_DAYS
 };
@@ -32,8 +36,14 @@ const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
  */
 export const SIGNUP_OPTIONS: Record<VolunteerRole, string[]> = { ...DEFAULT_OPTIONS };
 
-/** Time per option ("7:30–12:00"), keyed by the lowercased option. */
-export const OPTION_TIMES: Record<string, string> = {};
+/** Shift times until the agenda gives its own. */
+const DEFAULT_TIMES: Record<string, string> = Object.fromEntries([
+  ...DEFAULT_OPTIONS.inpakken.map((o) => [o.toLowerCase(), "6:30–12:00"]),
+  ...DEFAULT_OPTIONS.autokoerier.map((o) => [o.toLowerCase(), "9:00–12:00"])
+]);
+
+/** Time per option ("6:30–12:00"), keyed by the lowercased option. */
+export const OPTION_TIMES: Record<string, string> = { ...DEFAULT_TIMES };
 
 /** People needed per option when the agenda says so, keyed by the lowercased option; else STAFFING_TARGETS. */
 export const OPTION_TARGETS: Record<string, number> = {};
@@ -57,6 +67,7 @@ export function applyAgenda(slots: AgendaSlot[]): void {
   for (const k of Object.keys(OPTION_TARGETS)) delete OPTION_TARGETS[k];
   if (slots.length === 0) {
     Object.assign(SIGNUP_OPTIONS, DEFAULT_OPTIONS);
+    Object.assign(OPTION_TIMES, DEFAULT_TIMES);
     return;
   }
   const sorted = [...slots].sort((a, b) => a.date.localeCompare(b.date) || PART_ORDER.indexOf(a.part) - PART_ORDER.indexOf(b.part));
@@ -69,12 +80,12 @@ export function applyAgenda(slots: AgendaSlot[]): void {
       if (slot.time) OPTION_TIMES[label.toLowerCase()] = slot.time;
       if (slot.needed) OPTION_TARGETS[label.toLowerCase()] = slot.needed;
     }
-    SIGNUP_OPTIONS[role] = options;
+    SIGNUP_OPTIONS[role] = role === "fietskoerier" ? [] : options;
   }
 }
 
 export const SIGNUP_HINTS = {
-  inpakken: "Inpakken start rond 07:30 in Aalsmeer.",
+  inpakken: "Inpakken van 6:30 tot 12:00 in Aalsmeer.",
   fietskoerier: "Ochtendsessie start om 9:00 uur in Amsterdam (max. 3 uurtjes). Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
   autokoerier: "Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
   oliebollenbar: "Op welke dag(en) wil je helpen in de Oliebollenbar?"

@@ -75,7 +75,7 @@ export function StaffingCalendar({ counts }: { counts: SignupCounts }) {
         <span className="text-muted">
           {Object.keys(OPTION_TARGETS).length > 0
             ? "Nodig per dag(deel): zoals in het tabblad Agenda."
-            : `Nodig per dag(deel): inpakken ${STAFFING_TARGETS.inpakken}, fiets ${STAFFING_TARGETS.fietskoerier}, auto ${STAFFING_TARGETS.autokoerier}, bar ${STAFFING_TARGETS.oliebollenbar}`}
+            : `Nodig per dag: inpakken ${STAFFING_TARGETS.inpakken}, auto ${STAFFING_TARGETS.autokoerier}, bar ${STAFFING_TARGETS.oliebollenbar}`}
         </span>
       </div>
       <div className="overflow-x-auto">

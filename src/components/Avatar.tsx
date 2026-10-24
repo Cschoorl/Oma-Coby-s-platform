@@ -28,13 +28,17 @@ const GOLD = "#dcb867";
 const COLOURS = ["#aea1d0", "#a3b887", "#e6a98c", "#e1bd70", "#98afc6", "#d1989d"];
 /** The same six a step fuller, for the small drawing and for hats: at 26 px soft colours blur together. */
 const FULL = ["#a091cb", "#93ae74", "#e09a7a", "#dcb25a", "#859fbd", "#c9868c"];
-/** White to steel grey: everybody here has been around a while. */
-const TONES = [WHITE, "#e4ded5", "#c7beb3", "#a0978c"];
+/**
+ * Warm old-age hair: cream, sand, taupe and faded chestnut. Not cool grey, which on a blue or lilac
+ * face turns everyone into a Smurf.
+ */
+const TONES = ["#f6ecd9", "#e3cfae", "#c9ab8b", "#a98670"];
 
 export const HAIRS = ["krul", "knot", "kaal", "pet", "hoed", "scheiding", "bob", "lang", "baret", "hoofddoek", "kuif", "muts"] as const;
 type Hair = (typeof HAIRS)[number];
 
-export const FACES = ["glim", "lach", "knipoog", "verbaasd", "tevreden", "giechel", "schalks"] as const;
+/** Only warm, friendly faces: everybody here is glad you came. */
+export const FACES = ["glim", "lach", "knipoog", "tevreden"] as const;
 type Face = (typeof FACES)[number];
 
 type Extra = "geen" | "bril" | "leesbril" | "snor" | "parels";
@@ -83,17 +87,22 @@ let roster = new Map<string, number>();
 export function setAvatarRoster(names: string[]): void {
   const unique = Array.from(new Set(names.map(normalise).filter(Boolean)));
   unique.sort((a, b) => hash(a) - hash(b) || a.localeCompare(b));
-  // Hair is handed out evenly: the first twelve people all have a different head, then a second
-  // round in other colours. Within that, each name keeps its own preferred hair and colour.
+  // Hair and colour are both handed out evenly: the first twelve people all have a different head,
+  // and no colour comes round again before the others have had a turn. Within that, each name keeps
+  // its own preferred hair and colour, and a hair never gets the same colour twice.
   const used: number[][] = HAIRS.map(() => []);
+  const perColour = COLOURS.map(() => 0);
   const next = new Map<string, number>();
   for (const name of unique) {
     const h = hash(name);
     const fewest = Math.min(...used.map((u) => u.length));
     let hair = h % HAIRS.length;
     while (used[hair].length > fewest) hair = (hair + 1) % HAIRS.length;
+    const free = COLOURS.map((_, i) => i).filter((i) => !used[hair].includes(i));
+    const least = Math.min(...free.map((i) => perColour[i]));
     let colour = Math.floor(h / HAIRS.length) % COLOURS.length;
-    for (let tries = 0; used[hair].includes(colour) && tries < COLOURS.length; tries++) colour = (colour + 1) % COLOURS.length;
+    while (!free.includes(colour) || perColour[colour] > least) colour = (colour + 1) % COLOURS.length;
+    perColour[colour]++;
     used[hair].push(colour);
     next.set(name, colour * HAIRS.length + hair);
   }
@@ -389,30 +398,10 @@ const FACE_SHAPES: Record<Face, Shape[]> = {
     brows([21.6, 31.4, 28, 31.4], [36, 29.6, 42.4, 29]),
     { d: "M27 46q5.4 4.4 10.4-.6", colour: "ink" }
   ],
-  verbaasd: [
-    { c: [25, 36.5, 3.1], fill: "ink" },
-    { c: [39, 36.5, 3.1], fill: "ink" },
-    { c: [25.9, 35.6, 0.9], fill: WHITE, only: "big" },
-    { c: [39.9, 35.6, 0.9], fill: WHITE, only: "big" },
-    brows([21.6, 28.6, 28, 27.6], [36, 27.6, 42.4, 28.6]),
-    { e: [32, 47.6, 2.4, 3], fill: "ink" }
-  ],
   tevreden: [
     { d: "M22 36q3 3 6 0M36 36q3 3 6 0", colour: "ink" },
     brows([21.8, 30.6, 28, 30.6], [36, 30.6, 42.2, 30.6]),
     { d: "M28 46.4q4 2.8 8 0", colour: "ink" }
-  ],
-  giechel: [
-    { d: "M22.6 34.6l4.4 2.2-4.4 2.2M41.4 34.6l-4.4 2.2 4.4 2.2", colour: "ink" },
-    brows([21.6, 29.4, 28, 28.6], [36, 28.6, 42.4, 29.4]),
-    { d: "M25.4 44.4h13.2c-.6 5-3.2 7.6-6.6 7.6s-6-2.6-6.6-7.6Z", fill: "ink" },
-    { d: "M28.8 50.4q3.2-2.4 6.4 0-1.4 1.6-3.2 1.6t-3.2-1.6Z", fill: TONGUE }
-  ],
-  schalks: [
-    // Half-closed: the top of each oval cut off by a level lid.
-    { d: "M22.6 36h4.8c0 2-1 3.2-2.4 3.2s-2.4-1.2-2.4-3.2ZM36.6 36h4.8c0 2-1 3.2-2.4 3.2s-2.4-1.2-2.4-3.2Z", fill: "ink" },
-    brows([21.6, 31.4, 28, 31.4], [36, 29.6, 42.4, 28]),
-    { d: "M27.4 47q3.6 1.8 8.2-1.8", colour: "ink" }
   ]
 };
 
@@ -447,19 +436,34 @@ const EXTRA_SHAPES: Record<Extra, { under?: Shape[]; over?: Shape[] }> = {
   }
 };
 
+/**
+ * What sits behind the face. "licht" is a pale tint of the face colour, "ander" a pale tint of the
+ * hat colour, "geen" nothing, "donker" a dark tint of the face colour.
+ */
+export const BACKDROPS = ["licht", "ander", "geen", "donker"] as const;
+export type Backdrop = (typeof BACKDROPS)[number];
+const BACKDROP: Backdrop = "licht";
+/** The warm off-white the pale tints are mixed with. */
+const PALE = "#fffaf0";
+
+/** A person's own colours: the face, a pale tint of it (the backdrop) and the dark tint the features are drawn in. */
+function avatarTints(look: AvatarLook, small = false): { face: string; pale: string; ink: string } {
+  const face = small ? FULL[Math.max(0, COLOURS.indexOf(look.colour))] : look.colour;
+  return { face, pale: mix(face, PALE, 0.74), ink: mix(face, DEEP, 0.62) };
+}
+
 /** Below this size the small drawing is used. */
 const SMALL_BELOW = 44;
 
 /** The drawing as SVG markup: the large one, or from SMALL_BELOW down its own simpler version. */
-export function avatarSvg(look: AvatarLook, size = 64): string {
+export function avatarSvg(look: AvatarLook, size = 64, backdrop: Backdrop = BACKDROP): string {
   const small = size < SMALL_BELOW;
-  const index = Math.max(0, COLOURS.indexOf(look.colour));
-  const face = small ? FULL[index] : look.colour;
+  const { face, pale, ink } = avatarTints(look, small);
   const colours: Record<string, string> = {
     face,
     hair: look.tone,
     accent: look.accent,
-    ink: mix(face, DEEP, 0.62),
+    ink,
     mid: mix(face, DEEP, 0.2),
     moustache: mix(look.tone, DEEP, 0.12)
   };
@@ -488,7 +492,9 @@ export function avatarSvg(look: AvatarLook, size = 64): string {
   const clip = `oc-av-${small ? "s" : "l"}-${hash(JSON.stringify(look)).toString(36)}`;
   const ears = NO_EARS.has(look.hair) ? "" : [{ e: [11.4, 38.4, 3.6, 4.6], fill: "mid" } as Shape, { e: [52.6, 38.4, 3.6, 4.6], fill: "mid" } as Shape].map(draw).join("");
   const body = [
-    `<circle cx="32" cy="32" r="32" fill="${colours.ink}"/>`,
+    backdrop === "geen"
+      ? ""
+      : `<circle cx="32" cy="32" r="32" fill="${backdrop === "donker" ? colours.ink : (backdrop === "ander" ? mix(look.accent, PALE, 0.74) : pale)}"/>`,
     group(hair.back),
     ears,
     draw({ d: HEAD, fill: "face" }),
@@ -525,12 +531,14 @@ export function firstName(name: string): string {
 
 /**
  * Face plus name in a soft pill. `mine` marks the logged-in person (gouwe ouwe tint), so you
- * recognise yourself by your own name and face instead of "Jij".
+ * recognise yourself by your own name and face instead of "Jij". The pill stays neutral: a person's
+ * own colour lives in the poppetje, and colour on the pill would read as the staffing colours
+ * (roze te weinig, geel bijna, groen genoeg). The face gets room on all sides, so it does not touch the edge.
  */
 export function NameTag({ name, mine = false, short = false, suffix }: { name: string; mine?: boolean; short?: boolean; suffix?: string }) {
   return (
     <span
-      className={`inline-flex max-w-full items-center gap-1 whitespace-nowrap rounded-full py-0.5 pl-0.5 pr-2.5 text-xs font-bold ${
+      className={`inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full py-[3px] pl-[3px] pr-3 text-xs font-bold ${
         mine ? "bg-gouwe text-krent" : "bg-vul text-krent"
       }`}
     >

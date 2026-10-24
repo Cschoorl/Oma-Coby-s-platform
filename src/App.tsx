@@ -182,8 +182,8 @@ function App() {
               <span className={`inline-block h-2 w-2 rounded-full ${liveDot}`} />
               <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}</span>
             </span>
-            <span className="hidden items-center gap-1.5 text-krent sm:inline-flex">
-              <Avatar name={session.name} size={26} />
+            <span className="hidden items-center gap-2 text-krent sm:inline-flex">
+              <Avatar name={session.name} size={28} />
               <span>
                 <b>{session.name}</b> · {roleLabel[session.role]}
               </span>

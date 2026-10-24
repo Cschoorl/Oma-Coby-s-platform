@@ -43,11 +43,13 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 ## Personen
 
 1. Een persoon staat er altijd met naam en eigen poppetje (`Avatar`, `NameTag` in `src/components/Avatar.tsx`), nooit als "Jij".
-2. Het poppetje is een getekend oudje in vlakke kleur, zonder outlines: een breed, zacht-rechthoekig gezicht op een rond vlak in een donkere tint van de gezichtskleur. Ogen, wenkbrauwen (balkjes, geen lijntjes) en mond zijn dichte vormen in die donkere tint. Contrast doet het werk, niet lijnen. Alle gezichten hebben dezelfde bouw.
-3. De gezichtskleuren zijn zes iets vergrijsde, op elkaar afgestemde tinten: lavendel, saliegroen, perzik, honinggeel, mistblauw en oudroze. Geen huidtinten en geen felle snoepkleuren. Alle blosjes zijn hetzelfde zachte zalmroze (`#D99294`). Hoeden en mutsen krijgen een van de andere vijf kleuren. Deze kleuren zijn alleen voor de poppetjes, net als bij de discozaal.
+2. Het poppetje is een getekend oudje in vlakke kleur, zonder outlines: een breed, zacht-rechthoekig gezicht op een rond vlak in een bleke tint van de gezichtskleur. Ogen, wenkbrauwen (balkjes, geen lijntjes) en mond zijn dichte vormen in een donkere tint van die kleur. Contrast doet het werk, niet lijnen. Alle gezichten hebben dezelfde bouw en kijken vriendelijk: glimlach, lach, tevreden of knipoog.
+3. De gezichtskleuren zijn zes iets vergrijsde, op elkaar afgestemde tinten: lavendel, saliegroen, perzik, honinggeel, mistblauw en oudroze. Geen huidtinten en geen felle snoepkleuren. Het haar is warm (crème, zand, taupe, verbleekt kastanje), nooit koel grijs: dat maakt van een blauw of lila gezicht een Smurf. Alle blosjes zijn hetzelfde zachte zalmroze (`#D99294`). Hoeden en mutsen krijgen een van de andere vijf kleuren. Deze kleuren zijn alleen voor de poppetjes, net als bij de discozaal.
 4. Er zijn twee tekeningen van hetzelfde poppetje. De grote (vanaf 44 px) heeft kleine details zoals lachlijntjes, plukjes en het bloemetje op de hoed. De kleine (rooster, lijsten, naamlabels) is een eigen vereenvoudigde versie, geen verkleinde kopie: alleen de grote vormen, iets vollere kleuren, ingezoomd op het gezicht.
-5. Dezelfde naam geeft overal hetzelfde poppetje. Binnen het dashboard krijgt iedereen een eigen combinatie van haar en kleur.
-6. Wie ingelogd is, staat in een gouwe ouwe-pilletje (`NameTag mine`); anderen in een zacht vlak.
+5. Je eigen kleur zit in het poppetje, niet in de naam of de pil. Naamlabels blijven neutraal (zacht vlak, naam in krent), want kleur op een pil leest als de bezettingskleuren (roze te weinig, geel bijna, groen genoeg) en de taakkleuren. Alleen je eigen naam staat in gouwe ouwe.
+6. Het poppetje krijgt ademruimte: in een naamlabel 3 px rondom, zodat het de rand niet raakt.
+7. Dezelfde naam geeft overal hetzelfde poppetje. Binnen het dashboard krijgt iedereen een eigen combinatie van haar en kleur.
+8. Wie ingelogd is, staat in een gouwe ouwe-pilletje (`NameTag mine`); anderen in een zacht vlak.
 
 ## Gedrag
 

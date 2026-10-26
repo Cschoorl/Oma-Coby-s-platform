@@ -38,7 +38,7 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 3. Randen alleen voor invoervelden, de focusring en een staat die aandacht vraagt (de volgende stop bij Bezorgen).
 4. Tweede knoppen, filters, leverdagen, keuze-chips en afvinktegels zijn zachte vlakken zonder rand (`bg-vul`); actief = wit pilletje met schaduw, of krent.
 5. Knoppen en velden 6px hoek, badges 4px. Het schuine ovaal (`Sticker`, `Oval`) alleen voor mijlpalen en succes.
-6. Tikvlakken minimaal 44px op schermen die op telefoon worden gebruikt (Bezorgen, Inpakken, Aanmelden, Kosten).
+6. Tikvlakken minimaal 44px op schermen die op telefoon worden gebruikt (Bezorgen, Inpakken, Aanmelden, Bestellen, Kosten).
 
 ## Personen
 
@@ -71,7 +71,7 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 
 1. Alleen na een gelukte actie, bij voortgang, in lege staten en bij laden dat langer dan een seconde duurt.
 2. Eén per actie, korter dan 400 ms, nooit blokkerend (`toast`, `Sticker slap`).
-3. Bij iets bijzonders rolt er een getekende oliebol onderin voorbij (`rollOliebol`), over een baan van hooguit 480px in het midden, niet over de hele breedte: alles ingepakt, laatste stop afgeleverd, mijlpaal gehaald, aanmelding binnen. Nooit vaker dan één keer per moment.
+3. Bij iets bijzonders rolt er een getekende oliebol onderin voorbij (`rollOliebol`), over een baan van hooguit 480px in het midden, niet over de hele breedte: alles ingepakt, laatste stop afgeleverd, mijlpaal gehaald, aanmelding of zakelijke aanvraag binnen. Nooit vaker dan één keer per moment.
    Bij écht wachten rolt een klein oliebolletje over een kort baantje met één regel tekst (`OliebolLoader`): het eerste laden van het dashboard (onder de skeletblokken), een bon uitlezen en routes berekenen. Pas na 1 seconde (0,6 s bij bon en routes), zodat snel laden niets laat flitsen. Niet bij snelle acties zoals afvinken, claimen of een bezorger kiezen: die gaan direct.
 4. Oudjes rekenen we eerlijk: oliebollen gedeeld door 10, naar beneden afgerond (`oudjesLine`, `OLIEBOLLEN_PER_OUDJE`).
 5. De discozaal (`src/features/stats/Discozaal.tsx`) is een optie in de grafiekkeuze op de Tussenstand (Oliebollen, Bestellingen, Omzet, Discozaal), met het aantal oudjes als tellertje. Elk figuurtje is één oudje: drie rijen op een platte dansvloer, verspringend zodat elk hoofd zichtbaar blijft; ongeveer één op de tien oudjes heeft een donkerdere huid. Vanaf 60 oudjes komt af en toe een polonaise langs (die telt mee); wie niet past staat als aantal "in de rij voor de deur", zodat de zaal altijd optelt tot het getal. Achter de dansvloer het café van Oma Coby: staande lamp met franjekap, letterbord met het aantal, platenspeler, boekenkast en een tafel met oliebollen. Schiet het oudje met de rollator vooruit, dan krijgt ze een raketvlammetje.
@@ -90,3 +90,4 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 | Lege lijst inpakken | "Niks meer te doen. Oma Coby is trots op je." |
 | Inloggen | "Wie staat er achter de pan?" |
 | Aanmelding binnen | "Je bent nu officieel Oma's hulpje." |
+| Zakelijke aanvraag binnen | "Bedankt! Je aanvraag is binnen." |

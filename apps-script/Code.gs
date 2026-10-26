@@ -73,6 +73,26 @@ const CONFIG = {
   },
   /** Afzendernaam van de klantbevestiging. */
   MAIL_SENDER_NAME: "Oma Coby's Oliebollenbar",
+  /**
+   * Zakelijk bestellen (#/bestellen). Standaardprijzen en -dagen; overschrijf ze in het tabblad
+   * Instellingen (zakelijk_prijs, zakelijk_minimum, …) en in het tabblad Zakelijke dagen.
+   * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
+   */
+  BUSINESS: {
+    price: 1.83,
+    vatPercent: 9,
+    minimum: 50,
+    fees: { regio: 10, buiten: 25 },
+    surcharges: { regulier: 0, voor10: 10, voor9: 15 },
+    donationPrice: 2,
+    leadHours: 24,
+    deliveryDays: ['2026-12-14', '2026-12-15', '2026-12-16', '2026-12-17', '2026-12-18', '2026-12-21', '2026-12-22', '2026-12-28',
+      '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-04', '2027-01-05', '2027-01-06', '2027-01-07', '2027-01-08'],
+    pickupDays: [['2026-12-30', '14:00–16:00'], ['2026-12-31', '14:00–16:00']],
+    email: 'info@omacobysoliebollenbar.nl',
+    /** Wie een mail krijgt bij een nieuwe aanvraag (leeg = niemand). Instelling: zakelijk_melding_naar. */
+    notify: 'info@omacobysoliebollenbar.nl'
+  },
   /** Map in Google Drive voor foto's van bonnen. */
   RECEIPT_FOLDER: 'Oliebollen bonnen',
   /** Claude-model voor het uitlezen van bonnen. */
@@ -159,7 +179,12 @@ const TABS = {
   agenda: ['Agenda', ['datum', 'taak', 'dagdeel', 'tijd', 'locatie', 'nodig']],
   history: ['Historie', ['jaar', 'datum', 'bestellingen', 'oliebollen', 'omzet']],
   settings: ['Instellingen', ['sleutel', 'waarde']],
-  packlog: ['Inpaklog', ['tijd', 'order_id', 'klant', 'actie', 'door', 'met_krenten', 'zonder_krenten']]
+  packlog: ['Inpaklog', ['tijd', 'order_id', 'klant', 'actie', 'door', 'met_krenten', 'zonder_krenten']],
+  business: ['Zakelijke aanvragen', ['ordernummer', 'ingediend_op', 'status', 'onderneming', 'contactpersoon', 'telefoon', 'email',
+    'factuur_email', 'factuuradres', 'referentie', 'met_krenten', 'zonder_krenten', 'donatie_oliebollen', 'flyers', 'afhalen_bezorgen',
+    'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
+    'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op']],
+  businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']]
 };
 
 const PERMISSIONS = {
@@ -184,7 +209,10 @@ const PERMISSIONS = {
   setDelivered: ['beheer', 'bezorger'],
   reviewCost: ['beheer'],
   payCost: ['beheer'],
-  anonymize: ['beheer']
+  anonymize: ['beheer'],
+  businessInfo: ['public'],
+  submitBusinessOrder: ['public'],
+  setBusinessStatus: ['beheer']
 };
 
 // ---------------------------------------------------------------------------
@@ -631,7 +659,8 @@ function buildState_(role, name) {
     pricePerPiece: null,
     kmRate: null,
     delivery: {},
-    agenda: readAgenda_()
+    agenda: readAgenda_(),
+    business: isAdmin ? readBusiness_() : []
   };
 
   readTab_('meta').forEach(function (r) {
@@ -735,7 +764,7 @@ function readOrders_() {
   }
   const sheetSeason = Object.keys(yearCount).sort(function (a, b) { return yearCount[b] - yearCount[a]; })[0];
   const defaultSeason = sheetSeason ? Number(sheetSeason) : CONFIG.SEASON_YEAR;
-  return values.slice(1).map(function (row, i) {
+  const rows = values.slice(1).map(function (row, i) {
     const out = {};
     Object.keys(index).forEach(function (field) {
       const value = row[index[field]];
@@ -756,6 +785,8 @@ function readOrders_() {
     if (!(row[index.leverdatum] instanceof Date)) out.leverdatum = dutchDate_(out.leverdatum, seasonYear);
     return out;
   }).filter(function (r) { return r.leverdatum && (num_(r.oliebollen_met_krenten) || num_(r.oliebollen_zonder_krenten) || r.locatie_naam); });
+  // Confirmed business requests join the orders, unless someone already copied them in (same Unique ID).
+  return rows.concat(businessOrderRows_(rows));
 }
 
 const DUTCH_MONTHS = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
@@ -948,6 +979,7 @@ function sheet_(tab) {
     sheet.appendRow(def[1]);
     sheet.setFrozenRows(1);
     if (tab === 'agenda') defaultAgendaRows_().forEach(function (row) { sheet.appendRow(row); });
+    if (tab === 'businessDays') defaultBusinessDays_().forEach(function (row) { sheet.appendRow(row); });
   } else {
     textKeys_(tab, sheet);
     // Add columns introduced by a newer script version to an existing tab.
@@ -1147,6 +1179,7 @@ function anonymize_() {
   blank('packing', ['geclaimd_door', 'ingepakt_door']);
   blank('packlog', ['klant', 'door']);
   blank('delivery', ['afgeleverd_door']);
+  blank('business', ['contactpersoon', 'telefoon', 'email', 'factuur_email', 'opmerking', 'behandeld_door']);
   out.costs = blank('costs', ['ingevoerd_door', 'iban', 'beoordeeld_door']);
   clearRows_(sheet_('routes'));
 
@@ -1236,4 +1269,293 @@ function formatCell_(date, field) {
   if (field === 'geplande_tijd') return Utilities.formatDate(date, tz, 'HH:mm');
   if (/_op$|tijdstempel|timestamp/.test(field)) return Utilities.formatDate(date, tz, 'yyyy-MM-dd HH:mm:ss');
   return Utilities.formatDate(date, tz, 'yyyy-MM-dd');
+}
+
+// ---------------------------------------------------------------------------
+// Zakelijk bestellen (#/bestellen)
+//
+// Het bestelformulier schrijft in het tabblad Zakelijke aanvragen, nooit in Totaal_lijst bestellingen.
+// Beheer bevestigt een aanvraag op de pagina Zakelijk; dan telt hij mee als order (zie businessOrderRows_).
+// Prijzen en dagen: CONFIG.BUSINESS, te overschrijven in Instellingen en Zakelijke dagen.
+
+const BUSINESS_AREAS = { regio: 'Amsterdam/Aalsmeer', buiten: 'Buiten Amsterdam' };
+const BUSINESS_MOMENTS = { regulier: 'Tussen 9:00 en 12:30', voor10: 'Vóór 10:00', voor9: 'Vóór 9:00' };
+const BUSINESS_TEXT_COLUMNS = ['ordernummer', 'telefoon', 'postcode', 'leverdatum', 'referentie'];
+
+Object.assign(HANDLERS, {
+  businessInfo: function () {
+    return businessInfo_();
+  },
+  submitBusinessOrder: function (body) {
+    // Honeypot: people never see this field, bots fill it in.
+    if (String(body.website || '').trim()) throw new Error('Je aanvraag kon niet worden verstuurd.');
+    const info = businessInfo_();
+    const input = businessInput_(body);
+    const problem = validateBusiness_(input, info);
+    if (problem) throw new Error(problem);
+    const totals = businessTotals_(input, info);
+
+    const saved = withLock_(function () {
+      const id = nextBusinessId_();
+      writeBusinessRow_({
+        ordernummer: id, ingediend_op: now_(), status: 'nieuw', onderneming: input.company, contactpersoon: input.contact,
+        telefoon: input.phone, email: input.email, factuur_email: input.invoiceEmail, factuuradres: input.invoiceAddress,
+        referentie: input.reference, met_krenten: input.withRaisins, zonder_krenten: input.withoutRaisins,
+        donatie_oliebollen: input.donation, flyers: input.flyers ? 'Ja' : 'Nee',
+        afhalen_bezorgen: input.fulfilment === 'afhalen' ? 'Afhalen' : 'Bezorgen', leverdatum: input.date,
+        bezorgmoment: input.fulfilment === 'bezorgen' ? BUSINESS_MOMENTS[input.moment] : '',
+        bezorgomgeving: input.fulfilment === 'bezorgen' ? BUSINESS_AREAS[input.area] : '',
+        adres: input.street, postcode: input.postalCode, plaats: input.city,
+        afhalen_afgestemd: input.fulfilment === 'afhalen' ? (input.pickupAgreed ? 'Ja' : 'Nee') : '',
+        opmerking: input.remark, oliebollen: totals.oliebollen, bedrag_excl_btw: totals.subtotal, btw: totals.vat,
+        bedrag_incl_btw: totals.total, donatie_bedrag: totals.donation, factuurbedrag: totals.invoice, ouderen: totals.ouderen
+      });
+      bump_();
+      return id;
+    });
+
+    // Mail after saving: a mail problem never loses the request.
+    let warning = '';
+    try {
+      sendBusinessMails_(saved, input, totals, info);
+    } catch (err) {
+      warning = 'Je aanvraag is opgeslagen, maar de kopie per mail lukte niet.';
+    }
+    return { id: saved, warning: warning };
+  },
+  setBusinessStatus: function (body) {
+    const status = String(body.status || '');
+    if (['nieuw', 'bevestigd', 'afgewezen'].indexOf(status) === -1) throw new Error('Onbekende status.');
+    const reason = String(body.reason || '').trim();
+    if (status === 'afgewezen' && !reason) throw new Error('Schrijf kort waarom je de aanvraag afwijst.');
+    return withLock_(function () {
+      const row = findRow_('business', body.id);
+      row.set({
+        status: status, reden: status === 'afgewezen' ? reason : '',
+        behandeld_door: status === 'nieuw' ? '' : String(body.name || ''), behandeld_op: status === 'nieuw' ? '' : now_()
+      });
+      return bump_();
+    });
+  }
+});
+
+/** Prijzen en dagen: CONFIG.BUSINESS, met wat er in Instellingen en Zakelijke dagen staat eroverheen. */
+function businessInfo_() {
+  const b = CONFIG.BUSINESS;
+  const settings = {};
+  readTab_('settings').forEach(function (r) { settings[String(r.sleutel).trim()] = r.waarde; });
+  const number = function (key, fallback) {
+    const v = settings[key];
+    return v === undefined || v === '' ? fallback : num_(v);
+  };
+  const days = readTab_('businessDays').filter(function (r) {
+    return r.datum && String(r.open || 'ja').trim().toLowerCase() !== 'nee';
+  });
+  const iso = function (r) { return isoDate_(r.datum) || dutchDate_(r.datum, CONFIG.SEASON_YEAR); };
+  const delivery = days.filter(function (r) { return String(r.soort).trim().toLowerCase() !== 'afhalen'; }).map(iso).filter(String).sort();
+  const pickup = days.filter(function (r) { return String(r.soort).trim().toLowerCase() === 'afhalen'; })
+    .map(function (r) { return { date: iso(r), time: String(r.tijd || '') }; }).filter(function (d) { return d.date; });
+  return {
+    price: number('zakelijk_prijs', b.price),
+    vatRate: number('zakelijk_btw', b.vatPercent) / 100,
+    minimum: number('zakelijk_minimum', b.minimum),
+    fees: { regio: number('zakelijk_bezorgen_regio', b.fees.regio), buiten: number('zakelijk_bezorgen_buiten', b.fees.buiten) },
+    surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_9', b.surcharges.voor9) },
+    donationPrice: number('zakelijk_donatie', b.donationPrice),
+    leadHours: number('zakelijk_uren_vooraf', b.leadHours),
+    // An emptied tab means: no days yet, use the defaults.
+    deliveryDays: days.length ? delivery : b.deliveryDays,
+    pickupDays: days.length ? pickup : b.pickupDays.map(function (p) { return { date: p[0], time: p[1] }; }),
+    email: String(settings.zakelijk_email || b.email)
+  };
+}
+
+function defaultBusinessDays_() {
+  const b = CONFIG.BUSINESS;
+  return b.deliveryDays.map(function (d) { return [d, 'bezorgen', '9:00–12:30', 'ja']; })
+    .concat(b.pickupDays.map(function (p) { return [p[0], 'afhalen', p[1], 'ja']; }));
+}
+
+function businessInput_(body) {
+  const text = function (v, max) { return String(v === undefined || v === null ? '' : v).trim().slice(0, max || 200); };
+  const count = function (v) { const n = Math.round(Number(v)); return isFinite(n) && n > 0 ? n : 0; };
+  const fulfilment = body.fulfilment === 'afhalen' ? 'afhalen' : 'bezorgen';
+  return {
+    withRaisins: count(body.withRaisins), withoutRaisins: count(body.withoutRaisins), donation: count(body.donation),
+    flyers: !!body.flyers, fulfilment: fulfilment,
+    area: fulfilment === 'bezorgen' && BUSINESS_AREAS[body.area] ? body.area : '',
+    moment: BUSINESS_MOMENTS[body.moment] ? body.moment : 'regulier',
+    date: text(body.date, 10), pickupAgreed: !!body.pickupAgreed,
+    street: fulfilment === 'bezorgen' ? text(body.street) : '', postalCode: fulfilment === 'bezorgen' ? text(body.postalCode, 10).toUpperCase() : '',
+    city: fulfilment === 'bezorgen' ? text(body.city) : '',
+    company: text(body.company), contact: text(body.contact), phone: text(body.phone, 30), email: text(body.email),
+    invoiceEmail: text(body.invoiceEmail), invoiceAddress: text(body.invoiceAddress, 400), reference: text(body.reference),
+    remark: text(body.remark, 1000)
+  };
+}
+
+/** Same rules as validateBusiness in src/features/business/business.ts; returns the first problem. */
+function validateBusiness_(i, info) {
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (i.withRaisins % 10 || i.withoutRaisins % 10 || i.donation % 10) return 'Kies de aantallen in tientallen.';
+  if (i.withRaisins + i.withoutRaisins < info.minimum) return 'Bestel samen minimaal ' + info.minimum + ' oliebollen.';
+  const open = new Date(i.date + 'T09:00:00').getTime() - Date.now() >= info.leadHours * 3600000;
+  if (i.fulfilment === 'bezorgen') {
+    if (!i.street || !i.city || !/^\d{4}\s?[A-Z]{2}$/.test(i.postalCode)) return 'Vul het bezorgadres helemaal in.';
+    if (!i.area) return 'Kies waar we bezorgen.';
+    if (info.deliveryDays.indexOf(i.date) === -1) return 'Op deze dag bezorgen we niet. Kies een andere dag.';
+  } else {
+    if (!i.pickupAgreed) return 'Afhalen kan alleen na overleg. Mail eerst naar ' + info.email + '.';
+    if (!info.pickupDays.some(function (d) { return d.date === i.date; })) return 'Op deze dag kun je niet afhalen. Kies een andere dag.';
+  }
+  if (!open) return 'Deze dag is te snel: bestel minimaal ' + info.leadHours + ' uur van tevoren.';
+  if (!i.company) return 'Vul de naam van je onderneming in.';
+  if (!i.contact) return 'Vul de naam van de contactpersoon in.';
+  if (i.phone.replace(/\D/g, '').length < 10) return 'Vul een geldig telefoonnummer in.';
+  if (!email.test(i.email)) return 'Vul een geldig e-mailadres in.';
+  if (!email.test(i.invoiceEmail)) return 'Vul een geldig e-mailadres voor de factuur in.';
+  return '';
+}
+
+/** Same sums as businessTotals in src/features/business/business.ts. */
+function businessTotals_(i, info) {
+  const cents = function (n) { return Math.round(n * 100) / 100; };
+  const oliebollen = i.withRaisins + i.withoutRaisins;
+  const bollen = cents(oliebollen * info.price);
+  const bezorgen = i.fulfilment === 'bezorgen';
+  const delivery = bezorgen && i.area ? info.fees[i.area] : 0;
+  const surcharge = bezorgen ? info.surcharges[i.moment] || 0 : 0;
+  const subtotal = cents(bollen + delivery + surcharge);
+  const vat = cents(subtotal * info.vatRate);
+  const total = cents(subtotal + vat);
+  const donation = cents(i.donation * info.donationPrice);
+  return { oliebollen: oliebollen, bollen: bollen, delivery: delivery, surcharge: surcharge, subtotal: subtotal, vat: vat, total: total,
+    donation: donation, invoice: cents(total + donation), ouderen: Math.floor(oliebollen / 10) };
+}
+
+/** "Z26-0001", "Z26-0002", … per seizoen. Call inside withLock_. */
+function nextBusinessId_() {
+  const prefix = 'Z' + String(CONFIG.SEASON_YEAR).slice(2) + '-';
+  let max = 0;
+  readTab_('business').forEach(function (r) {
+    const id = String(r.ordernummer);
+    if (id.indexOf(prefix) === 0) max = Math.max(max, Number(id.slice(prefix.length)) || 0);
+  });
+  return prefix + ('000' + (max + 1)).slice(-4);
+}
+
+/** Like appendObject_, but phone numbers, postcodes and dates stay text ("0612…" keeps its 0). */
+function writeBusinessRow_(obj) {
+  const sheet = sheet_('business');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const row = sheet.getLastRow() + 1;
+  BUSINESS_TEXT_COLUMNS.forEach(function (h) {
+    const col = headers.indexOf(h);
+    if (col !== -1) sheet.getRange(row, col + 1).setNumberFormat('@');
+  });
+  sheet.getRange(row, 1, 1, headers.length).setValues([headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; })]);
+}
+
+function readBusiness_() {
+  const key = function (map, label) {
+    return Object.keys(map).filter(function (k) { return map[k] === label; })[0] || '';
+  };
+  let info = null;
+  return readTab_('business').filter(function (r) { return r.ordernummer; }).map(function (r) {
+    const fulfilment = /afhal/i.test(String(r.afhalen_bezorgen)) ? 'afhalen' : 'bezorgen';
+    const oliebollen = num_(r.met_krenten) + num_(r.zonder_krenten);
+    const total = num_(r.bedrag_incl_btw);
+    const subtotal = num_(r.bedrag_excl_btw);
+    return {
+      id: String(r.ordernummer), createdAt: String(r.ingediend_op || ''), status: String(r.status || 'nieuw').toLowerCase(),
+      company: String(r.onderneming || ''), contact: String(r.contactpersoon || ''), phone: String(r.telefoon || ''),
+      email: String(r.email || ''), invoiceEmail: String(r.factuur_email || ''), invoiceAddress: String(r.factuuradres || ''),
+      reference: String(r.referentie || ''), withRaisins: num_(r.met_krenten), withoutRaisins: num_(r.zonder_krenten),
+      donation: num_(r.donatie_oliebollen), flyers: truthy_(r.flyers), fulfilment: fulfilment,
+      date: isoDate_(r.leverdatum), moment: key(BUSINESS_MOMENTS, String(r.bezorgmoment)) || 'regulier',
+      area: key(BUSINESS_AREAS, String(r.bezorgomgeving)), street: String(r.adres || ''), postalCode: String(r.postcode || ''),
+      city: String(r.plaats || ''), pickupAgreed: truthy_(r.afhalen_afgestemd), remark: String(r.opmerking || ''),
+      reason: String(r.reden || ''), handledBy: String(r.behandeld_door || ''), handledAt: String(r.behandeld_op || ''),
+      totals: {
+        oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, subtotal: subtotal, vat: num_(r.btw), total: total,
+        donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen)
+      }
+    };
+  }).map(function (b) {
+    // Split the amount again for the details panel, from the prices of now.
+    info = info || businessInfo_();
+    const t = businessTotals_(b, info);
+    b.totals.bollen = t.bollen;
+    b.totals.delivery = t.delivery;
+    b.totals.surcharge = t.surcharge;
+    return b;
+  });
+}
+
+/** Confirmed requests as order rows (dashboard field names), skipping numbers the order list already has. */
+function businessOrderRows_(orders) {
+  const known = {};
+  orders.forEach(function (o) { known[String(o.order_id)] = true; });
+  return readBusiness_().filter(function (b) { return b.status === 'bevestigd' && !known[b.id]; }).map(function (b) {
+    const bezorgen = b.fulfilment === 'bezorgen';
+    return {
+      order_id: b.id, leverdatum: b.date, leverancier_naam: '', locatie_naam: b.company, contactpersoon: b.contact,
+      telefoon: b.phone, email: b.email, adres: b.street, postcode: b.postalCode, plaats: b.city, geplande_tijd: '', status: 'open',
+      oliebollen_met_krenten: b.withRaisins, oliebollen_zonder_krenten: b.withoutRaisins, extra_notities: b.remark,
+      type_klant: 'Zakelijk', bedrag: b.totals.total, besteldatum: b.createdAt.slice(0, 10),
+      afhalen_bezorgen: bezorgen ? 'Bezorgen' : 'Afhalen', flyers: b.flyers ? 'Ja' : 'Nee',
+      bezorgomgeving: bezorgen ? BUSINESS_AREAS[b.area] || '' : '', bezorgmoment: bezorgen ? BUSINESS_MOMENTS[b.moment] : ''
+    };
+  });
+}
+
+function sendBusinessMails_(id, i, t, info) {
+  const euro = function (n) { return '€ ' + n.toFixed(2).replace('.', ','); };
+  const day = function (iso) {
+    const d = new Date(iso + 'T12:00:00');
+    return ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][d.getDay()] + ' ' + d.getDate() + ' ' + DUTCH_MONTHS[d.getMonth()];
+  };
+  const pickup = info.pickupDays.filter(function (d) { return d.date === i.date; })[0];
+  const lines = [
+    'Beste ' + i.contact.split(' ')[0] + ',',
+    '',
+    'Dank je wel voor je aanvraag bij Oma Coby\'s Oliebollenbar. We kijken hem na en mailen je een bevestiging.',
+    'Hieronder staat een kopie.',
+    '',
+    'Aanvraagnummer: ' + id,
+    'Onderneming: ' + i.company,
+    'MET krenten: ' + i.withRaisins,
+    'ZONDER krenten: ' + i.withoutRaisins,
+    i.donation ? 'Extra gedoneerd: ' + i.donation + ' oliebollen' : '',
+    'Flyers: ' + (i.flyers ? 'ja' : 'nee'),
+    i.fulfilment === 'bezorgen'
+      ? 'Bezorgen: ' + day(i.date) + ', ' + BUSINESS_MOMENTS[i.moment].toLowerCase() + '\nAdres: ' + i.street + ', ' + i.postalCode + ' ' + i.city
+      : 'Afhalen: ' + day(i.date) + (pickup ? ', ' + pickup.time : ''),
+    '',
+    'Subtotaal excl. btw: ' + euro(t.subtotal),
+    'Btw ' + Math.round(info.vatRate * 100) + '%: ' + euro(t.vat),
+    'Totaal incl. btw: ' + euro(t.total),
+    t.donation ? 'Extra donatie: ' + euro(t.donation) + '\nOp je factuur: ' + euro(t.invoice) : '',
+    '',
+    'Factuur naar: ' + i.invoiceEmail + (i.reference ? ' (referentie ' + i.reference + ')' : ''),
+    i.remark ? 'Je opmerking: ' + i.remark : '',
+    '',
+    'Met je bestelling gaan ' + t.ouderen + ' ouderen gratis naar een Gouwe Ouwe-avond tegen eenzaamheid. Samen maken we een verschil!',
+    '',
+    'Hartelijke groet,',
+    'Oma Coby\'s Oliebollenbar',
+    info.email
+  ].filter(function (l, n, all) { return l !== '' || all[n - 1] !== ''; });
+  MailApp.sendEmail({
+    to: i.email, replyTo: info.email, name: CONFIG.MAIL_SENDER_NAME,
+    subject: 'Je aanvraag ' + id + ' bij Oma Coby\'s Oliebollenbar', body: lines.join('\n')
+  });
+  const notify = String(getSetting_('zakelijk_melding_naar') || CONFIG.BUSINESS.notify).trim();
+  if (notify) {
+    MailApp.sendEmail({
+      to: notify, replyTo: i.email, name: CONFIG.MAIL_SENDER_NAME,
+      subject: 'Nieuwe zakelijke aanvraag ' + id + ': ' + i.company + ', ' + t.oliebollen + ' oliebollen op ' + day(i.date),
+      body: 'Nakijken en bevestigen op de pagina Zakelijk in het platform.\n\n' + lines.slice(5).join('\n')
+    });
+  }
 }

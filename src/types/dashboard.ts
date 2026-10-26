@@ -1,3 +1,4 @@
+import type { BusinessOrder } from "./business";
 import type { Order } from "./order";
 
 export type Role = "beheer" | "inpakker" | "bezorger";
@@ -204,6 +205,8 @@ export interface DashboardState {
   kmRate: number | null;
   delivery: Record<string, DeliveryState>;
   agenda: AgendaSlot[];
+  /** Zakelijke aanvragen van het bestelformulier; alleen voor beheer. */
+  business: BusinessOrder[];
 }
 
 export const emptyMeta: OrderMeta = {

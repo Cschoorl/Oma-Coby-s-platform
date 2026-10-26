@@ -12,6 +12,8 @@ import { RoutesPage } from "./features/routes/RoutesPage";
 import { StatsPage } from "./features/stats/StatsPage";
 import { SignupPage } from "./features/volunteers/SignupPage";
 import { VolunteersPage } from "./features/volunteers/VolunteersPage";
+import { BusinessAdminPage } from "./features/business/BusinessAdminPage";
+import { BusinessOrderPage } from "./features/business/BusinessOrderPage";
 import { Notice, Skeleton, Toaster } from "./components/ui";
 import { Avatar, setAvatarRoster } from "./components/Avatar";
 import logoUrl from "./assets/logo-oliebollenbar.svg";
@@ -33,6 +35,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
+  { path: "/zakelijk", label: "Zakelijk", description: "Aanvragen van het zakelijke bestelformulier nakijken, bevestigen of afwijzen.", roles: ["beheer"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
   { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren. Achter de discobal-knop: de discozaal.", roles: ["beheer"] },
@@ -42,6 +45,9 @@ const NAV: NavItem[] = [
   { path: "/pakbonnen", label: "Pakbonnen", description: "Per order een pakbon om te printen en bij de doos te leggen.", roles: ["beheer", "inpakker"], hidden: true }
 ];
 
+/** Pages without login; a logged-in visitor can open them too. */
+const PUBLIC = ["/aanmelden", "/bestellen"];
+
 const HOME: Record<Role, string> = { beheer: "/inpakken", inpakker: "/inpakken", bezorger: "/bezorger" };
 
 const roleLabel: Record<Role, string> = { beheer: "Beheer", inpakker: "Inpakker", bezorger: "Bezorger" };
@@ -50,6 +56,7 @@ const roleLabel: Record<Role, string> = { beheer: "Beheer", inpakker: "Inpakker"
 const menuGlyph: Record<string, string> = {
   "/inpakken": "▣",
   "/orders": "@",
+  "/zakelijk": "Z",
   "/routes": "→",
   "/bezorger": "✓",
   "/tussenstand": "%",
@@ -97,7 +104,7 @@ function App() {
   const current = allowed.find((item) => item.path === route.path);
 
   useEffect(() => {
-    if (session && route.path !== "/aanmelden" && !current) navigate(HOME[session.role]);
+    if (session && !PUBLIC.includes(route.path) && !current) navigate(HOME[session.role]);
   }, [session, route.path, current]);
 
   useEffect(() => setMenuOpen(false), [route.path]);
@@ -113,20 +120,21 @@ function App() {
   }
 
   // Pages without login (signup, login) get a simple centred layout.
-  const simpleShell = (content: React.ReactNode) => (
+  const simpleShell = (content: React.ReactNode, wide = false) => (
     <div className="min-h-screen bg-meel">
       <header className="border-b border-lijn bg-papier">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-4">
+        <div className={`mx-auto flex h-16 items-center justify-between px-4 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
           <Brand />
           <DemoPill />
         </div>
       </header>
-      <main className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6">{content}</main>
+      <main className={`mx-auto grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>{content}</main>
       <Toaster />
     </div>
   );
 
   if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
+  if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, true);
   if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
   const { state, error, lastSync, run } = dashboard;
@@ -143,6 +151,9 @@ function App() {
         break;
       case "/orders":
         page = <OrdersAdminPage state={state} session={session} run={run} />;
+        break;
+      case "/zakelijk":
+        page = <BusinessAdminPage state={state} session={session} run={run} />;
         break;
       case "/routes":
         page = <RoutesPage state={state} session={session} run={run} isDemo={backend.kind === "demo"} />;

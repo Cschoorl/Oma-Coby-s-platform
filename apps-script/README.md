@@ -12,7 +12,9 @@ Het script:
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier en barter; dat tabblad wordt nooit aangepast);
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
-  `Bezorgstatus` en `Agenda`;
+  `Bezorgstatus`, `Agenda`, `Zakelijke aanvragen` en `Zakelijke dagen`;
+- ontvangt zakelijke aanvragen van het bestelformulier (`#/bestellen`), stuurt de klant een kopie en info@ een melding,
+  en telt bevestigde aanvragen mee als order (zie `docs/zakelijk-bestellen.md`);
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
   zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
@@ -118,7 +120,13 @@ in de plaats ervan delen.
   Totalen per week of per seizoen mogen ook (zet dan de laatste dag van die periode als datum).
 - **Instellingen** (`sleutel`, `waarde`):
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
-  - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers.
+  - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
+  - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_prijs` (1,83), `zakelijk_btw` (9),
+    `zakelijk_minimum` (50), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_toeslag_voor_10` (10),
+    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_uren_vooraf` (24), `zakelijk_email` en `zakelijk_melding_naar`.
+- **Zakelijke dagen** (`datum`, `soort`, `tijd`, `open`): de dagen op het zakelijke bestelformulier. `soort` is `bezorgen` of
+  `afhalen`; `open` = `nee` sluit een dag zonder hem te wissen. Het script vult het tabblad de eerste keer met de dagen uit
+  Marks formulier (14–31 december en 4–8 januari, afhalen 30 en 31 december).
 
 ## Kosten en declaraties
 

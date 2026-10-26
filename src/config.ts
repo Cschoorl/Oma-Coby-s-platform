@@ -1,3 +1,4 @@
+import type { BusinessInfo } from "./types/business";
 import type { AgendaSlot, VolunteerRole } from "./types/dashboard";
 
 /*
@@ -139,3 +140,33 @@ export const MAX_PER_DOOS = 50;
  * Change both numbers when another roll goes in (e.g. 99019: 59 × 190 mm).
  */
 export const LABEL_SIZE = { name: "DYMO 99014", widthMm: 101, heightMm: 54 };
+
+/*
+ * Zakelijk bestellen (#/bestellen), zoals in het Google Formulier van Mark voor 2026.
+ * De Sheet kan alles overschrijven: prijzen in het tabblad Instellingen (zakelijk_prijs, …) en de dagen
+ * in het tabblad Zakelijke dagen. Zie apps-script/README.md.
+ */
+export const BUSINESS_DEFAULTS: BusinessInfo = {
+  price: 1.83,
+  vatRate: 0.09,
+  minimum: 50,
+  fees: { regio: 10, buiten: 25 },
+  surcharges: { regulier: 0, voor10: 10, voor9: 15 },
+  donationPrice: 2,
+  leadHours: 24,
+  deliveryDays: [
+    ...[14, 15, 16, 17, 18, 21, 22, 28, 29, 30, 31].map((d) => `${SEASON_YEAR}-12-${String(d).padStart(2, "0")}`),
+    ...[4, 5, 6, 7, 8].map((d) => `${SEASON_YEAR + 1}-01-0${d}`)
+  ],
+  pickupDays: [
+    { date: `${SEASON_YEAR}-12-30`, time: "14:00–16:00" },
+    { date: `${SEASON_YEAR}-12-31`, time: "14:00–16:00" }
+  ],
+  email: "info@omacobysoliebollenbar.nl"
+};
+
+/** Bezorgen gebeurt tussen deze tijden; de toeslagen zijn voor eerder. */
+export const BUSINESS_DELIVERY_WINDOW = "9:00–12:30";
+
+/** Boven dit aantal per soort kijkt beheer extra mee (het formulier had "> 1500"). */
+export const BUSINESS_LARGE = 1500;

@@ -18,6 +18,9 @@ import type {
 } from "../types/dashboard";
 import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
+import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus } from "../types/business";
+import { BUSINESS_DEFAULTS } from "../config";
+import { businessToOrder, businessTotals, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
 
@@ -107,6 +110,11 @@ export interface Backend {
   payCost(session: Session, id: string, paid: boolean, date: string): Promise<void>;
   /** After the action: removes names, contact details and IBANs. */
   anonymize(session: Session, confirm: string): Promise<AnonymizeResult>;
+  /** Prices and days for the public order form (#/bestellen). */
+  getBusinessInfo(): Promise<BusinessInfo>;
+  /** Public: saves the request, mails a copy and returns the order number ("Z26-0001"). */
+  submitBusinessOrder(input: BusinessOrderInput & { website?: string }): Promise<{ id: string; warning?: string }>;
+  setBusinessStatus(session: Session, id: string, status: BusinessStatus, reason: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +182,7 @@ function createAppsScriptBackend(url: string): Backend {
         kmRate: rest.kmRate ?? null,
         costs: (rest.costs ?? []).map(withCostDefaults),
         routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
+        business: rest.business ?? [],
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
     },
@@ -234,6 +243,20 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async anonymize(session, confirm) {
       return call<AnonymizeResult>("anonymize", withSession(session, { confirm }));
+    },
+    async getBusinessInfo() {
+      // An older script without businessInfo: the form still works with the defaults from config.ts.
+      try {
+        return { ...BUSINESS_DEFAULTS, ...(await call<Partial<BusinessInfo>>("businessInfo", {})) };
+      } catch {
+        return BUSINESS_DEFAULTS;
+      }
+    },
+    async submitBusinessOrder(input) {
+      return call<{ id: string; warning?: string }>("submitBusinessOrder", { ...input });
+    },
+    async setBusinessStatus(session, id, status, reason) {
+      await call("setBusinessStatus", withSession(session, { id, status, reason }));
     }
   };
 }
@@ -282,6 +305,7 @@ interface DemoStore {
   volunteers: Volunteer[];
   costs: CostEntry[];
   delivery: Record<string, DeliveryState>;
+  business: BusinessOrder[];
 }
 
 const none: RoleAvailability = { wants: false, days: [] };
@@ -357,7 +381,7 @@ const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["plan
 ];
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {} };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness() };
 }
 
 function readStore(): DemoStore {
@@ -375,6 +399,32 @@ function writeStore(store: DemoStore) {
   } catch {
     // Private mode: changes only live until reload.
   }
+}
+
+/** Fictitious requests from the order form, so the Zakelijk page has something to show. */
+function demoBusiness(): BusinessOrder[] {
+  const base: BusinessOrderInput = {
+    withRaisins: 0, withoutRaisins: 0, donation: 0, flyers: false, fulfilment: "bezorgen", area: "regio", moment: "regulier", date: "",
+    pickupAgreed: false, street: "", postalCode: "", city: "", company: "", contact: "", phone: "", email: "", invoiceEmail: "",
+    invoiceAddress: "", reference: "", remark: ""
+  };
+  const rows: Array<[string, string, BusinessOrder["status"], Partial<BusinessOrderInput>]> = [
+    ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412" }],
+    ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", withRaisins: 40, withoutRaisins: 30, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
+    ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", fulfilment: "afhalen", area: "", pickupAgreed: true, invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
+    ["Z26-0004", "2026-10-25 16:30:00", "afgewezen", { company: "Sportschool Fit", contact: "Rick Bos", withRaisins: 0, withoutRaisins: 60, date: "2026-12-24", street: "Stationsweg 4", postalCode: "3811 MP", city: "Amersfoort", area: "buiten" }]
+  ];
+  return rows.map(([id, createdAt, status, extra]) => {
+    const input = { ...base, ...extra };
+    input.email ||= `${input.contact.split(" ")[0].toLowerCase()}@example.nl`;
+    input.invoiceEmail ||= input.email;
+    input.phone ||= "0612345678";
+    return {
+      ...input, id, createdAt, status, totals: businessTotals(input, BUSINESS_DEFAULTS),
+      reason: status === "afgewezen" ? "24 december bezorgen we niet; dag voorgesteld per mail." : "",
+      handledBy: status === "nieuw" ? "" : "Mark", handledAt: status === "nieuw" ? "" : "2026-10-25 17:02:00"
+    };
+  });
 }
 
 function nowStamp(): string {
@@ -440,8 +490,11 @@ function createDemoBackend(notice?: string): Backend {
       return readStore().version;
     },
     async getState(session) {
-      const orders = await getOrders();
       const store = readStore();
+      // Confirmed business requests join the orders, unless the order list already has that number.
+      const sheetOrders = await getOrders();
+      const known = new Set(sheetOrders.map((o) => o.id));
+      const orders = [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id)).map(businessToOrder)];
       const admin = session.role === "beheer";
       return {
         version: store.version,
@@ -461,7 +514,8 @@ function createDemoBackend(notice?: string): Backend {
         kmRate: 0.23,
         delivery: store.delivery,
         // Demo uses the default agenda from config.ts.
-        agenda: []
+        agenda: [],
+        business: admin ? store.business : []
       };
     },
     async claim(session, orderId) {
@@ -691,8 +745,35 @@ function createDemoBackend(notice?: string): Backend {
         for (const m of Object.values(s.meta)) Object.assign(m, { noteOverride: "", confirmationText: "", courier: "", updatedBy: "" });
         for (const p of Object.values(s.packing)) Object.assign(p, { claimedBy: "", packedBy: "" });
         for (const d of Object.values(s.delivery)) d.deliveredBy = "";
+        for (const b of s.business) Object.assign(b, { contact: "", phone: "", email: "", invoiceEmail: "", remark: "", handledBy: "" });
       });
       return result;
+    },
+    async getBusinessInfo() {
+      await delay(150);
+      return BUSINESS_DEFAULTS;
+    },
+    async submitBusinessOrder(input) {
+      await delay(500);
+      if (input.website) throw new Error("Je aanvraag kon niet worden verstuurd.");
+      const errors = Object.values(validateBusiness(input, BUSINESS_DEFAULTS));
+      if (errors.length) throw new Error(errors[0]);
+      let id = "";
+      mutate((store) => {
+        id = `Z${String(new Date().getFullYear()).slice(2)}-${String(store.business.length + 1).padStart(4, "0")}`;
+        const { website: _, ...clean } = input;
+        store.business.push({ ...clean, id, createdAt: nowStamp(), status: "nieuw", reason: "", handledBy: "", handledAt: "", totals: businessTotals(clean, BUSINESS_DEFAULTS) });
+      });
+      return { id };
+    },
+    async setBusinessStatus(session, id, status, reason) {
+      await delay(200);
+      if (status === "afgewezen" && !reason.trim()) throw new Error("Schrijf kort waarom je de aanvraag afwijst.");
+      mutate((store) => {
+        const b = store.business.find((x) => x.id === id);
+        if (!b) throw new Error("Aanvraag niet gevonden.");
+        Object.assign(b, { status, reason: status === "afgewezen" ? reason.trim() : "", handledBy: status === "nieuw" ? "" : session.name, handledAt: status === "nieuw" ? "" : nowStamp() });
+      });
     }
   };
 }

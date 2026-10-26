@@ -1,20 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { fieldLabel, formatNumber, rollOliebol, toast } from "../../components/ui";
 import { GOAL_MILESTONES, GOAL_OLIEBOLLEN, OLIEBOLLEN_PER_OUDJE } from "../../config";
 import "./discozaal.css";
 
 // De Tussenstand als discozaal, achter de discobal-knop bij de grafiek:
-// per tien verkochte oliebollen danst er een oudje bij.
-
-/** From this many oudjes a polonaise walks past in front. */
-const POLONAISE_FROM = 60;
-/** Three rows on the dance floor, front to back; every figure is one oudje. */
-const ROWS = [
-  { scale: 1, bottom: 4, step: 84 },
-  { scale: 0.9, bottom: 16, step: 76 },
-  { scale: 0.8, bottom: 28, step: 68 }
-];
-const ROW_SHIFT = [0, 0.5, 0.25];
+// per tien verkochte oliebollen danst er een oudje bij. Iedereen staat op de vloer: hoe voller de zaal,
+// hoe kleiner de oudjes (en vanaf een flinke drukte wordt de zaal hoger). Niemand wacht buiten.
 
 export function oudjesFor(oliebollen: number): number {
   return Math.floor(oliebollen / OLIEBOLLEN_PER_OUDJE);
@@ -114,13 +105,14 @@ function oudjeSvg(f: Character): string {
   const face = `<rect x="27.5" y="31" width="5" height="7" fill="${f.skin}"/><circle cx="30" cy="24" r="10.5" fill="${f.skin}"/>${hairSvg(f.hair)}<circle cx="26.2" cy="24.5" r="1.1" fill="${K}"/><circle cx="33.8" cy="24.5" r="1.1" fill="${K}"/>${glasses}<path d="M26.5 29.5 Q30 32 33.5 29.5" stroke="${K}" stroke-width="1.1" fill="none" stroke-linecap="round"/><circle cx="23" cy="28" r="1.6" fill="#e88a7a" opacity=".45"/><circle cx="37" cy="28" r="1.6" fill="#e88a7a" opacity=".45"/>`;
   return `<svg viewBox="0 0 60 92"><ellipse cx="30" cy="89.5" rx="14" ry="2.2" fill="#5c4238" opacity=".18"/><g class="sway"><g class="jump">${body}${shoes}${arm("l")}${arm("r")}${face}${f.hat ? hatSvg(f.hat) : ""}</g></g></svg>`;
 }
-/** Roughly one in ten oudjes has a darker skin. */
+/** One in ten oudjes has a darker skin: number 7, 17, 27, … */
 const DIVERSE_SKINS = ["#9c6644", "#6e4630"];
+const isDiverse = (index: number) => index % 10 === 6;
 const svgCache = new Map<string, string>();
 
 /** The drawing for one dancer: the cast decides look and dance, the index decides the skin. */
 function dancerSvg(cast: number, index: number): string {
-  const skin = index % 10 === 6 ? DIVERSE_SKINS[Math.floor(index / 10) % DIVERSE_SKINS.length] : CAST[cast].skin;
+  const skin = isDiverse(index) ? DIVERSE_SKINS[Math.floor(index / 10) % DIVERSE_SKINS.length] : CAST[cast].skin;
   const key = `${cast}-${skin}`;
   let svg = svgCache.get(key);
   if (!svg) {
@@ -198,46 +190,21 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
     return () => ro.disconnect();
   }, []);
 
-  // Every figure is exactly one oudje, so the hall can be counted: three rows on the floor (front first),
-  // then the polonaise. Whoever does not fit waits outside, with the number shown.
-  const narrow = width < 640;
-  const span = width * (narrow ? 0.92 : 0.7);
-  const rowCaps = ROWS.map((r) => Math.max(2, Math.floor(span / r.step)));
-  const floorCap = rowCaps.reduce((a, b) => a + b, 0);
-  const onFloor = Math.min(oudjes, floorCap);
-  const poloMembers = oudjes - onFloor > 0 && oudjes >= POLONAISE_FROM ? Math.min(8, oudjes - onFloor, 3 + Math.floor((oudjes - POLONAISE_FROM) / 60)) : 0;
-  const outside = Math.max(0, oudjes - onFloor - poloMembers);
-
-  // Place dancers row by row, each row from the middle outwards; back rows sit between the heads in front.
-  const placed: Array<{ row: number; left: number; cast: number }> = [];
-  let left = onFloor;
-  ROWS.forEach((_, ri) => {
-    const n = Math.min(left, rowCaps[ri]);
-    left -= n;
-    const cap = rowCaps[ri];
-    const order = Array.from({ length: cap }, (_, j) => j).sort((a, b) => Math.abs(a - (cap - 1) / 2) - Math.abs(b - (cap - 1) / 2));
-    const startPct = narrow ? 4 : 15;
-    const widthPct = narrow ? 92 : 70;
-    order.slice(0, n).forEach((j) => {
-      // Rows are shifted against each other so every head stays visible on this flat floor.
-      placed.push({ row: ri, left: startPct + ((j + 0.5 + ROW_SHIFT[ri]) / cap) * widthPct, cast: (placed.length * 3 + ri) % CAST.length });
-    });
-  });
+  const layout = useMemo(() => floorLayout(oudjes, width), [oudjes, width]);
+  // The check: one slot per oudje, so the floor always holds exactly the number on the letter board.
+  const counted = layout.slots.length;
+  const diverse = Array.from({ length: counted }, (_, i) => i).filter(isDiverse).length;
 
   const tags = [
-    oliebollen >= GOAL_OLIEBOLLEN ? <span key="goal" className="rounded bg-kerst-50 px-2 py-0.5 text-kerst-ink">Doel gehaald</span> : null,
-    poloMembers > 0 ? <span key="polo" className="rounded bg-gouwe-100 px-2 py-0.5 text-gouwe-ink">{poloMembers} in de polonaise</span> : null,
-    outside > 0 ? <span key="out" className="rounded bg-papier/90 px-2 py-0.5 text-krent shadow-zacht">+ {formatNumber(outside)} in de rij voor de deur</span> : null
+    oliebollen >= GOAL_OLIEBOLLEN ? <span key="goal" className="rounded bg-kerst-50 px-2 py-0.5 text-kerst-ink">Doel gehaald</span> : null
   ].filter(Boolean);
 
-  // Dancers that join while the hall is open walk in; the first render just shows who is there.
-  const firstCount = useRef(onFloor);
   const previous = useRef(oudjes);
   useEffect(() => {
     const before = previous.current;
     previous.current = oudjes;
     if (oudjes === before + 1) toast(`Oudje ${formatNumber(oudjes)} komt binnen!`);
-    if (before < POLONAISE_FROM && oudjes >= POLONAISE_FROM) toast("Polonaise! Iedereen achter elkaar aan.");
+    else if (oudjes < before) toast(`Er gaan ${formatNumber(before - oudjes)} ${before - oudjes === 1 ? "oudje" : "oudjes"} naar huis: nu ${formatNumber(oudjes)} op de vloer.`);
   }, [oudjes]);
 
   return (
@@ -266,7 +233,7 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
         </div>
       </div>
 
-      <div className="dz-zaal" ref={zaalRef} role="img" aria-label={`Discozaal met ${formatNumber(oudjes)} dansende oudjes`}>
+      <div className="dz-zaal" ref={zaalRef} role="img" aria-label={`Discozaal met ${formatNumber(counted)} dansende oudjes`} style={{ height: layout.height }}>
         <div className="dz-wainscot" aria-hidden="true" />
         <div className="dz-flecks" aria-hidden="true" />
         <svg className="dz-slinger" viewBox="0 0 1000 44" preserveAspectRatio="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: SLINGER_SVG }} />
@@ -280,37 +247,7 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
         <div className="dz-ball" aria-hidden="true" dangerouslySetInnerHTML={{ __html: discoBallSvg("dzbal") }} />
         <div className="dz-floor" aria-hidden="true" />
         <div className="dz-prop dz-table" aria-hidden="true" dangerouslySetInnerHTML={{ __html: TABLE_SVG }} />
-        <div className="dz-dancers" aria-hidden="true">
-          {placed.map((d, i) => {
-            const r = ROWS[d.row];
-            return (
-              <div
-                key={i}
-                className={`dz-d m-${CAST[d.cast].move} ${i >= firstCount.current && !reducedMotion() ? "enter" : ""}`}
-                style={{
-                  left: `${d.left.toFixed(1)}%`,
-                  bottom: r.bottom,
-                  width: 54 * r.scale,
-                  height: 84 * r.scale,
-                  zIndex: 3 - d.row,
-                  ["--dl" as string]: `${(-(i * 0.37) % 2).toFixed(2)}s`,
-                  ["--sw" as string]: `${(2.2 + (i % 3) * 0.3).toFixed(1)}s`
-                }}
-                dangerouslySetInnerHTML={{ __html: dancerSvg(d.cast, i) }}
-              />
-            );
-          })}
-        </div>
-        {poloMembers > 0 ? (
-          <div className="dz-polo" aria-hidden="true">
-            <div className="dz-train" style={{ ["--zw" as string]: `${width + 40}px` }}>
-              {Array.from({ length: poloMembers }, (_, i) => {
-                const c = (i + 2) % CAST.length;
-                return <div key={i} className={`dz-d m-${CAST[c].move}`} dangerouslySetInnerHTML={{ __html: dancerSvg(c, 100 + i) }} />;
-              })}
-            </div>
-          </div>
-        ) : null}
+        <DanceFloor layout={layout} />
         {oudjes === 0 ? (
           <p className="absolute bottom-[52px] left-1/2 z-[5] w-max max-w-[86%] -translate-x-1/2 text-center text-[13px] text-muted">
             <b className="block font-serif text-lg text-krent">De dansvloer is nog leeg.</b>
@@ -321,10 +258,198 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
       </div>
       {/* On phones the labels sit under the hall, so they do not cover the letter board. */}
       {tags.length > 0 ? <div className="flex flex-wrap gap-1 text-[11px] font-bold sm:hidden">{tags}</div> : null}
+      {counted === oudjes ? (
+        oudjes > 0 ? (
+          <p className="text-xs text-muted">
+            <span className="font-bold text-kerst-ink">✓ Geteld:</span> alle {formatNumber(counted)} {counted === 1 ? "oudje danst" : "oudjes dansen"} op de vloer
+            {diverse ? `, ${formatNumber(diverse)} met een donkere huid` : ""}.
+          </p>
+        ) : null
+      ) : (
+        <p className="text-xs font-bold text-feest-ink">! Op de vloer staan er {formatNumber(counted)}, maar het moeten er {formatNumber(oudjes)} zijn.</p>
+      )}
 
       <Rollatorbalk oliebollen={oliebollen} />
     </div>
   );
+}
+
+// ---------- de dansvloer ----------
+
+/** Hall height without a crowd, and the most it grows to. */
+const HALL = 236;
+const HALL_MAX = 420;
+/** Width over height of one drawing (viewBox 60 × 92). */
+const ASPECT = 60 / 92;
+
+interface Slot {
+  /** Centre of the feet, in px from the left and top of the hall. */
+  x: number;
+  y: number;
+  row: number;
+}
+
+export interface FloorLayout {
+  height: number;
+  /** Height of one oudje in px. */
+  size: number;
+  /** Exactly one slot per oudje; slot i belongs to oudje i. */
+  slots: Slot[];
+}
+
+/** Small fixed wobble per slot, so the crowd does not look like a grid. */
+function jitter(i: number, salt: number): number {
+  const v = Math.sin(i * 12.9898 + salt * 78.233) * 43758.5453;
+  return v - Math.floor(v) - 0.5;
+}
+
+/**
+ * Places every oudje on the floor. Starts at full size and shrinks until everyone fits; when they get very
+ * small, the hall grows instead. Front row first, each row filled from the middle outwards.
+ */
+export function floorLayout(count: number, width: number): FloorLayout {
+  const pad = 8;
+  let height = HALL;
+  let size = 84;
+  for (;;) {
+    const colStep = size * ASPECT * 0.82;
+    const rowStep = Math.max(3, size * 0.3);
+    // Feet stand between the bottom of the floor and a bit below the letter board.
+    const front = height - 6;
+    const back = Math.max(height * 0.42, 70);
+    const cols = Math.max(1, Math.floor((width - 2 * pad - size * ASPECT) / colStep) + 1);
+    const rows = Math.max(1, Math.floor((front - back) / rowStep) + 1);
+    if (cols * rows >= count || (size <= 7 && height >= HALL_MAX)) {
+      const slots: Slot[] = [];
+      for (let row = 0; slots.length < count; row++) {
+        const shift = row % 2 ? 0.5 : 0;
+        const inRow = Math.min(cols - (shift ? 1 : 0) || 1, count - slots.length);
+        // Columns ordered from the middle outwards, so a half-full row stands in the centre.
+        const rowCols = cols - (shift ? 1 : 0) || 1;
+        const order = Array.from({ length: rowCols }, (_, c) => c).sort((a, b) => Math.abs(a - (rowCols - 1) / 2) - Math.abs(b - (rowCols - 1) / 2));
+        const rowWidth = (rowCols - 1) * colStep;
+        const left = (width - rowWidth) / 2;
+        for (const c of order.slice(0, inRow)) {
+          const i = slots.length;
+          slots.push({
+            x: left + c * colStep + jitter(i, 1) * colStep * 0.3,
+            y: Math.max(back - rowStep * 2, front - row * rowStep + jitter(i, 2) * rowStep * 0.4),
+            row
+          });
+        }
+      }
+      return { height, size, slots };
+    }
+    if (size > 16 || height >= HALL_MAX) size = Math.max(7, size * 0.92);
+    else height = Math.min(HALL_MAX, height + 24);
+  }
+}
+
+/** One image per look and skin, drawn once and reused by the canvas. */
+const spriteCache = new Map<string, HTMLImageElement>();
+function sprite(cast: number, index: number): HTMLImageElement {
+  const key = `${cast}-${isDiverse(index) ? DIVERSE_SKINS[Math.floor(index / 10) % DIVERSE_SKINS.length] : "eigen"}`;
+  let img = spriteCache.get(key);
+  if (!img) {
+    img = new Image();
+    const svg = dancerSvg(cast, index).replace('<svg viewBox="0 0 60 92">', '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="184" viewBox="0 0 60 92">');
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    spriteCache.set(key, img);
+  }
+  return img;
+}
+
+const castFor = (i: number) => (i * 3 + Math.floor(i / CAST.length)) % CAST.length;
+
+interface Drawn {
+  x: number;
+  y: number;
+  size: number;
+  alpha: number;
+  leaving: boolean;
+}
+
+/**
+ * The dancers on a canvas: every oudje in the layout is drawn, newcomers walk in from the left,
+ * oudjes that leave (a cancelled order) walk out to the right. Positions glide when the crowd rearranges.
+ */
+function DanceFloor({ layout }: { layout: FloorLayout }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawn = useRef<Drawn[]>([]);
+  const target = useRef(layout);
+  const first = useRef(true);
+  target.current = layout;
+
+  // Newcomers start at the door; leavers keep their spot and are marked to walk out.
+  const list = drawn.current;
+  const { slots, size } = layout;
+  for (let i = 0; i < Math.max(list.length, slots.length); i++) {
+    if (i < slots.length && !list[i]) list[i] = first.current ? { x: slots[i].x, y: slots[i].y, size, alpha: 1, leaving: false } : { x: -size, y: layout.height - 6, size, alpha: 1, leaving: false };
+    else if (i < slots.length) list[i].leaving = false;
+    else if (list[i]) list[i].leaving = true;
+  }
+  first.current = false;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    let frame = 0;
+    let last = 0;
+    const still = reducedMotion();
+
+    const draw = (now: number) => {
+      frame = requestAnimationFrame(draw);
+      // About 30 frames a second is plenty for swaying oudjes.
+      if (now - last < 32) return;
+      last = now;
+      const { slots: tSlots, size: tSize, height } = target.current;
+      const w = canvas.clientWidth;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(height * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(height * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, height);
+      const items = drawn.current;
+      const ease = still ? 1 : 0.14;
+      // Move everyone a step towards their spot (or out of the door), then draw back rows first.
+      items.forEach((d, i) => {
+        if (!d) return;
+        const goal = d.leaving ? { x: w + d.size, y: height - 6 } : tSlots[i];
+        d.x += (goal.x - d.x) * ease;
+        d.y += (goal.y - d.y) * ease;
+        d.size += (tSize - d.size) * ease;
+        if (d.leaving) d.alpha = Math.max(0, d.alpha - (still ? 1 : 0.04));
+      });
+      while (items.length && items[items.length - 1]?.leaving && items[items.length - 1].alpha <= 0) items.pop();
+      const order = items.map((_, i) => i).filter((i) => items[i]).sort((a, b) => items[a].y - items[b].y);
+      for (const i of order) {
+        const d = items[i];
+        const img = sprite(castFor(i), i);
+        if (!img.complete) continue;
+        const h = d.size;
+        const wd = h * ASPECT;
+        const t = now / 1000;
+        const speed = 2.2 + (i % 5) * 0.35;
+        const bob = still ? 0 : -Math.abs(Math.sin(t * speed + i)) * h * 0.06;
+        const tilt = still || h < 18 ? 0 : Math.sin(t * speed * 0.5 + i * 1.7) * 0.06;
+        ctx.globalAlpha = d.alpha;
+        ctx.save();
+        ctx.translate(d.x, d.y + bob);
+        if (tilt) ctx.rotate(tilt);
+        ctx.drawImage(img, -wd / 2, -h, wd, h);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    };
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return <canvas ref={canvasRef} className="dz-dancers" data-oudjes={layout.slots.length} style={{ width: "100%", height: layout.height }} aria-hidden="true" />;
 }
 
 // ---------- rollatorbalk ----------

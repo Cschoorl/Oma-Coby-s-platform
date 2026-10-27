@@ -7,37 +7,36 @@ import { SupplierPicker } from "../orders/SupplierPicker";
 import { Badge, Bollenteller, Card, EmptyState, Icon, Note, Notice, ProgressBar, bigButton, formatDayLabel, pickInitialDate, primaryButton, rollOliebol, secondaryButton, textAction, toast } from "../../components/ui";
 import { effectiveNote, mapsRouteUrlForOrders, mapsUrl, stopAddress } from "../../utils/orderUtils";
 import { navigate } from "../../lib/router";
+import { patches } from "../../lib/patches";
+import type { Patch } from "../../lib/useDashboard";
 import { courierRuns, couriersOn, isRouteStale, orderedStops, runRoute } from "./routeUtils";
 
 interface CourierPageProps {
   state: DashboardState;
   session: Session;
-  run: (change: () => Promise<unknown>) => Promise<void>;
+  run: (change: () => Promise<unknown>, patch?: Patch) => Promise<void>;
   name: string | null;
   date: string | null;
 }
 
 /** Mobile-first page per bezorger; this is the link that goes out via WhatsApp. */
 export function CourierPage({ state, session, run, name, date: dateParam }: CourierPageProps) {
-  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Shows at once and the next stop can be ticked straight away; the Sheet saves in the background.
   async function markDelivered(orderId: string, delivered: boolean) {
-    setBusy(orderId);
     setError(null);
+    if (delivered) {
+      const left = orders.filter((o) => o.id !== orderId && !state.delivery[o.id]).length;
+      if (left === 0) {
+        rollOliebol();
+        toast("Alle bollen zijn binnen. Rij voorzichtig terug!");
+      } else toast(`Afgeleverd. Nog ${left} ${left === 1 ? "stop" : "stops"}.`);
+    }
     try {
-      await run(() => backend.setDelivered(session, orderId, delivered));
-      if (delivered) {
-        const left = orders.filter((o) => o.id !== orderId && !state.delivery[o.id]).length;
-        if (left === 0) {
-          rollOliebol();
-          toast("Alle bollen zijn binnen. Rij voorzichtig terug!");
-        } else toast(`Afgeleverd. Nog ${left} ${left === 1 ? "stop" : "stops"}.`);
-      }
+      await run(() => backend.setDelivered(session, orderId, delivered), patches.delivered(orderId, session.name, delivered));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Opslaan mislukt.");
-    } finally {
-      setBusy(null);
     }
   }
   const dates = useMemo(() => Array.from(new Set(state.orders.map((o) => o.deliveryDate))).sort(), [state.orders]);
@@ -140,7 +139,7 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                       <p className="truncate font-bold text-muted">{order.locationName || order.contactPerson}</p>
                       <p className="text-xs text-muted">
                         Afgeleverd door {delivered.deliveredBy} om {delivered.deliveredAt.slice(11, 16)} ·{" "}
-                        <button type="button" className={textAction} disabled={busy !== null} onClick={() => void markDelivered(order.id, false)}>
+                        <button type="button" className={textAction} onClick={() => void markDelivered(order.id, false)}>
                           Ongedaan maken
                         </button>
                       </p>
@@ -189,8 +188,8 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                       Navigeren
                     </a>
                   </div>
-                  <button type="button" className={bigButton} disabled={busy !== null} onClick={() => void markDelivered(order.id, true)}>
-                    {busy === order.id ? "Opslaan…" : "✓ Afgeleverd"}
+                  <button type="button" className={bigButton} onClick={() => void markDelivered(order.id, true)}>
+                    ✓ Afgeleverd
                   </button>
                 </Card>
               ];

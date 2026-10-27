@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { backend, DEMO_STORAGE_KEY, type Session } from "../data/backend";
 import type { DashboardState } from "../types/dashboard";
 
@@ -41,13 +41,30 @@ export function clearSnapshots() {
   }
 }
 
+/** How a change looks in the state, so the screen can show it before the Sheet has it. */
+export type Patch = (state: DashboardState) => DashboardState;
+
 export interface Dashboard {
   state: DashboardState | null;
   error: string | null;
   lastSync: Date | null;
+  /** Changes still being saved to the Sheet. */
+  saving: number;
   refresh: () => Promise<void>;
-  /** Runs a change, then reloads so every page shows the new state. Throws the backend's message on failure. */
-  run: (change: () => Promise<unknown>) => Promise<void>;
+  /**
+   * Runs a change. With a patch the change shows at once and the next click can follow right
+   * away: changes are saved one after the other in the background, and the patch stays on screen
+   * until a state from the Sheet has it. Without a patch it waits for the reload, as before.
+   * Throws the backend's message on failure (and the patch is taken back).
+   */
+  run: (change: () => Promise<unknown>, patch?: Patch) => Promise<void>;
+}
+
+interface Pending {
+  id: number;
+  patch: Patch;
+  /** When the Sheet confirmed it (performance.now()); undefined while saving. */
+  savedAt?: number;
 }
 
 /**
@@ -61,9 +78,14 @@ export function useDashboard(session: Session | null): Dashboard {
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const versionRef = useRef<number>(0);
   const loadingRef = useRef(false);
+  const [pending, setPending] = useState<Pending[]>([]);
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const nextIdRef = useRef(1);
 
+  /** A state fetched after a change was saved contains that change: its patch can go. */
   const accept = useCallback(
-    (next: DashboardState) => {
+    (next: DashboardState, fetchedFrom: number) => {
+      setPending((list) => list.filter((p) => p.savedAt === undefined || p.savedAt >= fetchedFrom));
       versionRef.current = next.version;
       setState(next);
       setError(null);
@@ -76,9 +98,10 @@ export function useDashboard(session: Session | null): Dashboard {
   const refresh = useCallback(async () => {
     if (!session || loadingRef.current) return;
     loadingRef.current = true;
+    const startedAt = performance.now();
     try {
       const next = await backend.getState(session);
-      if (next) accept(next);
+      if (next) accept(next, startedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Laden mislukt.");
     } finally {
@@ -94,6 +117,7 @@ export function useDashboard(session: Session | null): Dashboard {
     // Another person on this device, or a fresh login: start from their own saved state.
     const saved = loadSnapshot(session);
     setState(saved);
+    setPending([]);
     versionRef.current = 0;
     setLastSync(null);
     void refresh();
@@ -102,9 +126,10 @@ export function useDashboard(session: Session | null): Dashboard {
     const poll = window.setInterval(async () => {
       if (stopped || document.hidden || loadingRef.current || !versionRef.current) return;
       loadingRef.current = true;
+      const startedAt = performance.now();
       try {
         const next = await backend.getState(session, versionRef.current);
-        if (next) accept(next);
+        if (next) accept(next, startedAt);
         else setLastSync(new Date());
       } catch {
         // Next tick tries again; a persistent problem shows up through refresh().
@@ -133,16 +158,55 @@ export function useDashboard(session: Session | null): Dashboard {
   }, [session, refresh, accept]);
 
   const run = useCallback(
-    async (change: () => Promise<unknown>) => {
+    async (change: () => Promise<unknown>, patch?: Patch) => {
+      if (!patch) {
+        try {
+          await change();
+        } finally {
+          loadingRef.current = false;
+          await refresh();
+        }
+        return;
+      }
+      const id = nextIdRef.current++;
+      setPending((list) => [...list, { id, patch }]);
+      // One after the other, in click order: "claim" must be saved before "MET".
+      const saved = queueRef.current.then(change);
+      queueRef.current = saved.catch(() => undefined);
       try {
-        await change();
-      } finally {
-        loadingRef.current = false;
-        await refresh();
+        await saved;
+        const savedAt = performance.now();
+        setPending((list) => list.map((p) => (p.id === id ? { ...p, savedAt } : p)));
+        // Reload in the background once the last change in line is saved.
+        const tail = queueRef.current;
+        void tail.then(() => {
+          if (queueRef.current === tail) {
+            loadingRef.current = false;
+            void refresh();
+          }
+        });
+      } catch (err) {
+        setPending((list) => list.filter((p) => p.id !== id));
+        throw err;
       }
     },
     [refresh]
   );
 
-  return { state, error, lastSync, refresh, run };
+  // What the screen shows: the Sheet's state plus the changes not in it yet.
+  const shown = useMemo(() => (state ? pending.reduce((s, p) => p.patch(s), state) : state), [state, pending]);
+  const saving = pending.filter((p) => p.savedAt === undefined).length;
+
+  // Closing the page while a click is still being saved would lose it: let the browser ask first.
+  useEffect(() => {
+    if (!saving) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saving]);
+
+  return { state: shown, error, lastSync, saving, refresh, run };
 }

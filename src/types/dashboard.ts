@@ -243,9 +243,17 @@ export interface DashboardState {
   changes: ChangeEntry[];
   /** Sold so far per pop-up (order id of the pop-up stock). */
   popupSales: Record<string, PopupSales>;
+  /** Inpakken › Opmerkingen: processed items (see src/lib/packNotes.ts), by item id. */
+  packNotes: Record<string, PackNoteDone>;
 }
 
 /** What was sold of the extra stock at one pop-up (tab Pop-up verkoop). */
+/** Who ticked an item off as processed, and when. */
+export interface PackNoteDone {
+  by: string;
+  at: string;
+}
+
 export interface PopupSales {
   withRaisins: number;
   withoutRaisins: number;

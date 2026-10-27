@@ -166,6 +166,12 @@ Inpakkers en bezorgers zien welke velden zijn gewijzigd, maar niet de oude en ni
 
 Let op: "verzonden" betekent dat Gmail de mail heeft aangenomen. Een mail die later terugkomt (bounce) ziet het script niet; die komt binnen in de mailbox van het account dat het script draait.
 
+## Inpakken › Opmerkingen
+
+Op de pagina Inpakken staat het tabblad **Opmerkingen**: per bestelling de wijzigingen uit het `Wijzigingslog` die voor het inpakken tellen (aantallen, datum, soort, naam, bezorgen/afhalen, adres, opnieuw inpakken, nieuwe bestelling) en de opmerking zoals inpakkers die zien. Inpakkers en beheer vinken een item af als verwerkt (`setPackNoteDone`). Dat staat in het tabblad **`Inpak opmerkingen`** (`item_id`, `order_id`, `verwerkt_door`, `verwerkt_op`).
+
+`item_id` is `wijziging|<order>|<tijd>` of `opmerking|<order>|<code van de tekst>`. Een nieuwe wijziging (of een aangepaste opmerking) krijgt dus een nieuw item en staat weer open. Terugzetten kan ook (de cellen worden dan leeg).
+
 ## Particulier en pop-upvoorraad
 
 - **+ Bestelling** en **+ Pop-upvoorraad** op de pagina Bestellingen zetten een nieuwe regel onderaan `Totaal_lijst bestellingen` (`createOrder`). Pop-upvoorraad krijgt een nummer `POP-001`, `POP-002`, …; andere bestellingen `OB-001`, …. Pop-ups zijn altijd *Afhalen* en komen dus niet in de routes.

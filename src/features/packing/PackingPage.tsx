@@ -35,6 +35,8 @@ import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 import { minBoxes } from "../../utils/boxes";
 import { byRoute, labelsFor, loadAutoPrint, printLabels } from "./labels";
 import { LabelPanel, boxPlan } from "./LabelPanel";
+import { PackingNotes } from "./PackingNotes";
+import { openPackNotes } from "../../lib/packNotes";
 
 interface PackingPageProps {
   state: DashboardState;
@@ -60,6 +62,9 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
   const [error, setError] = useState<string | null>(null);
   // The order whose label panel is open stays in the list, also when the filter would hide it now it is packed.
   const [labelOrder, setLabelsFor] = useState<string | null>(null);
+  // Tabs: the orders to pack, or the changes and remarks to process.
+  const [view, setView] = useState<"inpakken" | "opmerkingen">("inpakken");
+  const openNotes = useMemo(() => openPackNotes(state), [state]);
 
   useEffect(() => {
     if (dates.length > 0 && !dates.includes(date)) setDate(pickInitialDate(dates));
@@ -159,8 +164,31 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     }
   }, [date, totals.packedOrders, dayOrders.length, allPacked]);
 
+  const tabs = (
+    <Segmented
+      label="Inpakken of opmerkingen"
+      value={view}
+      onChange={setView}
+      options={[
+        ["inpakken", "Inpakken"],
+        ["opmerkingen", "Opmerkingen", openNotes]
+      ]}
+    />
+  );
+
+  if (view === "opmerkingen") {
+    return (
+      <div className="grid gap-5">
+        {tabs}
+        <OrderFilters selectedDate={date} availableDates={dates} onDateChange={setDate} />
+        <PackingNotes state={state} session={session} run={run} date={date} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-5">
+      {tabs}
       <OrderFilters selectedDate={date} availableDates={dates} onDateChange={setDate} />
 
       {/* One summary: what is ordered, still to bake and already packed. */}

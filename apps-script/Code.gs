@@ -194,7 +194,9 @@ const TABS = {
   // Every change to an order (and later other things): who changed what, when, from what to what.
   changelog: ['Wijzigingslog', ['tijd', 'soort', 'order_id', 'veld', 'oud', 'nieuw', 'door', 'rol', 'toelichting']],
   // What was sold of the extra stock taken to a pop-up (one row per pop-up, totals so far).
-  popupSales: ['Pop-up verkoop', ['order_id', 'met_verkocht', 'zonder_verkocht', 'bedrag', 'bijgewerkt_door', 'bijgewerkt_op']]
+  popupSales: ['Pop-up verkoop', ['order_id', 'met_verkocht', 'zonder_verkocht', 'bedrag', 'bijgewerkt_door', 'bijgewerkt_op']],
+  // Inpakken › Opmerkingen: which change or remark is processed, by whom and when.
+  packNotes: ['Inpak opmerkingen', ['item_id', 'order_id', 'verwerkt_door', 'verwerkt_op']]
 };
 
 const PERMISSIONS = {
@@ -211,6 +213,7 @@ const PERMISSIONS = {
   updateOrder: ['beheer'],
   createOrder: ['beheer'],
   setPopupSales: ['beheer'],
+  setPackNoteDone: ['beheer', 'inpakker'],
   saveConfirmation: ['beheer'],
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
@@ -799,7 +802,8 @@ function buildFullState_() {
     // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
     business: readBusiness_(),
     changes: [],
-    popupSales: {}
+    popupSales: {},
+    packNotes: {}
   };
 
   readTab_('meta').forEach(function (r) {
@@ -873,6 +877,9 @@ function buildFullState_() {
       amount: r.bedrag === '' || r.bedrag === undefined ? null : num_(r.bedrag),
       updatedBy: String(r.bijgewerkt_door || ''), updatedAt: String(r.bijgewerkt_op || '')
     };
+  });
+  readTab_('packNotes').forEach(function (r) {
+    if (r.item_id && r.verwerkt_door) state.packNotes[r.item_id] = { by: String(r.verwerkt_door), at: String(r.verwerkt_op || '') };
   });
   // Newest first: that is how every page shows them.
   state.changes = readTab_('changelog').filter(function (r) { return r.order_id && r.veld; }).map(function (r) {
@@ -1481,6 +1488,7 @@ function anonymize_() {
   // The change log holds names, addresses and remarks.
   clearRows_(sheet_('changelog'));
   blank('popupSales', ['bijgewerkt_door']);
+  blank('packNotes', ['verwerkt_door']);
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
@@ -2203,6 +2211,26 @@ Object.assign(HANDLERS, {
       note('soldAmount', before.bedrag === '' || before.bedrag === undefined ? '' : num_(before.bedrag), amount);
       row.set({ met_verkocht: met, zonder_verkocht: zonder, bedrag: amount, bijgewerkt_door: name, bijgewerkt_op: now_() });
       logChanges_(log);
+      return bump_();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Inpakken › Opmerkingen: een wijziging of opmerking afvinken als verwerkt.
+// item_id komt van het platform: "wijziging|<order>|<tijd>" of "opmerking|<order>|<code van de tekst>".
+// Een nieuwe wijziging heeft een nieuwe tijd en dus een nieuw item: die staat weer open.
+
+Object.assign(HANDLERS, {
+  setPackNoteDone: function (body) {
+    const name = requireName_(body.name);
+    const id = String(body.itemId || '').trim();
+    if (!/^(wijziging|opmerking)\|/.test(id)) throw new Error('Onbekend item.');
+    return withLock_(function () {
+      const row = findOrCreate_('packNotes', id);
+      row.set(body.done
+        ? { order_id: String(body.orderId || ''), verwerkt_door: name, verwerkt_op: now_() }
+        : { order_id: String(body.orderId || ''), verwerkt_door: '', verwerkt_op: '' });
       return bump_();
     });
   }

@@ -245,15 +245,33 @@ export interface DashboardState {
   popupSales: Record<string, PopupSales>;
   /** Inpakken › Opmerkingen: processed items (see src/lib/packNotes.ts), by item id. */
   packNotes: Record<string, PackNoteDone>;
+  /** Inpakken › Bakkerij: every time the bake counts were shared, newest first. */
+  bakeShares: BakeShare[];
+  /** Where the counts go (Instellingen: bakkerij_whatsapp, bakkerij_email); empty = choose when sharing. */
+  bakery: { phone: string; email: string };
 }
 
-/** What was sold of the extra stock at one pop-up (tab Pop-up verkoop). */
+/** One time the bake counts of a delivery day were passed on. */
+export interface BakeShare {
+  id: string;
+  /** Delivery day, yyyy-mm-dd. */
+  date: string;
+  withRaisins: number;
+  withoutRaisins: number;
+  total: number;
+  channel: "whatsapp" | "email" | "deelmenu";
+  by: string;
+  /** "2026-12-29 16:05:00". */
+  at: string;
+}
+
 /** Who ticked an item off as processed, and when. */
 export interface PackNoteDone {
   by: string;
   at: string;
 }
 
+/** What was sold of the extra stock at one pop-up (tab Pop-up verkoop). */
 export interface PopupSales {
   withRaisins: number;
   withoutRaisins: number;

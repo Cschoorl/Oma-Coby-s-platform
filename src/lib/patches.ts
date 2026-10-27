@@ -1,4 +1,4 @@
-import type { DashboardState, PackingState } from "../types/dashboard";
+import type { BakeShare, DashboardState, PackingState } from "../types/dashboard";
 import { emptyPacking } from "../types/dashboard";
 
 /** Local time as the script writes it ("2026-12-30 09:12:00"). */
@@ -29,6 +29,10 @@ export const patches = {
     else delete packNotes[itemId];
     return { ...s, packNotes };
   },
+  bakeShare: (share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }, name: string) => (s: DashboardState): DashboardState => ({
+    ...s,
+    bakeShares: [{ id: "nieuw", ...share, total: share.withRaisins + share.withoutRaisins, by: name, at: stamp() }, ...(s.bakeShares ?? [])]
+  }),
   delivered: (orderId: string, name: string, delivered: boolean) => (s: DashboardState): DashboardState => {
     const delivery = { ...s.delivery };
     if (delivered) delivery[orderId] = { deliveredBy: name, deliveredAt: stamp() };

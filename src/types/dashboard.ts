@@ -22,6 +22,8 @@ export interface OrderMeta {
   confirmationError: string;
   /** Time of the last attempt, sent or failed. */
   confirmationAttemptAt: string;
+  /** Contact on the delivery address for this delivery; null = the customer's contact (see src/lib/deliveryContact.ts). */
+  deliveryContact: { name: string; phone: string; note: string } | null;
   /** Courier assigned in the dashboard; overrides a courier column in the sheet. */
   courier: string;
   updatedBy: string;
@@ -312,6 +314,7 @@ export const emptyMeta: OrderMeta = {
   confirmationSentTo: "",
   confirmationError: "",
   confirmationAttemptAt: "",
+  deliveryContact: null,
   courier: "",
   updatedBy: "",
   updatedAt: ""

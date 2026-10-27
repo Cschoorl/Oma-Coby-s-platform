@@ -36,6 +36,8 @@ import { byRoute, labelsFor, loadAutoPrint, printLabels } from "./labels";
 import { LabelPanel, boxPlan } from "./LabelPanel";
 import { PackingNotes } from "./PackingNotes";
 import { openPackNotes } from "../../lib/packNotes";
+import { DeliveryContactLine } from "../../components/DeliveryContactLine";
+import { deliveryContact } from "../../lib/deliveryContact";
 
 interface PackingPageProps {
   state: DashboardState;
@@ -417,6 +419,7 @@ function PackingCard({ state, labelsOpen, onLabels, order, note, courier, packin
         <div className="min-w-0">
           <p className={`truncate font-bold ${done ? "text-muted" : "text-krent"}`}>{order.locationName || order.contactPerson}</p>
           <p className="mt-0.5 text-xs text-muted">{meta.join(" · ")}</p>
+          {order.category !== "popup" ? <DeliveryContactLine className="mt-1" contact={deliveryContact(order, state.meta[order.id])} /> : null}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {order.customerType === "zakelijk" ? <Badge tone="zacht">Zakelijk</Badge> : null}

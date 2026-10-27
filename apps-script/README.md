@@ -174,6 +174,10 @@ Optioneel in **Instellingen**: `bakkerij_whatsapp` (telefoonnummer, bijv. `06 12
 
 Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd.
 
+## Contact bij aflevering
+
+Standaard is het contact op het afleveradres de contactpersoon van de klant: de kolommen `Contactpersoon` en `Contactpersoon telefoonnummer` (of `contactpersoon`/`telefoon` van een zakelijke aanvraag). Op **Bestellingen → Contact bij aflevering** past beheer dat per bezorging aan, met naam, telefoon en een opmerking (bijv. "bel bij aankomst") (`setDeliveryContact`, alleen beheer). Dat staat in `Dashboard_Orders` (`afl_contact_naam`, `afl_contact_telefoon`, `afl_contact_opmerking`, `afl_contact_eigen`); de bron blijft ongemoeid. "Terug naar contact van de klant" maakt het weer leeg. Elke wijziging staat in het wijzigingslog (naam en telefoon alleen zichtbaar voor beheer). Inpakken, Routes, Bezorgen en de pakbon tonen het contact, met een klikbaar telefoonnummer.
+
 ## Gebakken aantallen goedkeuren (Bakkerij)
 
 Op **Bakkerij** keurt beheer per leverdag goed hoeveel er echt gebakken is, per product (met en zonder), naast wat de bestellingen nodig hebben (`approveBaked`, alleen beheer). Elke goedkeuring is een nieuwe regel in **`Bakkerij goedkeuringen`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `benodigd_met`, `benodigd_zonder`, `soort` (`goedkeuring`, `correctie` of `overgenomen`), `toelichting`, `door`, `goedgekeurd_op`. De laatste regel per dag telt.

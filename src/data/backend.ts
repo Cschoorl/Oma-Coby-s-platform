@@ -3,6 +3,7 @@ import type {
   BakedCount,
   ChangeEntry,
   CostEntry,
+  PopupSales,
   CostStatus,
   DeliveryState,
   DashboardState,
@@ -25,6 +26,7 @@ import { businessToOrder, businessTotals, momentLabel, validateBusiness } from "
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
+import { categoryOf } from "../lib/categories";
 
 export interface Session {
   code: string;
@@ -50,6 +52,27 @@ export interface RouteRequest {
 /** What the script answers after a change: the data version that includes it. */
 export interface SavedVersion {
   version: number;
+}
+
+/** A new order or pop-up stock, as beheer fills it in. */
+export interface NewOrderInput {
+  /** Column Type: "Zakelijk", "Barter", "Particulier" or "Pop-up". */
+  type: string;
+  /** Name of the customer, or of the pop-up (place). */
+  locationName: string;
+  deliveryDate: string;
+  withRaisins: number;
+  withoutRaisins: number;
+  fulfilment: "bezorgen" | "afhalen";
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  pickupLocation?: string;
+  deliveryMoment?: string;
+  note?: string;
 }
 
 export interface GeoPoint {
@@ -128,6 +151,10 @@ export interface Backend {
   assignCourier(session: Session, orderId: string, courier: string): Promise<void>;
   /** Beheer edits an order: written in the Sheet and in the change log. */
   updateOrder(session: Session, orderId: string, changes: OrderFieldChange[]): Promise<SavedVersion | void>;
+  /** Beheer adds an order or extra pop-up stock (new row in the Sheet). */
+  createOrder(session: Session, input: NewOrderInput): Promise<{ id: string }>;
+  /** Sold so far at a pop-up (totals). */
+  setPopupSales(session: Session, orderId: string, sales: { withRaisins: number; withoutRaisins: number; amount: number | null }): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
@@ -216,6 +243,7 @@ function createAppsScriptBackend(url: string): Backend {
         routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
         business: rest.business ?? [],
         changes: rest.changes ?? [],
+        popupSales: rest.popupSales ?? {},
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
     },
@@ -258,6 +286,12 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async updateOrder(session, orderId, changes) {
       return call<SavedVersion>("updateOrder", withSession(session, { orderId, changes }));
+    },
+    async createOrder(session, input) {
+      return call<{ id: string }>("createOrder", withSession(session, { ...input }));
+    },
+    async setPopupSales(session, orderId, sales) {
+      return call<SavedVersion>("setPopupSales", withSession(session, { orderId, ...sales, amount: sales.amount ?? "" }));
     },
     async geocode(session, addresses) {
       return call<GeocodeResult>("geocode", withSession(session, { addresses }));
@@ -351,6 +385,9 @@ interface DemoStore {
   /** Edits of the example orders, per order and field. */
   orderEdits: Record<string, Partial<Record<OrderField, string>>>;
   changes: ChangeEntry[];
+  popupSales: Record<string, PopupSales>;
+  /** Orders and pop-up stock added on the platform (demo). */
+  createdOrders: Order[];
 }
 
 const none: RoleAvailability = { wants: false, days: [] };
@@ -432,7 +469,7 @@ const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["plan
 ];
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, createdOrders: [] };
 }
 
 function readStore(): DemoStore {
@@ -530,12 +567,24 @@ function demoPoint(address: string): GeoPoint | null {
   return { lat: DEMO_TOWNS[town].lat + (((hash & 0xff) / 255) - 0.5) * spread, lng: DEMO_TOWNS[town].lng + ((((hash >> 8) & 0xff) / 255) - 0.5) * spread * 1.6 };
 }
 
+function todayIsoDemo(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function createDemoBackend(notice?: string): Backend {
   let ordersPromise: Promise<Order[]> | null = null;
   const getOrders = () => {
     ordersPromise ??= loadOrders().then((result) => result.agendaOrders);
     return ordersPromise;
   };
+
+  /** Example orders + confirmed business requests + orders added on the platform, with edits applied. */
+  async function allOrders(store: DemoStore): Promise<Order[]> {
+    const sheetOrders = [...(await getOrders()), ...store.createdOrders];
+    const known = new Set(sheetOrders.map((o) => o.id));
+    return [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id)).map(businessToOrder)].map((o) => applyOrderEdits(o, store.orderEdits[o.id]));
+  }
 
   function mutate(fn: (store: DemoStore) => void) {
     const store = readStore();
@@ -570,9 +619,7 @@ function createDemoBackend(notice?: string): Backend {
       const store = readStore();
       if (since && since === store.version) return null;
       // Confirmed business requests join the orders, unless the order list already has that number.
-      const sheetOrders = await getOrders();
-      const known = new Set(sheetOrders.map((o) => o.id));
-      const orders = [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id)).map(businessToOrder)].map((o) => applyOrderEdits(o, store.orderEdits[o.id]));
+      const orders = await allOrders(store);
       const admin = session.role === "beheer";
       return {
         version: store.version,
@@ -595,7 +642,8 @@ function createDemoBackend(notice?: string): Backend {
         agenda: [],
         business: admin ? store.business : [],
         // Like the script: everyone sees what changed, contact details only beheer.
-        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city"].includes(c.field) ? { ...c, from: "", to: "" } : c))
+        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "locationName"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
+        popupSales: store.popupSales
       };
     },
     async claim(session, orderId) {
@@ -709,10 +757,72 @@ function createDemoBackend(notice?: string): Backend {
         m.updatedAt = nowStamp();
       });
     },
+    async createOrder(session, input) {
+      await delay(300);
+      const type = input.type;
+      if (!["Zakelijk", "Barter", "Particulier", "Pop-up"].includes(type)) throw new Error("Kies een soort.");
+      if (!input.locationName.trim()) throw new Error(type === "Pop-up" ? "Geef de pop-up een naam of plek." : "Vul de naam van de klant in.");
+      if (input.withRaisins + input.withoutRaisins <= 0) throw new Error("Vul in hoeveel oliebollen.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.deliveryDate)) throw new Error("Kies een leverdatum.");
+      const store = readStore();
+      const prefix = type === "Pop-up" ? "POP-" : "OB-";
+      const max = Math.max(0, ...(await allOrders(store)).filter((o) => o.id.startsWith(prefix)).map((o) => Number(o.id.slice(prefix.length)) || 0));
+      const id = `${prefix}${String(max + 1).padStart(3, "0")}`;
+      const customerType = type === "Pop-up" ? "popup" : type === "Barter" ? "barter" : type === "Zakelijk" ? "zakelijk" : "particulier";
+      const popup = customerType === "popup";
+      const order: Order = {
+        id,
+        deliveryDate: input.deliveryDate,
+        supplierName: "",
+        locationName: input.locationName.trim(),
+        contactPerson: input.contactPerson?.trim() ?? "",
+        phone: input.phone?.trim() ?? "",
+        address: popup || input.fulfilment === "afhalen" ? "" : input.address?.trim() ?? "",
+        postalCode: popup || input.fulfilment === "afhalen" ? "" : input.postalCode?.trim() ?? "",
+        city: input.city?.trim() ?? "",
+        plannedTime: "",
+        status: "open",
+        withRaisins: input.withRaisins,
+        withoutRaisins: input.withoutRaisins,
+        extras: input.note?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        customerType,
+        category: categoryOf(customerType),
+        orderDate: todayIsoDemo(),
+        fulfilment: popup ? "afhalen" : input.fulfilment,
+        pickupLocation: popup ? input.pickupLocation?.trim() || input.locationName.trim() : input.fulfilment === "afhalen" ? input.pickupLocation?.trim() : undefined,
+        deliveryMoment: !popup && input.fulfilment === "bezorgen" ? input.deliveryMoment?.trim() || undefined : undefined
+      };
+      mutate((st) => {
+        st.createdOrders.push(order);
+        st.changes = [{ at: nowStamp(), kind: "bestelling", orderId: id, field: "created", from: "", to: `${type}: ${order.locationName} (${input.withRaisins + input.withoutRaisins})`, by: session.name, note: "" }, ...st.changes];
+      });
+      return { id };
+    },
+    async setPopupSales(session, orderId, sales) {
+      await delay(250);
+      const order = (await allOrders(readStore())).find((o) => o.id === orderId);
+      if (!order) throw new Error("Pop-up niet gevonden.");
+      if (order.category !== "popup") throw new Error("Alleen bij pop-upvoorraad leg je verkochte aantallen vast.");
+      if (![sales.withRaisins, sales.withoutRaisins].every((n) => Number.isInteger(n) && n >= 0)) throw new Error("Aantal moet een heel getal van 0 of meer zijn.");
+      if (sales.withRaisins > order.withRaisins || sales.withoutRaisins > order.withoutRaisins) throw new Error("Er is meer verkocht dan er mee ging. Pas eerst de voorraad aan.");
+      mutate((store) => {
+        const before = store.popupSales[orderId];
+        const at = nowStamp();
+        const log: ChangeEntry[] = [];
+        const note = (field: string, from: number | null | undefined, to: number | null) => {
+          if (String(from ?? "") !== String(to ?? "")) log.push({ at, kind: "pop-up", orderId, field, from: String(from ?? ""), to: String(to ?? ""), by: session.name, note: "" });
+        };
+        note("soldWithRaisins", before?.withRaisins, sales.withRaisins);
+        note("soldWithoutRaisins", before?.withoutRaisins, sales.withoutRaisins);
+        note("soldAmount", before?.amount, sales.amount);
+        store.popupSales[orderId] = { withRaisins: sales.withRaisins, withoutRaisins: sales.withoutRaisins, amount: sales.amount, updatedBy: session.name, updatedAt: at };
+        store.changes = [...log.reverse(), ...store.changes];
+      });
+    },
     async updateOrder(session, orderId, changes) {
       await delay(300);
-      const order = (await getOrders()).map((o) => applyOrderEdits(o, readStore().orderEdits[o.id])).find((o) => o.id === orderId)
-        ?? readStore().business.filter((b) => b.id === orderId).map(businessToOrder)[0];
+      const order = (await allOrders(readStore())).find((o) => o.id === orderId);
       if (!order) throw new Error("Bestelling niet gevonden.");
       const real = changes.filter((c) => c.to.trim() !== orderFieldValue(order, c.field));
       if (real.length === 0) throw new Error("Er is niets gewijzigd.");

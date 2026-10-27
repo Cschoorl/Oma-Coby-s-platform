@@ -9,10 +9,10 @@ bestand met de bestellingen en koppel het vrijwilligersbestand met de Script-eig
 
 Het script:
 
-- leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier en barter; dat tabblad wordt nooit aangepast);
+- leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier, barter en pop-up); het script schrijft daar alleen bij **Bewerken** en bij een **nieuwe bestelling of pop-upvoorraad** uit het beheer;
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
-  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen` en `Zakelijke dagen`;
+  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wijzigingslog` en `Pop-up verkoop`;
 - ontvangt zakelijke aanvragen van het bestelformulier (`#/bestellen`), stuurt de klant een kopie en info@ een melding,
   en telt bevestigde aanvragen mee als order (zie `docs/zakelijk-bestellen.md`);
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
@@ -72,7 +72,7 @@ anders draait de oude versie.
 | Kolom | Gebruikt voor |
 |---|---|
 | `Unique ID` | ordernummer en besteldatum (tijdstempel) voor de tussenstand |
-| `Type` (Zakelijk / Particulier / Barter / …) | splitsing in de inpaktool |
+| `Type` (Zakelijk / Barter / Particulier / Pop-up) | soort: Zakelijk en Barter (en leeg) zijn regulier; Pop-up is extra voorraad zonder vaste koper |
 | `Info` | e-mailadres voor de klantbevestiging |
 | `Afhalen/Bezorgen`, `Pick up locatie` | afhaalorders komen niet in de routes |
 | `Datum` ("18 december") | leverdag; het jaar komt uit de tijdstempels |
@@ -154,6 +154,13 @@ Op **Bestellingen → Bewerken** past beheer een bestelling aan. Het script (`up
 - legt elke wijziging vast in het tabblad **`Wijzigingslog`**: tijd, soort, bestelling, veld, oud, nieuw, door, rol, toelichting. Ook wijzigingen in de opmerking komen erin.
 
 Inpakkers en bezorgers zien welke velden zijn gewijzigd, maar niet de oude en nieuwe adresgegevens. Bij "Na de actie" wordt het log gewist.
+
+## Particulier en pop-upvoorraad
+
+- **+ Bestelling** en **+ Pop-upvoorraad** op de pagina Bestellingen zetten een nieuwe regel onderaan `Totaal_lijst bestellingen` (`createOrder`). Pop-upvoorraad krijgt een nummer `POP-001`, `POP-002`, …; andere bestellingen `OB-001`, …. Pop-ups zijn altijd *Afhalen* en komen dus niet in de routes.
+- De soort van een bestaande bestelling pas je aan via **Bewerken → Soort** (of direct in de kolom `Type`).
+- Per pop-up legt beheer vast hoeveel er verkocht is (`setPopupSales`). Dat staat in het tabblad **`Pop-up verkoop`** (`order_id`, `met_verkocht`, `zonder_verkocht`, `bedrag`, `bijgewerkt_door`, `bijgewerkt_op`) en in het wijzigingslog. Is `bedrag` leeg, dan rekent de tussenstand met `prijs_per_oliebol`.
+- Tussenstand en omzet tellen van een pop-up alleen het verkochte deel; bakken en inpakken tellen de hele voorraad.
 
 ## Na de actie: persoonsgegevens verwijderen
 

@@ -76,9 +76,9 @@ export function findVolunteer(volunteers: Volunteer[], name: string): Volunteer 
   return volunteers.find((v) => v.name.trim().toLowerCase() === key);
 }
 
-/** Orders that go out for delivery on a day (pickups excluded). */
+/** Orders that go out for delivery on a day (pickups and pop-up stock excluded). */
 export function deliveryOrders(state: DashboardState, date: string): Order[] {
-  return state.orders.filter((o) => o.deliveryDate === date && o.fulfilment === "bezorgen");
+  return state.orders.filter((o) => o.deliveryDate === date && o.fulfilment === "bezorgen" && o.category !== "popup");
 }
 
 /** Stops in the optimised order when a route was computed, otherwise by planned time. */

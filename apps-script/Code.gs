@@ -191,7 +191,9 @@ const TABS = {
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
   // Every change to an order (and later other things): who changed what, when, from what to what.
-  changelog: ['Wijzigingslog', ['tijd', 'soort', 'order_id', 'veld', 'oud', 'nieuw', 'door', 'rol', 'toelichting']]
+  changelog: ['Wijzigingslog', ['tijd', 'soort', 'order_id', 'veld', 'oud', 'nieuw', 'door', 'rol', 'toelichting']],
+  // What was sold of the extra stock taken to a pop-up (one row per pop-up, totals so far).
+  popupSales: ['Pop-up verkoop', ['order_id', 'met_verkocht', 'zonder_verkocht', 'bedrag', 'bijgewerkt_door', 'bijgewerkt_op']]
 };
 
 const PERMISSIONS = {
@@ -206,6 +208,8 @@ const PERMISSIONS = {
   setBaked: ['beheer', 'inpakker'],
   updateNote: ['beheer'],
   updateOrder: ['beheer'],
+  createOrder: ['beheer'],
+  setPopupSales: ['beheer'],
   saveConfirmation: ['beheer'],
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
@@ -768,7 +772,8 @@ function buildFullState_() {
     agenda: readAgenda_(),
     // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
     business: readBusiness_(),
-    changes: []
+    changes: [],
+    popupSales: {}
   };
 
   readTab_('meta').forEach(function (r) {
@@ -830,6 +835,14 @@ function buildFullState_() {
       iban: String(r.iban || ''),
       status: String(r.status || 'ingediend'), reason: String(r.reden || ''),
       reviewedBy: String(r.beoordeeld_door || ''), reviewedAt: String(r.beoordeeld_op || ''), paidAt: isoDate_(r.uitbetaald_op)
+    };
+  });
+  readTab_('popupSales').forEach(function (r) {
+    if (!r.order_id) return;
+    state.popupSales[r.order_id] = {
+      withRaisins: num_(r.met_verkocht), withoutRaisins: num_(r.zonder_verkocht),
+      amount: r.bedrag === '' || r.bedrag === undefined ? null : num_(r.bedrag),
+      updatedBy: String(r.bijgewerkt_door || ''), updatedAt: String(r.bijgewerkt_op || '')
     };
   });
   // Newest first: that is how every page shows them.
@@ -1438,6 +1451,7 @@ function anonymize_() {
   clearRows_(sheet_('places'));
   // The change log holds names, addresses and remarks.
   clearRows_(sheet_('changelog'));
+  blank('popupSales', ['bijgewerkt_door']);
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
@@ -1837,11 +1851,27 @@ const ORDER_EDIT_FIELDS = {
   address: { sheet: 'adres', business: 'adres', kind: 'text' },
   postalCode: { sheet: 'postcode', business: 'postcode', kind: 'text' },
   city: { sheet: 'plaats', business: 'plaats', kind: 'text' },
-  amount: { sheet: 'bedrag', business: '', kind: 'money' }
+  amount: { sheet: 'bedrag', business: '', kind: 'money' },
+  // Soort bestelling (kolom Type): Zakelijk, Barter, Particulier of Pop-up (extra pop-upvoorraad).
+  type: { sheet: 'type_klant', business: '', kind: 'type' },
+  locationName: { sheet: 'locatie_naam', business: '', kind: 'text' }
 };
 
+/** The order types in the column Type, as the platform knows them. */
+const ORDER_TYPES = ['Zakelijk', 'Barter', 'Particulier', 'Pop-up'];
+
+/** "pop-up voorraad", "Popup", "zakelijk", "" … → one of ORDER_TYPES ('' when empty). Same rules as the platform. */
+function orderType_(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return '';
+  if (/pop.?up/.test(v)) return 'Pop-up';
+  if (/barter/.test(v)) return 'Barter';
+  if (/zakelijk|b2b|bedrijf/.test(v)) return 'Zakelijk';
+  return 'Particulier';
+}
+
 /** Contact details in the log are only shown to beheer. */
-const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email'];
+const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email', 'locationName'];
 
 /** Adds rows to the Wijzigingslog in one write. entries: {soort, order_id, veld, oud, nieuw, door, rol, toelichting}. */
 function logChanges_(entries) {
@@ -1867,6 +1897,7 @@ function editValue_(field, value) {
   if (def.kind === 'count' || def.kind === 'money') return value === '' ? '' : String(num_(value));
   if (def.kind === 'date') return value instanceof Date ? isoDate_(value) : String(value).trim();
   if (def.kind === 'fulfilment') return /afhal|ophal|pick/i.test(String(value)) ? 'afhalen' : 'bezorgen';
+  if (def.kind === 'type') return orderType_(value);
   // "1431 AB" and "1431ab" are the same postcode.
   if (field === 'postalCode') return String(value).replace(/\s+/g, '').toUpperCase();
   return String(value).trim();
@@ -1891,6 +1922,10 @@ function checkEditValue_(field, value) {
   }
   if (def.kind === 'fulfilment') {
     if (v !== 'bezorgen' && v !== 'afhalen') throw new Error('Kies bezorgen of afhalen.');
+    return v;
+  }
+  if (def.kind === 'type') {
+    if (ORDER_TYPES.indexOf(v) === -1) throw new Error('Kies een soort: ' + ORDER_TYPES.join(', ') + '.');
     return v;
   }
   return v;
@@ -2025,6 +2060,112 @@ Object.assign(HANDLERS, {
         }
         if (was) log.push({ soort: 'bestelling', order_id: order.order_id, veld: 'courier', oud: was, nieuw: '', door: name, rol: role, toelichting: 'andere leverdatum' });
       }
+      logChanges_(log);
+      return bump_();
+    });
+  }
+});
+
+
+// ---------------------------------------------------------------------------
+// Soorten bestellingen: regulier (zakelijk/barter), particulier en extra pop-upvoorraad
+//
+// De soort staat in de kolom Type van Totaal_lijst bestellingen. Pop-upvoorraad is voorraad die we
+// meenemen naar een pop-up zonder vaste koper: hij telt volledig mee voor het bakken, maar in de
+// tussenstand en omzet alleen wat er verkocht is (tabblad Pop-up verkoop).
+
+Object.assign(HANDLERS, {
+  /** Beheer adds an order or pop-up stock: a new row in Totaal_lijst bestellingen. */
+  createOrder: function (body, role) {
+    const name = requireName_(body.name);
+    const type = String(body.type || '').trim();
+    if (ORDER_TYPES.indexOf(type) === -1) throw new Error('Kies een soort: ' + ORDER_TYPES.join(', ') + '.');
+    const title = String(body.locationName || '').trim();
+    if (!title) throw new Error(type === 'Pop-up' ? 'Geef de pop-up een naam of plek.' : 'Vul de naam van de klant in.');
+    const met = checkEditValue_('withRaisins', body.withRaisins);
+    const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
+    if (met + zonder === 0) throw new Error('Vul in hoeveel oliebollen.');
+    const date = checkEditValue_('deliveryDate', body.deliveryDate);
+    const fulfilment = type === 'Pop-up' ? 'afhalen' : checkEditValue_('fulfilment', body.fulfilment || 'bezorgen');
+
+    return withLock_(function () {
+      const sheet = ss_().getSheetByName(CONFIG.ORDERS_SHEET);
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+      const col = function (field) {
+        const names = CONFIG.COLUMNS[field] || [];
+        for (let i = 0; i < names.length; i++) {
+          const at = headers.indexOf(names[i].toLowerCase());
+          if (at !== -1) return at;
+        }
+        return -1;
+      };
+      // Pop-ups get POP-001, POP-002…; other orders continue the OB-numbers.
+      const prefix = type === 'Pop-up' ? 'POP-' : 'OB-';
+      const idCol = col('order_id');
+      let max = 0;
+      values.slice(1).forEach(function (r) {
+        const id = String(idCol === -1 ? '' : r[idCol]);
+        if (id.indexOf(prefix) === 0) max = Math.max(max, Number(id.slice(prefix.length)) || 0);
+      });
+      const id = prefix + ('00' + (max + 1)).slice(-3);
+      const p = date.split('-').map(Number);
+      const cells = {
+        order_id: id,
+        type_klant: type,
+        afhalen_bezorgen: fulfilment === 'afhalen' ? 'Afhalen' : 'Bezorgen',
+        leverdatum: new Date(p[0], p[1] - 1, p[2]),
+        datum_volledig: weekdayLabel_(date),
+        locatie_naam: title,
+        contactpersoon: String(body.contactPerson || '').trim(),
+        telefoon: String(body.phone || '').trim(),
+        email: String(body.email || '').trim(),
+        adres: fulfilment === 'bezorgen' ? String(body.address || '').trim() : '',
+        postcode: fulfilment === 'bezorgen' ? String(body.postalCode || '').trim() : '',
+        plaats: String(body.city || '').trim(),
+        afhaallocatie: fulfilment === 'afhalen' ? String(body.pickupLocation || (type === 'Pop-up' ? title : '')).trim() : '',
+        bezorgmoment: fulfilment === 'bezorgen' ? String(body.deliveryMoment || '').trim() : '',
+        oliebollen_met_krenten: met,
+        oliebollen_zonder_krenten: zonder,
+        totaal: met + zonder,
+        extra_notities: String(body.note || '').trim()
+      };
+      const row = headers.map(function () { return ''; });
+      Object.keys(cells).forEach(function (field) {
+        const c = col(field);
+        if (c !== -1) row[c] = cells[field];
+      });
+      if (col('order_id') === -1 || col('type_klant') === -1) throw new Error('De kolommen Unique ID en Type moeten in ' + CONFIG.ORDERS_SHEET + ' staan.');
+      sheet.appendRow(row);
+      logChanges_([{ soort: 'bestelling', order_id: id, veld: 'created', oud: '', nieuw: type + ': ' + title + ' (' + (met + zonder) + ')', door: name, rol: role }]);
+      bump_();
+      return { id: id };
+    });
+  },
+
+  /** Sold so far at a pop-up: totals MET and ZONDER, and the money taken (optional). */
+  setPopupSales: function (body, role) {
+    const name = requireName_(body.name);
+    return withLock_(function () {
+      const order = findOrder_(body.orderId);
+      if (!order) throw new Error('Pop-up niet gevonden.');
+      if (orderType_(order.type_klant) !== 'Pop-up') throw new Error('Alleen bij pop-upvoorraad leg je verkochte aantallen vast.');
+      const met = checkEditValue_('withRaisins', body.withRaisins);
+      const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
+      if (met > num_(order.oliebollen_met_krenten) || zonder > num_(order.oliebollen_zonder_krenten)) {
+        throw new Error('Er is meer verkocht dan er mee ging. Pas eerst de voorraad aan.');
+      }
+      const amount = checkEditValue_('amount', body.amount);
+      const row = findOrCreate_('popupSales', order.order_id);
+      const before = row.values;
+      const log = [];
+      const note = function (field, from, to) {
+        if (String(from) !== String(to)) log.push({ soort: 'pop-up', order_id: order.order_id, veld: field, oud: String(from), nieuw: String(to), door: name, rol: role });
+      };
+      note('soldWithRaisins', before.met_verkocht === '' || before.met_verkocht === undefined ? '' : num_(before.met_verkocht), met);
+      note('soldWithoutRaisins', before.zonder_verkocht === '' || before.zonder_verkocht === undefined ? '' : num_(before.zonder_verkocht), zonder);
+      note('soldAmount', before.bedrag === '' || before.bedrag === undefined ? '' : num_(before.bedrag), amount);
+      row.set({ met_verkocht: met, zonder_verkocht: zonder, bedrag: amount, bijgewerkt_door: name, bijgewerkt_op: now_() });
       logChanges_(log);
       return bump_();
     });

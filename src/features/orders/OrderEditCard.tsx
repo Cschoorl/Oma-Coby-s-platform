@@ -5,6 +5,7 @@ import type { Order } from "../../types/order";
 import { Badge, Card, Notice, SectionTitle, Segmented, fieldLabel, ghostButton, inputClass, primaryButton, toast } from "../../components/ui";
 import { OrderFilters } from "./OrderFilters";
 import { momentLabel } from "../business/business";
+import { TYPE_CHOICES } from "../../lib/categories";
 import { changesFor, fieldLabel as changeLabel, formatChangeTime, formatChangeValue, orderFieldValue, ROUTE_FIELDS, type OrderField, type OrderFieldChange } from "../../lib/orderChanges";
 
 interface OrderEditCardProps {
@@ -17,7 +18,7 @@ interface OrderEditCardProps {
 
 type Draft = Record<OrderField, string>;
 
-const FIELDS: OrderField[] = ["withRaisins", "withoutRaisins", "deliveryDate", "fulfilment", "deliveryMoment", "pickupLocation", "address", "postalCode", "city", "amount"];
+const FIELDS: OrderField[] = ["type", "locationName", "withRaisins", "withoutRaisins", "deliveryDate", "fulfilment", "deliveryMoment", "pickupLocation", "address", "postalCode", "city", "amount"];
 
 /** The moments a business order can have (same as the order form). */
 const BUSINESS_MOMENTS = Object.values(momentLabel);
@@ -48,7 +49,11 @@ export function OrderEditCard({ order, state, session, run, onClose }: OrderEdit
   const courier = state.meta[order.id]?.courier || order.supplierName;
   const route = Object.values(state.routes).find((r) => r.orderIds.includes(order.id));
   const countsChanged = changed.has("withRaisins") || changed.has("withoutRaisins");
+  const toPopup = changed.has("type") && draft.type === "Pop-up";
+  const fromPopup = changed.has("type") && initial.type === "Pop-up";
   const warnings = [
+    toPopup ? "Als pop-upvoorraad telt deze in de tussenstand en omzet alleen nog mee voor wat verkocht is, en komt hij niet meer in de routes." : "",
+    fromPopup ? "Dit wordt een gewone bestelling: hij telt weer helemaal mee in de tussenstand." : "",
     countsChanged && packing && (packing.packedBy || packing.met || packing.zonder || packing.totaal)
       ? `${packing.packedBy ? `Al ingepakt door ${packing.packedBy}` : "Al deels afgevinkt"}: na opslaan moet deze order opnieuw ingepakt worden.`
       : "",
@@ -79,6 +84,25 @@ export function OrderEditCard({ order, state, session, run, onClose }: OrderEdit
     <Card>
       <SectionTitle title="Bestelling aanpassen" subtitle="Wat je hier opslaat komt in de Sheet en in de wijzigingsgeschiedenis, met jouw naam en de tijd." />
       <div className="grid gap-5">
+        {!business ? (
+          <div className="grid gap-2 sm:grid-cols-[14rem_1fr]">
+            <label className="grid gap-1 text-sm">
+              <span className={fieldLabel}>Soort</span>
+              <select className={`${inputClass} ${mark("type")}`} value={draft.type} onChange={(e) => set("type")(e.target.value)}>
+                {draft.type === "" ? <option value="">Onbekend (regulier)</option> : null}
+                {TYPE_CHOICES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className={fieldLabel}>{draft.type === "Pop-up" ? "Pop-up (naam of plek)" : "Naam"}</span>
+              <input className={`${inputClass} ${mark("locationName")}`} value={draft.locationName} onChange={(e) => set("locationName")(e.target.value)} />
+            </label>
+          </div>
+        ) : null}
         <fieldset className="grid gap-2">
           <legend className={fieldLabel}>Producten</legend>
           <div className="grid grid-cols-3 gap-2">

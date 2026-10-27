@@ -5,6 +5,8 @@ interface OrderFiltersProps {
   selectedDate: string;
   availableDates: string[];
   onDateChange: (value: string) => void;
+  /** Label before the days; "Leverdag" by default. */
+  label?: string;
 }
 
 function formatDateLabel(isoDate: string): string {
@@ -73,7 +75,7 @@ function MonthCalendar({ selected, marked, onPick }: { selected: string; marked:
 }
 
 /** Day picker: the delivery days as soft buttons, plus a house-style calendar for any other day. */
-export function OrderFilters({ selectedDate, availableDates, onDateChange }: OrderFiltersProps) {
+export function OrderFilters({ selectedDate, availableDates, onDateChange, label = "Leverdag" }: OrderFiltersProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const today = todayIso();
@@ -95,7 +97,7 @@ export function OrderFilters({ selectedDate, availableDates, onDateChange }: Ord
 
   return (
     <div className="relative flex flex-wrap items-center gap-1.5" ref={wrapRef}>
-      <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Leverdag</span>
+      <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
       {availableDates.map((date) => (
         <button
           key={date}

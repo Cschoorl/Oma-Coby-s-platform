@@ -43,9 +43,9 @@ interface PackingPageProps {
 }
 
 type Filter = "open" | "mine" | "done" | "all";
-type TypeFilter = "alle" | "particulier" | "zakelijk" | "barter";
+type TypeFilter = "alle" | "particulier" | "zakelijk" | "barter" | "popup";
 
-const customerLabel: Record<CustomerType, string> = { particulier: "Particulier", zakelijk: "Zakelijk (B2B)", barter: "Barter", onbekend: "Onbekend" };
+const customerLabel: Record<CustomerType, string> = { particulier: "Particulier", zakelijk: "Zakelijk (B2B)", barter: "Barter", popup: "Pop-upvoorraad", onbekend: "Onbekend" };
 
 function packingOf(state: DashboardState, orderId: string): PackingState {
   return state.packing[orderId] ?? emptyPacking;
@@ -75,6 +75,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
       particulier: { met: 0, zonder: 0 },
       zakelijk: { met: 0, zonder: 0 },
       barter: { met: 0, zonder: 0 },
+      popup: { met: 0, zonder: 0 },
       onbekend: { met: 0, zonder: 0 }
     };
     let packedMet = 0;
@@ -259,7 +260,8 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
                 ["alle", "Alle klanten"],
                 ["particulier", "Particulier"],
                 ["zakelijk", "Zakelijk"],
-                ["barter", "Barter"]
+                ["barter", "Barter"],
+                ["popup", "Pop-up"]
               ]}
             />
             <a className={ghostButton} href={appLink(`/pakbonnen?datum=${date}`)} target="_blank" rel="noreferrer">
@@ -434,6 +436,7 @@ function PackingCard({ state, labelsOpen, onLabels, order, note, courier, packin
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           {order.customerType === "zakelijk" ? <Badge tone="zacht">Zakelijk</Badge> : null}
           {order.customerType === "barter" ? <Badge tone="zacht">Barter</Badge> : null}
+          {order.customerType === "popup" ? <Badge tone="aandacht">Pop-upvoorraad</Badge> : null}
           {mine && !done ? <NameTag name={session.name} mine short /> : claimedByOther && !done ? <NameTag name={packing.claimedBy} short suffix="is bezig" /> : null}
         </div>
       </div>

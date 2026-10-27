@@ -131,7 +131,7 @@ function App() {
   if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
   if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
-  const { state, error, lastSync, run } = dashboard;
+  const { state, error, lastSync, saving, run } = dashboard;
 
   let page: React.ReactNode = null;
   // The signup options and targets follow the Agenda tab of the Sheet.
@@ -180,7 +180,7 @@ function App() {
             <DemoPill />
             <span className="inline-flex items-center gap-1.5" title={lastSync ? `Bijgewerkt ${lastSync.toLocaleTimeString("nl-NL")}` : undefined}>
               <span className={`inline-block h-2 w-2 rounded-full ${liveDot}`} />
-              <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : state ? "Bijwerken…" : "Verbinden…"}</span>
+              <span className="hidden sm:inline">{saving ? "Opslaan…" : error ? "Geen verbinding" : lastSync ? "Live" : state ? "Bijwerken…" : "Verbinden…"}</span>
             </span>
             <span className="hidden text-krent sm:inline">
               <b>{session.name}</b> · {roleLabel[session.role]}

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { backend, type Session } from "../../data/backend";
 import type { DashboardState, PackingPart, PackingState } from "../../types/dashboard";
 import { emptyPacking } from "../../types/dashboard";
+import { patches } from "../../lib/patches";
+import type { Patch } from "../../lib/useDashboard";
 import type { CustomerType, Order } from "../../types/order";
 import { OrderFilters } from "../orders/OrderFilters";
 import {
@@ -34,7 +36,7 @@ import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 interface PackingPageProps {
   state: DashboardState;
   session: Session;
-  run: (change: () => Promise<unknown>) => Promise<void>;
+  run: (change: () => Promise<unknown>, patch?: Patch) => Promise<void>;
 }
 
 type Filter = "open" | "mine" | "done" | "all";
@@ -101,17 +103,21 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     return true;
   });
 
-  async function act(key: string, change: () => Promise<unknown>): Promise<boolean> {
-    setBusy(key);
+  /**
+   * With a patch (claim, ticks, afronden) the change shows at once and nothing is blocked: the next
+   * click can follow straight away while the Sheet saves in the background.
+   */
+  async function act(key: string, change: () => Promise<unknown>, patch?: Patch): Promise<boolean> {
+    if (!patch) setBusy(key);
     setError(null);
     try {
-      await run(change);
+      await run(change, patch);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Er ging iets mis.");
       return false;
     } finally {
-      setBusy(null);
+      if (!patch) setBusy(null);
     }
   }
 
@@ -349,15 +355,14 @@ interface PackingCardProps {
   packing: PackingState;
   session: Session;
   busy: string | null;
-  onAct: (key: string, change: () => Promise<unknown>) => Promise<boolean>;
+  onAct: (key: string, change: () => Promise<unknown>, patch?: Patch) => Promise<boolean>;
 }
 
 function PackingCard({ order, note, courier, packing, session, busy, onAct }: PackingCardProps) {
-  // Ticks show immediately; the server answer (or an error) settles them afterwards.
-  const [optimistic, setOptimistic] = useState<Partial<Record<PackingPart, boolean>>>({});
   const [askReopen, setAskReopen] = useState(false);
   const [justDone, setJustDone] = useState(false);
-  const view = { ...packing, ...optimistic };
+  // Clicks show at once (see useDashboard); the Sheet confirms them in the background.
+  const view = packing;
   const mine = packing.claimedBy === session.name;
   const claimedByOther = Boolean(packing.claimedBy) && !mine;
   const done = Boolean(packing.packedBy);
@@ -372,15 +377,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
   ];
 
   function toggle(part: PackingPart, value: boolean) {
-    setOptimistic((o) => ({ ...o, [part]: value, ...(part !== "totaal" && !value ? { totaal: false } : {}) }));
-    void onAct(`${order.id}-${part}`, () => backend.checkPart(session, order.id, part, value)).finally(() =>
-      setOptimistic((o) => {
-        const next = { ...o };
-        delete next[part];
-        if (part !== "totaal") delete next.totaal;
-        return next;
-      })
-    );
+    void onAct(`${order.id}-${part}`, () => backend.checkPart(session, order.id, part, value), patches.checkPart(order.id, part, value));
   }
 
   const meta = [
@@ -392,10 +389,9 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
 
   async function complete() {
     const pieces = order.withRaisins + order.withoutRaisins;
-    if (await onAct(`${order.id}-complete`, () => backend.complete(session, order.id))) {
-      setJustDone(true);
-      toast(`Ingepakt! ${oudjesLine(pieces)}`);
-    }
+    setJustDone(true);
+    toast(`Ingepakt! ${oudjesLine(pieces)}`);
+    if (!(await onAct(`${order.id}-complete`, () => backend.complete(session, order.id), patches.complete(order.id, session.name)))) setJustDone(false);
   }
 
   return (
@@ -468,7 +464,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
             onConfirm={() => {
               setAskReopen(false);
               setJustDone(false);
-              void onAct(`${order.id}-reopen`, () => backend.reopen(session, order.id));
+              void onAct(`${order.id}-reopen`, () => backend.reopen(session, order.id), patches.reopen(order.id, session.name));
             }}
           >
             <p>Deze order heropenen om iets aan te passen? Hij komt dan op jouw naam te staan.</p>
@@ -486,7 +482,7 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           {!packing.claimedBy ? (
-            <button type="button" className={`${primaryButton} w-full sm:w-auto`} disabled={isBusy} onClick={() => void onAct(`${order.id}-claim`, () => backend.claim(session, order.id))}>
+            <button type="button" className={`${primaryButton} w-full sm:w-auto`} disabled={isBusy} onClick={() => void onAct(`${order.id}-claim`, () => backend.claim(session, order.id), patches.claim(order.id, session.name))}>
               Ik pak deze order
             </button>
           ) : null}
@@ -495,14 +491,14 @@ function PackingCard({ order, note, courier, packing, session, busy, onAct }: Pa
               <button type="button" className={primaryButton} disabled={!allChecked || isBusy} onClick={() => void complete()}>
                 Afronden
               </button>
-              <button type="button" className={ghostButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
+              <button type="button" className={ghostButton} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id), patches.release(order.id))}>
                 Vrijgeven
               </button>
             </>
           ) : null}
           {claimedByOther ? <p className="text-xs text-muted">{packing.claimedBy} pakt deze in.</p> : null}
           {claimedByOther && session.role === "beheer" ? (
-            <button type="button" className={textAction} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id))}>
+            <button type="button" className={textAction} disabled={isBusy} onClick={() => void onAct(`${order.id}-release`, () => backend.release(session, order.id), patches.release(order.id))}>
               Vrijgeven (beheer)
             </button>
           ) : null}

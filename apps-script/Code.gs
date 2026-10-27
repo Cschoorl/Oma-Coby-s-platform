@@ -53,9 +53,9 @@ const CONFIG = {
   START_ADDRESS: 'Aalsmeerderweg 85, Aalsmeer',
   /** Route eindigt weer bij de baklocatie. */
   ROUND_TRIP: true,
-  /** Vertrektijd als er bij de route geen is opgegeven, en minuten per stop voor uitladen en afgeven. */
+  /** Vertrektijd als er bij de route geen is opgegeven, en minuten per stop (parkeren, praatje, afgeven). */
   ROUTE_START_TIME: '09:00',
-  MINUTES_PER_STOP: 5,
+  MINUTES_PER_STOP: 15,
   /**
    * Startinhoud van het tabblad Agenda (alleen als het nog leeg is). Daarna past Mark de agenda in de
    * Sheet aan: één regel per dag, taak en dagdeel, met tijd, locatie en hoeveel mensen nodig zijn.
@@ -173,7 +173,7 @@ const TABS = {
   meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op']],
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
-  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden']],
+  routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden', 'dagdeel', 'eindpunt', 'maps_url_zonder_eindpunt']],
   costs: ['Kosten', ['id', 'ingevoerd_op', 'ingevoerd_door', 'datum', 'bedrag', 'leverancier', 'omschrijving', 'foto_url', 'iban', 'status', 'reden', 'beoordeeld_door', 'beoordeeld_op', 'uitbetaald_op']],
   delivery: ['Bezorgstatus', ['order_id', 'afgeleverd_door', 'afgeleverd_op']],
   agenda: ['Agenda', ['datum', 'taak', 'dagdeel', 'tijd', 'locatie', 'nodig']],
@@ -184,7 +184,9 @@ const TABS = {
     'factuur_email', 'factuuradres', 'referentie', 'met_krenten', 'zonder_krenten', 'donatie_oliebollen', 'flyers', 'afhalen_bezorgen',
     'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op']],
-  businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']]
+  businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
+  // Coordinates per address for the automatic planning, so each address is looked up only once.
+  places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']]
 };
 
 const PERMISSIONS = {
@@ -202,6 +204,8 @@ const PERMISSIONS = {
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
   assignCourier: ['beheer'],
+  assignCouriers: ['beheer'],
+  geocode: ['beheer'],
   extractReceipt: ['beheer', 'inpakker', 'bezorger'],
   saveCost: ['beheer', 'inpakker', 'bezorger'],
   registerVolunteer: ['public'],
@@ -233,6 +237,7 @@ function doPost(e) {
 }
 
 function handle_(raw) {
+  resetMemo_();
   try {
     const body = JSON.parse(raw);
     const action = String(body.action || '');
@@ -258,10 +263,9 @@ function json_(value) {
 function roleForCode_(code) {
   const value = String(code || '').trim();
   if (!value) return null;
-  const props = PropertiesService.getScriptProperties();
-  if (value === props.getProperty('CODE_BEHEER')) return 'beheer';
-  if (value === props.getProperty('CODE_INPAKKER')) return 'inpakker';
-  if (value === props.getProperty('CODE_BEZORGER')) return 'bezorger';
+  if (value === prop_('CODE_BEHEER')) return 'beheer';
+  if (value === prop_('CODE_INPAKKER')) return 'inpakker';
+  if (value === prop_('CODE_BEZORGER')) return 'bezorger';
   return null;
 }
 
@@ -275,6 +279,8 @@ const HANDLERS = {
     return { version: getVersion_() };
   },
   state: function (body, role) {
+    // The platform asks "anything new since version X?"; then one request is enough for both.
+    if (body.since && Number(body.since) === getVersion_()) return { unchanged: true, version: getVersion_() };
     return buildState_(role, String(body.name || '').trim());
   },
   setDelivered: function (body) {
@@ -471,11 +477,66 @@ const HANDLERS = {
       return bump_();
     });
   },
+  assignCouriers: function (body) {
+    const list = (body.assignments || []).filter(function (a) { return a && a.orderId; });
+    if (list.length === 0) throw new Error('Niets om in te delen.');
+    return withLock_(function () {
+      list.forEach(function (a) {
+        findOrCreate_('meta', a.orderId).set({
+          bezorger: String(a.courier || '').trim(),
+          bijgewerkt_door: String(body.name || ''),
+          bijgewerkt_op: now_()
+        });
+      });
+      return bump_();
+    });
+  },
+  /** Coordinates for the automatic planning. Looked up once per address and kept in the tab Locaties. */
+  geocode: function (body) {
+    const wanted = [CONFIG.START_ADDRESS].concat((body.addresses || []).map(function (a) { return String(a || '').trim(); }).filter(String));
+    const known = {};
+    readTab_('places').forEach(function (r) {
+      const lat = num_(r.lat);
+      const lng = num_(r.lng);
+      known[String(r.adres).trim().toLowerCase()] = lat && lng ? { lat: lat, lng: lng } : null;
+    });
+    const geocoder = Maps.newGeocoder().setRegion('nl').setLanguage('nl');
+    const points = {};
+    const fresh = [];
+    wanted.slice(0, 300).forEach(function (address) {
+      const key = address.toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(known, key)) { points[address] = known[key]; return; }
+      let point = null;
+      try {
+        const res = geocoder.geocode(address);
+        if (res.status === 'OK' && res.results && res.results.length) {
+          const loc = res.results[0].geometry.location;
+          point = { lat: loc.lat, lng: loc.lng };
+        }
+      } catch (err) {
+        point = null;
+      }
+      known[key] = point;
+      points[address] = point;
+      fresh.push([address, point ? point.lat : '', point ? point.lng : '', now_()]);
+    });
+    if (fresh.length) {
+      withLock_(function () {
+        const sheet = sheet_('places');
+        sheet.getRange(sheet.getLastRow() + 1, 1, fresh.length, 4).setValues(fresh);
+      });
+    }
+    return { start: { address: CONFIG.START_ADDRESS, point: points[CONFIG.START_ADDRESS] || null }, points: points };
+  },
   computeRoute: function (body) {
     const stops = (body.stops || []).filter(function (s) { return s && s.address; });
     if (stops.length === 0) throw new Error('Geen adressen voor deze route.');
     if (stops.length > 23) throw new Error('Maximaal 23 stops per route.');
     const mode = body.mode === 'bicycling' ? 'bicycling' : 'driving';
+    const part = String(body.part || '').trim();
+    // The last trip of the day may end at the courier's home: then the last stop is the one nearest home.
+    const endAddress = String(body.endAddress || '').trim();
+    const perStop = Number(body.minutesPerStop) > 0 ? Number(body.minutesPerStop) : CONFIG.MINUTES_PER_STOP;
 
     const finder = Maps.newDirectionFinder()
       .setOrigin(CONFIG.START_ADDRESS)
@@ -485,12 +546,15 @@ const HANDLERS = {
 
     let waypoints = stops;
     let destination;
-    if (CONFIG.ROUND_TRIP) {
+    if (endAddress) {
+      destination = endAddress;
+    } else if (CONFIG.ROUND_TRIP) {
       destination = CONFIG.START_ADDRESS;
     } else {
       destination = stops[stops.length - 1].address;
       waypoints = stops.slice(0, -1);
     }
+    const lastIsStop = !endAddress && !CONFIG.ROUND_TRIP;
     finder.setDestination(destination);
     waypoints.forEach(function (s) { finder.addWaypoint(s.address); });
     if (waypoints.length > 1) finder.setOptimizeWaypoints(true);
@@ -505,26 +569,35 @@ const HANDLERS = {
       seconds += leg.duration.value;
     });
     const order = (route.waypoint_order || waypoints.map(function (_, i) { return i; })).map(function (i) { return waypoints[i]; });
-    if (!CONFIG.ROUND_TRIP) order.push(stops[stops.length - 1]);
+    if (lastIsStop) order.push(stops[stops.length - 1]);
 
     // Expected arrival per stop: departure + driving time of each leg + time spent at earlier stops.
     const startTime = /^\d{1,2}:\d{2}$/.test(String(body.startTime || '')) ? String(body.startTime) : CONFIG.ROUTE_START_TIME;
     let clock = Number(startTime.split(':')[0]) * 60 + Number(startTime.split(':')[1]);
     const stopTimes = order.map(function (_, i) {
-      clock += Math.round(route.legs[i].duration.value / 60) + (i > 0 ? CONFIG.MINUTES_PER_STOP : 0);
+      clock += Math.round(route.legs[i].duration.value / 60) + (i > 0 ? perStop : 0);
       return hhmm_(clock);
     });
-    seconds += order.length * CONFIG.MINUTES_PER_STOP * 60;
+    seconds += order.length * perStop * 60;
+    // The way home after the last stop is not work time.
+    if (endAddress) seconds -= route.legs[route.legs.length - 1].duration.value;
 
     const travelmode = mode === 'bicycling' ? 'bicycling' : 'driving';
     const enc = encodeURIComponent;
     const mapsUrl = 'https://www.google.com/maps/dir/?api=1&origin=' + enc(CONFIG.START_ADDRESS) +
       '&destination=' + enc(destination) +
-      '&waypoints=' + order.slice(0, CONFIG.ROUND_TRIP ? order.length : -1).map(function (s) { return enc(s.address); }).join('%7C') +
+      '&waypoints=' + order.slice(0, lastIsStop ? -1 : order.length).map(function (s) { return enc(s.address); }).join('%7C') +
+      '&travelmode=' + travelmode;
+    // Other volunteers see the route without the home address: it then ends at the last stop.
+    const publicUrl = !endAddress ? mapsUrl : 'https://www.google.com/maps/dir/?api=1&origin=' + enc(CONFIG.START_ADDRESS) +
+      '&destination=' + enc(order[order.length - 1].address) +
+      '&waypoints=' + order.slice(0, -1).map(function (s) { return enc(s.address); }).join('%7C') +
       '&travelmode=' + travelmode;
 
     const info = {
-      key: body.date + '|' + body.courier,
+      key: body.date + '|' + body.courier + (part ? '|' + part : ''),
+      part: part,
+      endAddress: endAddress,
       date: String(body.date),
       courier: String(body.courier),
       mode: mode,
@@ -547,7 +620,10 @@ const HANDLERS = {
         maps_url: info.mapsUrl,
         berekend_op: info.computedAt,
         starttijd: info.startTime,
-        tijden: info.stopTimes.join(',')
+        tijden: info.stopTimes.join(','),
+        dagdeel: part,
+        eindpunt: endAddress,
+        maps_url_zonder_eindpunt: publicUrl
       });
       bump_();
     });
@@ -644,10 +720,26 @@ const HANDLERS = {
 // ---------------------------------------------------------------------------
 // State
 
+/**
+ * The state for one person. The full state is built once per data version and kept in the
+ * script cache, so opening the platform or refreshing does not read every tab again; any change
+ * (dashboard, form or a cell in the Sheet) bumps the version and the next request rebuilds it.
+ */
 function buildState_(role, name) {
-  const isAdmin = role === 'beheer';
+  const version = getVersion_();
+  let full = readStateCache_(version);
+  if (!full) {
+    full = buildFullState_();
+    full.version = version;
+    writeStateCache_(version, full);
+  }
+  return viewFor_(full, role, name);
+}
+
+/** Everything, as beheer sees it; viewFor_ takes out what other roles may not see. */
+function buildFullState_() {
   const state = {
-    version: getVersion_(),
+    version: 0,
     rows: readOrders_(),
     meta: {},
     packing: {},
@@ -660,7 +752,8 @@ function buildState_(role, name) {
     kmRate: null,
     delivery: {},
     agenda: readAgenda_(),
-    business: isAdmin ? readBusiness_() : []
+    // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
+    business: readBusiness_()
   };
 
   readTab_('meta').forEach(function (r) {
@@ -693,53 +786,116 @@ function buildState_(role, name) {
     state.routes[r.sleutel] = {
       key: r.sleutel, date: isoDate_(r.leverdatum), courier: String(r.bezorger), mode: r.vervoer,
       km: num_(r.km), minutes: num_(r.minuten),
-      orderIds: String(r.volgorde || '').split(',').filter(String), mapsUrl: String(r.maps_url || ''),
+      orderIds: String(r.volgorde || '').split(',').filter(String),
+      mapsUrl: String(r.maps_url || ''),
+      // For everyone but beheer: the route without the courier's home address.
+      publicMapsUrl: String(r.maps_url_zonder_eindpunt || (r.eindpunt ? '' : r.maps_url) || ''),
       computedAt: String(r.berekend_op || ''),
-      startTime: String(r.starttijd || ''), stopTimes: String(r.tijden || '').split(',').filter(String)
+      startTime: String(r.starttijd || ''), stopTimes: String(r.tijden || '').split(',').filter(String),
+      part: String(r.dagdeel || ''), endAddress: String(r.eindpunt || '')
     };
   });
   readTab_('delivery').forEach(function (r) {
     if (r.afgeleverd_door) state.delivery[r.order_id] = { deliveredBy: String(r.afgeleverd_door), deliveredAt: String(r.afgeleverd_op || '') };
   });
+  state.volunteers = readVolunteers_();
 
-  // Everyone sees who is available when (agenda); contact details only for beheer.
-  state.volunteers = readVolunteers_().map(function (v) {
-    if (isAdmin) return v;
-    return Object.assign({}, v, { phone: '', email: '', remark: '', address: '' });
-  });
-
-  const price = num_(getSetting_('prijs_per_oliebol'));
+  const settings = {};
+  readTab_('settings').forEach(function (r) { settings[r.sleutel] = r.waarde; });
+  const price = num_(settings.prijs_per_oliebol);
   state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
-  const kmRate = num_(getSetting_('km_vergoeding'));
+  const kmRate = num_(settings.km_vergoeding);
   state.kmRate = kmRate > 0 ? kmRate : null;
 
-  // Beheer sees every declaration; a volunteer only their own, with the IBAN masked.
   state.costs = readTab_('costs').map(function (r) {
-    const iban = String(r.iban || '');
     return {
       id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
       date: isoDate_(r.datum), amount: num_(r.bedrag), supplier: String(r.leverancier || ''),
       description: String(r.omschrijving || ''), photoUrl: String(r.foto_url || ''),
-      iban: isAdmin || !iban ? iban : '•••• ' + iban.slice(-4),
+      iban: String(r.iban || ''),
       status: String(r.status || 'ingediend'), reason: String(r.reden || ''),
       reviewedBy: String(r.beoordeeld_door || ''), reviewedAt: String(r.beoordeeld_op || ''), paidAt: isoDate_(r.uitbetaald_op)
     };
-  }).filter(function (c) {
-    return isAdmin || (name && c.createdBy.toLowerCase() === name.toLowerCase());
   });
-
-  if (isAdmin) {
-    state.history = readTab_('history').map(function (r) {
-      const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
-      return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
-    }).filter(function (r) { return r.year && r.date; });
-  }
+  state.history = readTab_('history').map(function (r) {
+    const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
+    return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
+  }).filter(function (r) { return r.year && r.date; });
   return state;
+}
+
+/** What one role sees: contact details, home addresses, IBANs and other people's costs only for beheer. */
+function viewFor_(full, role, name) {
+  const isAdmin = role === 'beheer';
+  const routes = {};
+  Object.keys(full.routes).forEach(function (key) {
+    const r = full.routes[key];
+    const out = Object.assign({}, r, isAdmin ? {} : { mapsUrl: r.publicMapsUrl, endAddress: '' });
+    delete out.publicMapsUrl;
+    routes[key] = out;
+  });
+  const lower = String(name || '').toLowerCase();
+  return Object.assign({}, full, {
+    routes: routes,
+    // Everyone sees who is available when (agenda); contact details only for beheer.
+    volunteers: isAdmin ? full.volunteers : full.volunteers.map(function (v) {
+      return Object.assign({}, v, { phone: '', email: '', remark: '', address: '' });
+    }),
+    // Beheer sees every declaration; a volunteer only their own, with the IBAN masked.
+    costs: full.costs.filter(function (c) {
+      return isAdmin || (lower && c.createdBy.toLowerCase() === lower);
+    }).map(function (c) {
+      return isAdmin || !c.iban ? c : Object.assign({}, c, { iban: '•••• ' + c.iban.slice(-4) });
+    }),
+    history: isAdmin ? full.history : [],
+    business: isAdmin ? full.business : []
+  });
+}
+
+// The script cache holds at most 100 KB per entry: the state is zipped and split into parts.
+// A change that skips the triggers (e.g. via another app) shows up after at most 5 minutes.
+const STATE_CACHE_SECONDS = 300;
+const STATE_CACHE_PART = 90000;
+
+function readStateCache_(version) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const count = Number(cache.get('state:' + version));
+    if (!count) return null;
+    const keys = [];
+    for (let i = 0; i < count; i++) keys.push('state:' + version + ':' + i);
+    const parts = cache.getAll(keys);
+    let text = '';
+    for (let i = 0; i < count; i++) {
+      if (!parts[keys[i]]) return null;
+      text += parts[keys[i]];
+    }
+    const blob = Utilities.newBlob(Utilities.base64Decode(text), 'application/x-gzip');
+    return JSON.parse(Utilities.ungzip(blob).getDataAsString('UTF-8'));
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeStateCache_(version, state) {
+  try {
+    const zipped = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(state), 'application/json')).getBytes());
+    const entries = {};
+    let count = 0;
+    for (let at = 0; at < zipped.length; at += STATE_CACHE_PART) entries['state:' + version + ':' + count++] = zipped.slice(at, at + STATE_CACHE_PART);
+    // Too big for the cache (very large Sheet): just build it every time.
+    if (count > 50) return;
+    const cache = CacheService.getScriptCache();
+    cache.putAll(entries, STATE_CACHE_SECONDS);
+    cache.put('state:' + version, String(count), STATE_CACHE_SECONDS);
+  } catch (err) {
+    // Without cache the platform still works, only slower.
+  }
 }
 
 /** Reads the order tab and returns rows keyed by the dashboard field names. */
 function readOrders_() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.ORDERS_SHEET);
+  const sheet = ss_().getSheetByName(CONFIG.ORDERS_SHEET);
   if (!sheet) throw new Error('Tabblad "' + CONFIG.ORDERS_SHEET + '" niet gevonden. Pas CONFIG.ORDERS_SHEET aan.');
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
@@ -753,7 +909,7 @@ function readOrders_() {
     }
   });
   const seen = {};
-  const tz = Session.getScriptTimeZone();
+  const tz = tz_();
   // Season = the most common year among the order timestamps; CONFIG.SEASON_YEAR when there are none.
   const yearCount = {};
   if (index.besteldatum !== undefined) {
@@ -818,8 +974,8 @@ function logPacking_(orderId, action, name) {
 }
 
 function volunteerSheet_() {
-  const id = PropertiesService.getScriptProperties().getProperty('VOLUNTEERS_SPREADSHEET_ID');
-  const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActive();
+  const id = prop_('VOLUNTEERS_SPREADSHEET_ID');
+  const ss = id ? SpreadsheetApp.openById(id) : ss_();
   let sheet = ss.getSheetByName(CONFIG.VOLUNTEERS_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.VOLUNTEERS_SHEET);
@@ -857,7 +1013,7 @@ function readVolunteers_() {
   const cell = function (row, field) {
     if (index[field] === undefined) return '';
     const v = row[index[field]];
-    if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm:ss');
     return String(v === null || v === undefined ? '' : v).trim();
   };
   return values.slice(1).map(function (row, i) {
@@ -968,10 +1124,55 @@ function receiptFolder_() {
 // ---------------------------------------------------------------------------
 // Sheet helpers
 
+// Every call to a Google service costs time (often 50–100 ms). Within one request we look up the
+// spreadsheet, the tabs, the script properties and the time zone only once.
+let SS_ = null;
+let PROPS_ = null;
+let TZ_ = null;
+const TAB_SHEETS_ = {};
+const TAB_CHECKED_ = {};
+
+/** Start of a request: forget lookups from an earlier one (the Sheet may have changed in between). */
+function resetMemo_() {
+  SS_ = null;
+  PROPS_ = null;
+  Object.keys(TAB_SHEETS_).forEach(function (k) { delete TAB_SHEETS_[k]; });
+  Object.keys(TAB_CHECKED_).forEach(function (k) { delete TAB_CHECKED_[k]; });
+}
+
+function ss_() {
+  if (!SS_) SS_ = SpreadsheetApp.getActive();
+  return SS_;
+}
+
+/** All script properties in one call; setProp_ keeps this copy up to date. */
+function prop_(key) {
+  if (!PROPS_) PROPS_ = PropertiesService.getScriptProperties().getProperties();
+  return PROPS_[key] === undefined ? null : PROPS_[key];
+}
+
+function setProp_(key, value) {
+  PropertiesService.getScriptProperties().setProperty(key, value);
+  if (PROPS_) PROPS_[key] = value;
+}
+
+function tz_() {
+  if (!TZ_) TZ_ = Session.getScriptTimeZone();
+  return TZ_;
+}
+
+/** The tab for reading: no header or format checks, those happen when writing. */
+function readSheet_(tab) {
+  if (TAB_SHEETS_[tab]) return TAB_SHEETS_[tab];
+  const sheet = ss_().getSheetByName(TABS[tab][0]);
+  return sheet ? (TAB_SHEETS_[tab] = sheet) : sheet_(tab);
+}
+
 function sheet_(tab) {
+  if (TAB_CHECKED_[tab]) return TAB_CHECKED_[tab];
   const def = TABS[tab];
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(def[0]);
+  const ss = ss_();
+  let sheet = TAB_SHEETS_[tab] || ss.getSheetByName(def[0]);
   if (!sheet) {
     sheet = ss.insertSheet(def[0]);
     // Keys stay text, so "001" or "2026-12-30" are not turned into numbers or dates.
@@ -991,11 +1192,13 @@ function sheet_(tab) {
       }
     });
   }
+  TAB_SHEETS_[tab] = sheet;
+  TAB_CHECKED_[tab] = sheet;
   return sheet;
 }
 
 function readTab_(tab) {
-  const sheet = sheet_(tab);
+  const sheet = readSheet_(tab);
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
   const headers = values[0].map(String);
@@ -1052,20 +1255,15 @@ function withLock_(fn) {
   }
 }
 
-function getSetting_(key) {
-  const rows = readTab_('settings');
-  for (let i = 0; i < rows.length; i++) if (rows[i].sleutel === key) return rows[i].waarde;
-  return '';
-}
-
 function getVersion_() {
-  return Number(PropertiesService.getScriptProperties().getProperty('DATA_VERSION')) || 1;
+  return Number(prop_('DATA_VERSION')) || 1;
 }
 
 function bump_() {
-  const props = PropertiesService.getScriptProperties();
+  // Read fresh: another request may have bumped in the meantime.
+  PROPS_ = null;
   const next = getVersion_() + 1;
-  props.setProperty('DATA_VERSION', String(next));
+  setProp_('DATA_VERSION', String(next));
   return { version: next };
 }
 
@@ -1182,6 +1380,8 @@ function anonymize_() {
   blank('business', ['contactpersoon', 'telefoon', 'email', 'factuur_email', 'opmerking', 'behandeld_door']);
   out.costs = blank('costs', ['ingevoerd_door', 'iban', 'beoordeeld_door']);
   clearRows_(sheet_('routes'));
+  // Looked-up addresses include volunteers' home addresses.
+  clearRows_(sheet_('places'));
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
@@ -1212,7 +1412,7 @@ function hhmm_(minutes) {
 /** Key cell → text. Sheets may turn "2026-11-15 10:12:00" into a date; keep the time if it has one. */
 function keyOf_(v) {
   if (v instanceof Date) {
-    const tz = Session.getScriptTimeZone();
+    const tz = tz_();
     const hasTime = Utilities.formatDate(v, tz, 'HH:mm:ss') !== '00:00:00';
     return Utilities.formatDate(v, tz, hasTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd');
   }
@@ -1222,12 +1422,11 @@ function keyOf_(v) {
 /** Keeps the key column of a dashboard tab as plain text, so new keys are not turned into dates. Once per tab. */
 function textKeys_(tab, sheet) {
   if (tab === 'history') return;
-  const props = PropertiesService.getScriptProperties();
   const flag = 'TEXT_KEYS_' + tab;
-  if (props.getProperty(flag)) return;
+  if (prop_(flag)) return;
   // The packing log has the time first and the order number second.
   sheet.getRange(tab === 'packlog' ? 'B:B' : 'A:A').setNumberFormat('@');
-  props.setProperty(flag, '1');
+  setProp_(flag, '1');
 }
 
 /** Number from a cell: 12.5, "12,5", "€ 1.234,50" and "" (→ 0) all work. */
@@ -1255,16 +1454,16 @@ function splitList_(v) {
 }
 
 function now_() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss');
 }
 
 function isoDate_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
   return String(v || '');
 }
 
 function formatCell_(date, field) {
-  const tz = Session.getScriptTimeZone();
+  const tz = tz_();
   if (/tijd/.test(field) && date.getFullYear() < 1900) return Utilities.formatDate(date, tz, 'HH:mm');
   if (field === 'geplande_tijd') return Utilities.formatDate(date, tz, 'HH:mm');
   if (/_op$|tijdstempel|timestamp/.test(field)) return Utilities.formatDate(date, tz, 'yyyy-MM-dd HH:mm:ss');

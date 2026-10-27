@@ -184,6 +184,10 @@ export interface RouteInfo {
   stopTimes: string[];
   mapsUrl: string;
   computedAt: string;
+  /** Dagdeel of this trip ("ochtend", "middag", "avond"); "" when the courier has one trip that day. */
+  part?: string;
+  /** Where the trip ends when not back at the loods (the courier's home after the last trip). */
+  endAddress?: string;
 }
 
 export interface DashboardState {

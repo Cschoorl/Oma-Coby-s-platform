@@ -6,8 +6,9 @@ import { Badge, Card, CopyButton, EmptyState, Icon, Notice, OliebolLoader, Secti
 import { Avatar } from "../../components/Avatar";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
-import { courierCandidates, courierOrders, couriersOn, deliveryOrders, findVolunteer, guessMode, isRouteStale, orderPart, orderedStops, routeKey, transportOn, whatsappNumber } from "./routeUtils";
-import { BIKE_MAX_PIECES, ROUTE_START_TIMES } from "../../config";
+import { courierAvailability, courierCandidates, courierRuns, couriersOn, deliveryOrders, findVolunteer, guessMode, homeAddress, isRouteStale, orderPart, orderedStops, runRoute, toHhmm, transportOn, whatsappNumber } from "./routeUtils";
+import { BIKE_MAX_PIECES, PLANNING, ROUTE_START_TIMES } from "../../config";
+import { AutoPlanCard } from "./AutoPlanCard";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
 
@@ -25,6 +26,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   // One flag for the whole run, so the loader does not restart between couriers.
   const [computingAll, setComputingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per trip ("courier|dagdeel"): vehicle and departure chosen on this page.
   const [modes, setModes] = useState<Record<string, "driving" | "bicycling">>({});
   const [startTimes, setStartTimes] = useState<Record<string, string>>({});
 
@@ -36,6 +38,16 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   const dayDeliveries = useMemo(() => deliveryOrders(state, date), [state, date]);
   const unassigned = dayDeliveries.filter((o) => !effectiveCourier(o, state.meta[o.id]));
   const pickups = state.orders.filter((o) => o.deliveryDate === date && o.fulfilment === "afhalen").length;
+
+  // Every trip of the day: one per courier and dagdeel.
+  const trips = useMemo(
+    () =>
+      couriers.flatMap((courier) => {
+        const runs = courierRuns(state, date, courier);
+        return runs.map((r, i) => ({ courier, part: r.part, orders: r.orders, last: i === runs.length - 1, route: runRoute(state, date, courier, r, runs.length === 1) }));
+      }),
+    [couriers, state, date]
+  );
 
   async function assign(order: Order, courier: string) {
     setBusy(`assign-${order.id}`);
@@ -49,49 +61,64 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
     }
   }
 
-  const dayRoutes = couriers.map((c) => state.routes[routeKey(date, c)]).filter(Boolean);
-  const totalKm = dayRoutes.reduce((sum, r) => sum + r.km, 0);
-  const staleCouriers = couriers.filter((c) => isRouteStale(courierOrders(state, date, c), state.routes[routeKey(date, c)]));
+  const dayRoutes = trips.map((t) => t.route).filter(Boolean);
+  const totalKm = dayRoutes.reduce((sum, r) => sum + (r?.km ?? 0), 0);
+  const staleTrips = trips.filter((t) => isRouteStale(t.orders, t.route));
   const delivered = dayDeliveries.filter((o) => state.delivery[o.id]).length;
 
-  const modeFor = (courier: string) =>
-    modes[courier] ?? state.routes[routeKey(date, courier)]?.mode ?? guessMode(courierOrders(state, date, courier), findVolunteer(state.volunteers, courier), date);
-  const startFor = (courier: string) => {
-    if (startTimes[courier]) return startTimes[courier];
-    const saved = state.routes[routeKey(date, courier)]?.startTime;
+  const tripKey = (courier: string, part: string) => `${courier}|${part}`;
+  const modeFor = (courier: string, part: string, orders: Order[]) =>
+    modes[tripKey(courier, part)] ?? routeOf(courier, part)?.mode ?? guessMode(orders, findVolunteer(state.volunteers, courier), date);
+  const routeOf = (courier: string, part: string) => trips.find((t) => t.courier === courier && t.part === part)?.route;
+  const startFor = (courier: string, part: string) => {
+    if (startTimes[tripKey(courier, part)]) return startTimes[tripKey(courier, part)];
+    const saved = routeOf(courier, part)?.startTime;
     if (saved) return saved;
-    // Earliest dagdeel among the stops decides the default departure.
-    const parts = courierOrders(state, date, courier).map(orderPart);
-    const first = ["ochtend", "middag", "avond"].find((p) => parts.includes(p)) ?? "";
-    return ROUTE_START_TIMES[first];
+    // The start of the dagdeel the courier signed up for, else the default for the dagdeel.
+    const v = findVolunteer(state.volunteers, courier);
+    const slot = v ? courierAvailability(v, date).find((a) => a.part === part) : undefined;
+    return slot ? toHhmm(slot.start) : ROUTE_START_TIMES[part] ?? ROUTE_START_TIMES[""];
   };
+  /** The last trip of the day ends at the courier's home, when the address is known. */
+  const endFor = (courier: string, last: boolean) => (last ? homeAddress(findVolunteer(state.volunteers, courier)) : "");
 
-  async function compute(courier: string) {
-    const orders = courierOrders(state, date, courier);
-    const mode = modeFor(courier);
-    setBusy(courier);
+  async function computeTrip(trip: { courier: string; part: string; mode: "driving" | "bicycling"; startTime: string; endAddress: string; orders: Order[] }) {
+    const id = tripKey(trip.courier, trip.part);
+    setBusy(id);
     setError(null);
     try {
       await run(() =>
         backend.computeRoute(session, {
           date,
-          courier,
-          mode,
-          startTime: startFor(courier),
-          stops: orders.map((o) => ({ orderId: o.id, address: stopAddress(o) }))
+          courier: trip.courier,
+          part: trip.part,
+          mode: trip.mode,
+          startTime: trip.startTime,
+          endAddress: trip.endAddress,
+          minutesPerStop: PLANNING.minutesPerStop,
+          stops: trip.orders.map((o) => ({ orderId: o.id, address: stopAddress(o) }))
         })
       );
     } catch (err) {
-      setError(`${courier}: ${err instanceof Error ? err.message : "route berekenen mislukt"}`);
+      setError(`${trip.courier}${trip.part ? ` (${trip.part})` : ""}: ${err instanceof Error ? err.message : "route berekenen mislukt"}`);
     } finally {
       setBusy(null);
     }
   }
 
-  async function computeAll() {
+  const tripRequest = (t: (typeof trips)[number]) => ({
+    courier: t.courier,
+    part: t.part,
+    mode: modeFor(t.courier, t.part, t.orders),
+    startTime: startFor(t.courier, t.part),
+    endAddress: endFor(t.courier, t.last),
+    orders: t.orders
+  });
+
+  async function computeMany(list: Array<Parameters<typeof computeTrip>[0]>) {
     setComputingAll(true);
     try {
-      for (const courier of couriers) await compute(courier);
+      for (const t of list) await computeTrip(t);
     } finally {
       setComputingAll(false);
     }
@@ -104,36 +131,38 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
       <StatStrip
         items={[
-          { label: "Bezorgers", value: couriers.length },
+          { label: "Bezorgers", value: couriers.length, hint: trips.length > couriers.length ? `${trips.length} ritten` : undefined },
           { label: "Bezorgingen", value: dayDeliveries.length, hint: `${unassigned.length} nog in te delen${pickups ? ` · ${pickups} afhalen` : ""}` },
-          { label: "Kilometers", value: `${formatNumber(Math.round(totalKm * 10) / 10)} km`, hint: `${dayRoutes.length} van ${couriers.length} routes berekend` },
+          { label: "Kilometers", value: `${formatNumber(Math.round(totalKm * 10) / 10)} km`, hint: `${dayRoutes.length} van ${trips.length} routes berekend` },
           { label: "Afgeleverd", value: `${delivered} / ${dayDeliveries.length}`, hint: "door de bezorgers afgevinkt" }
         ]}
       />
 
-      {staleCouriers.length > 0 ? (
+      {staleTrips.length > 0 ? (
         <Notice tone="warning">
-          Na het berekenen zijn er bezorgingen bijgekomen, vervallen of verschoven bij {staleCouriers.join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
-          <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void (async () => { for (const c of staleCouriers) await compute(c); })()}>
+          Na het berekenen zijn er bezorgingen bijgekomen, vervallen of verschoven bij {Array.from(new Set(staleTrips.map((t) => t.courier))).join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
+          <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void computeMany(staleTrips.map(tripRequest))}>
             Deze routes opnieuw berekenen
           </button>
         </Notice>
       ) : null}
+
+      <AutoPlanCard state={state} session={session} date={date} orders={dayDeliveries} run={run} isDemo={isDemo} onApplied={(list) => computeMany(list)} />
 
       <CourierAssignment state={state} date={date} orders={dayDeliveries} busy={busy} onAssign={assign} />
 
       <section>
         <SectionTitle
           title={`Routes voor ${formatDayLabel(date)}`}
-          subtitle="Bereken per bezorger de snelste volgorde en de kilometers vanaf de baklocatie, en stuur de route via WhatsApp."
+          subtitle={`Per bezorger en dagdeel de snelste volgorde vanaf de loods, met ${PLANNING.minutesPerStop} minuten per stop. De laatste rit eindigt bij huis. Stuur de route via WhatsApp.`}
           action={
-            <button type="button" className={primaryButton} disabled={busy !== null || couriers.length === 0} onClick={() => void computeAll()}>
+            <button type="button" className={primaryButton} disabled={busy !== null || trips.length === 0} onClick={() => void computeMany(trips.map(tripRequest))}>
               Alle routes berekenen
             </button>
           }
         />
         {isDemo ? <p className="-mt-2 mb-3 text-xs text-gouwe-ink">Demo: kilometers zijn een schatting. Met de Sheet-koppeling rekent Google Maps de echte route.</p> : null}
-        {/* Calculating routes calls Google Maps per courier: a real wait. Assigning a courier is quick and shows nothing. */}
+        {/* Calculating routes calls Google Maps per trip: a real wait. Assigning a courier is quick and shows nothing. */}
         {computingAll || (busy && !busy.startsWith("assign-")) ? (
           <div className="mb-3">
             <OliebolLoader label="De routes worden berekend…" delay={600} />
@@ -146,28 +175,28 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
         ) : null}
 
         <div className="grid gap-3 lg:grid-cols-2">
-          {couriers.map((courier) => {
-            const orders = courierOrders(state, date, courier);
-            const route = state.routes[routeKey(date, courier)];
+          {trips.map((trip) => {
+            const { courier, part, orders, route } = trip;
+            const id = tripKey(courier, part);
             const stale = isRouteStale(orders, route);
-            const mode = modeFor(courier);
+            const mode = modeFor(courier, part, orders);
             const stops = orderedStops(orders, route);
             const mapsUrl = route?.mapsUrl || mapsRouteUrlForOrders(stops);
             const volunteer = findVolunteer(state.volunteers, courier);
             const link = appLink(`/bezorger?naam=${encodeURIComponent(courier)}&datum=${date}`);
             const pieces = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-            const transport = volunteer ? transportOn(volunteer, date) : [];
+            const transport = volunteer ? transportOn(volunteer, date, part) : [];
             const warnings = [
               volunteer && mode === "driving" && !volunteer.roles.autokoerier.wants ? `${courier} heeft zich niet als autokoerier aangemeld.` : "",
               volunteer && mode === "bicycling" && !volunteer.roles.fietskoerier.wants ? `${courier} heeft zich niet als fietskoerier aangemeld.` : "",
-              volunteer && transport.length === 0 ? `${courier} heeft zich niet voor deze dag aangemeld.` : "",
+              volunteer && transport.length === 0 ? `${courier} heeft zich niet voor ${part ? `de ${part} van ` : ""}deze dag aangemeld.` : "",
               mode === "bicycling" && pieces > BIKE_MAX_PIECES ? `${pieces} oliebollen is veel voor de fiets (richtlijn: max. ${BIKE_MAX_PIECES}). Overweeg een auto.` : ""
             ].filter(Boolean);
             const done = orders.filter((o) => state.delivery[o.id]).length;
             const message = [
-              `Hoi ${courier}! Je bezorgroute voor ${formatDayLabel(date)}:`,
+              `Hoi ${courier}! Je bezorgroute voor ${formatDayLabel(date)}${part ? ` (${part})` : ""}:`,
               `${orders.length} stops, ${pieces} oliebollen${route ? `, ${route.km.toLocaleString("nl-NL")} km (± ${route.minutes} min)` : ""}.`,
-              route?.startTime && !stale ? `Vertrek ${route.startTime} vanaf de baklocatie.` : "",
+              route?.startTime && !stale ? `Vertrek ${route.startTime} vanaf de loods in Aalsmeer.` : "",
               "",
               `Alle adressen, aantallen en opmerkingen: ${link}`,
               mapsUrl ? `Route in Google Maps: ${mapsUrl}` : "",
@@ -177,14 +206,18 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
               .filter((line, i, all) => line !== "" || all[i - 1] !== "")
               .join("\n");
             const waUrl = `https://wa.me/${volunteer?.phone ? whatsappNumber(volunteer.phone) : ""}?text=${encodeURIComponent(message)}`;
+            const ends = route ? route.endAddress : endFor(courier, trip.last);
 
             return (
-              <Card key={courier} className="grid content-start gap-3">
+              <Card key={id} className="grid content-start gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
                     <Avatar name={courier} size={36} />
                     <div>
-                      <p className="font-serif text-lg font-bold text-krent">{courier}</p>
+                      <p className="font-serif text-lg font-bold text-krent">
+                        {courier}
+                        {part ? <span className="font-sans text-sm font-normal text-oliebol"> · {part}</span> : null}
+                      </p>
                       <p className="text-xs text-muted">
                         {orders.length} {orders.length === 1 ? "stop" : "stops"} · {pieces} oliebollen · {done} van {orders.length} afgeleverd
                       </p>
@@ -201,8 +234,8 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                     <select
                       className={`${inputClass} !w-auto py-1 text-xs`}
                       value={mode}
-                      onChange={(e) => setModes((m) => ({ ...m, [courier]: e.target.value as "driving" | "bicycling" }))}
-                      aria-label="Vervoer"
+                      onChange={(e) => setModes((m) => ({ ...m, [id]: e.target.value as "driving" | "bicycling" }))}
+                      aria-label={`Vervoer ${courier}${part ? ` ${part}` : ""}`}
                     >
                       <option value="driving">Auto</option>
                       <option value="bicycling">Fiets</option>
@@ -212,9 +245,9 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                       <input
                         type="time"
                         className={`${inputClass} !w-28 py-1 text-xs`}
-                        value={startFor(courier)}
-                        onChange={(e) => setStartTimes((t) => ({ ...t, [courier]: e.target.value }))}
-                        aria-label={`Vertrektijd ${courier}`}
+                        value={startFor(courier, part)}
+                        onChange={(e) => setStartTimes((t) => ({ ...t, [id]: e.target.value }))}
+                        aria-label={`Vertrektijd ${courier}${part ? ` ${part}` : ""}`}
                       />
                     </label>
                   </div>
@@ -245,14 +278,15 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                     );
                   })}
                 </ol>
+                <p className="-mt-1 text-xs text-muted">{ends ? `Eindigt bij huis (${ends}).` : "Eindigt weer bij de loods."}</p>
 
                 <div className="flex flex-wrap items-center gap-1">
                   <a className={`${primaryButton} mr-1`} href={waUrl} target="_blank" rel="noreferrer">
                     <Icon name="whatsapp" />
                     Stuur via WhatsApp
                   </a>
-                  <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void compute(courier)}>
-                    {busy === courier ? "Berekenen…" : route ? "Opnieuw berekenen" : "Route berekenen"}
+                  <button type="button" className={ghostButton} disabled={busy !== null} onClick={() => void computeTrip(tripRequest(trip))}>
+                    {busy === id ? "Berekenen…" : route ? "Opnieuw berekenen" : "Route berekenen"}
                   </button>
                   {mapsUrl ? (
                     <a className={ghostButton} href={mapsUrl} target="_blank" rel="noreferrer">
@@ -268,7 +302,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             );
           })}
         </div>
-        {couriers.length === 0 ? <EmptyState title="Nog geen bezorgers ingedeeld." text="Deel hierboven de bezorgingen in; daarna verschijnen hier de routes." /> : null}
+        {couriers.length === 0 ? <EmptyState title="Nog geen bezorgers ingedeeld." text="Maak hierboven een voorstel of deel de bezorgingen zelf in; daarna verschijnen hier de routes." /> : null}
       </section>
     </div>
   );

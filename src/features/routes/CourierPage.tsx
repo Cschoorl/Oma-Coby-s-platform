@@ -7,37 +7,36 @@ import { SupplierPicker } from "../orders/SupplierPicker";
 import { Badge, Bollenteller, Card, EmptyState, Icon, Note, Notice, ProgressBar, bigButton, formatDayLabel, pickInitialDate, primaryButton, rollOliebol, secondaryButton, textAction, toast } from "../../components/ui";
 import { effectiveNote, mapsRouteUrlForOrders, mapsUrl, stopAddress } from "../../utils/orderUtils";
 import { navigate } from "../../lib/router";
-import { courierOrders, couriersOn, isRouteStale, orderedStops, routeKey } from "./routeUtils";
+import { patches } from "../../lib/patches";
+import type { Patch } from "../../lib/useDashboard";
+import { courierRuns, couriersOn, isRouteStale, orderedStops, runRoute } from "./routeUtils";
 
 interface CourierPageProps {
   state: DashboardState;
   session: Session;
-  run: (change: () => Promise<unknown>) => Promise<void>;
+  run: (change: () => Promise<unknown>, patch?: Patch) => Promise<void>;
   name: string | null;
   date: string | null;
 }
 
 /** Mobile-first page per bezorger; this is the link that goes out via WhatsApp. */
 export function CourierPage({ state, session, run, name, date: dateParam }: CourierPageProps) {
-  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Shows at once and the next stop can be ticked straight away; the Sheet saves in the background.
   async function markDelivered(orderId: string, delivered: boolean) {
-    setBusy(orderId);
     setError(null);
+    if (delivered) {
+      const left = orders.filter((o) => o.id !== orderId && !state.delivery[o.id]).length;
+      if (left === 0) {
+        rollOliebol();
+        toast("Alle bollen zijn binnen. Rij voorzichtig terug!");
+      } else toast(`Afgeleverd. Nog ${left} ${left === 1 ? "stop" : "stops"}.`);
+    }
     try {
-      await run(() => backend.setDelivered(session, orderId, delivered));
-      if (delivered) {
-        const left = orders.filter((o) => o.id !== orderId && !state.delivery[o.id]).length;
-        if (left === 0) {
-          rollOliebol();
-          toast("Alle bollen zijn binnen. Rij voorzichtig terug!");
-        } else toast(`Afgeleverd. Nog ${left} ${left === 1 ? "stop" : "stops"}.`);
-      }
+      await run(() => backend.setDelivered(session, orderId, delivered), patches.delivered(orderId, session.name, delivered));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Opslaan mislukt.");
-    } finally {
-      setBusy(null);
     }
   }
   const dates = useMemo(() => Array.from(new Set(state.orders.map((o) => o.deliveryDate))).sort(), [state.orders]);
@@ -50,12 +49,21 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
     navigate(nextName ? `/bezorger?naam=${encodeURIComponent(nextName)}&datum=${nextDate}` : `/bezorger?datum=${nextDate}`);
   }
 
-  const orders = name ? courierOrders(state, date, name) : [];
-  const route = name ? state.routes[routeKey(date, name)] : undefined;
-  const stops = orderedStops(orders, route);
-  const routeUrl = route?.mapsUrl || mapsRouteUrlForOrders(stops);
+  // One trip per dagdeel; most couriers have one.
+  const runs = name ? courierRuns(state, date, name) : [];
+  const trips = runs.map((r) => {
+    const route = runRoute(state, date, name ?? "", r, runs.length === 1);
+    const stops = orderedStops(r.orders, route);
+    return { ...r, route, stale: isRouteStale(r.orders, route), stops, url: route?.mapsUrl || mapsRouteUrlForOrders(stops) };
+  });
+  const orders = trips.flatMap((t) => t.orders);
+  const stops = trips.flatMap((t) => t.stops);
+  const tripOf = (orderId: string) => trips.find((t) => t.orders.some((o) => o.id === orderId));
+  const computed = trips.filter((t) => t.route && !t.stale);
+  const km = computed.reduce((sum, t) => sum + (t.route?.km ?? 0), 0);
+  const minutes = computed.reduce((sum, t) => sum + (t.route?.minutes ?? 0), 0);
+  const firstStart = trips[0]?.route && !trips[0].stale ? trips[0].route.startTime : "";
   const pieces = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-  const stale = isRouteStale(orders, route);
   const deliveredCount = orders.filter((o) => state.delivery[o.id]).length;
   const nextStop = stops.find((o) => !state.delivery[o.id]);
 
@@ -75,21 +83,24 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                 <p className="font-display text-[34px] uppercase leading-none tracking-wide text-krent">Hoi {name.split(" ")[0]}!</p>
                 <p className="mt-1 text-sm text-oliebol">
                   {orders.length} {orders.length === 1 ? "stop" : "stops"} · {pieces} oliebollen
-                  {route ? ` · ${route.km.toLocaleString("nl-NL")} km (± ${route.minutes} min)` : ""}
-                  {route?.startTime && !stale ? ` · vertrek ${route.startTime}` : ""}
+                  {computed.length ? ` · ${(Math.round(km * 10) / 10).toLocaleString("nl-NL")} km (± ${minutes} min)` : ""}
+                  {trips.length > 1 ? ` · ${trips.length} ritten` : ""}
+                  {firstStart ? ` · vertrek ${firstStart}` : ""}
                 </p>
               </div>
               <button type="button" className={textAction} onClick={() => go(null, date)}>
                 Wissel
               </button>
             </div>
-            {routeUrl ? (
-              <a className={`${primaryButton} min-h-[48px] text-base`} href={routeUrl} target="_blank" rel="noreferrer">
-                <Icon name="map" />
-                Start route in Google Maps
-              </a>
-            ) : null}
-            <p className="-mt-1 text-center text-xs text-muted">Start en eindigt bij de baklocatie in Aalsmeer.</p>
+            {trips.map((t) =>
+              t.url ? (
+                <a key={t.part || "rit"} className={`${primaryButton} min-h-[48px] text-base`} href={t.url} target="_blank" rel="noreferrer">
+                  <Icon name="map" />
+                  {trips.length > 1 ? `Start rit ${t.part || ""} in Google Maps` : "Start route in Google Maps"}
+                </a>
+              ) : null
+            )}
+            <p className="-mt-1 text-center text-xs text-muted">{trips.length > 1 ? "Elke rit start bij de loods in Aalsmeer." : "De route start bij de loods in Aalsmeer."}</p>
             {orders.length > 0 ? <ProgressBar label="Afgeleverd" done={deliveredCount} total={orders.length} /> : null}
           </Card>
           {error ? <Notice tone="error">{error}</Notice> : null}
@@ -107,26 +118,37 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
               const note = effectiveNote(order, state.meta[order.id]);
               const packing = state.packing[order.id] ?? emptyPacking;
               const delivered = state.delivery[order.id];
-              const eta = route && !stale ? route.stopTimes[route.orderIds.indexOf(order.id)] : "";
+              const trip = tripOf(order.id);
+              const eta = trip?.route && !trip.stale ? trip.route.stopTimes[trip.route.orderIds.indexOf(order.id)] : "";
               const isNext = nextStop?.id === order.id;
+              // With more than one trip, a small heading where each trip begins.
+              const tripHead =
+                trips.length > 1 && trip && trip.stops[0]?.id === order.id ? (
+                  <p key={`kop-${trip.part}`} className="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                    Rit {trip.part || ""}
+                    {trip.route?.startTime && !trip.stale ? ` · vertrek ${trip.route.startTime} vanaf de loods` : ""}
+                  </p>
+                ) : null;
               if (delivered) {
                 // Delivered stops fold into one quiet line.
-                return (
+                return [
+                  tripHead,
                   <div key={order.id} className="flex items-center gap-3 px-1 py-1.5">
                     <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-kerst text-sm font-bold text-meel">✓</span>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-bold text-muted">{order.locationName || order.contactPerson}</p>
                       <p className="text-xs text-muted">
                         Afgeleverd door {delivered.deliveredBy} om {delivered.deliveredAt.slice(11, 16)} ·{" "}
-                        <button type="button" className={textAction} disabled={busy !== null} onClick={() => void markDelivered(order.id, false)}>
+                        <button type="button" className={textAction} onClick={() => void markDelivered(order.id, false)}>
                           Ongedaan maken
                         </button>
                       </p>
                     </div>
                   </div>
-                );
+                ];
               }
-              return (
+              return [
+                tripHead,
                 <Card key={order.id} className={`grid gap-3 ${isNext ? "ring-2 ring-feest" : ""}`}>
                   <div className="flex items-start gap-3">
                     <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold tabular-nums text-meel ${isNext ? "bg-feest" : "bg-krent"}`}>{i + 1}</span>
@@ -166,11 +188,11 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                       Navigeren
                     </a>
                   </div>
-                  <button type="button" className={bigButton} disabled={busy !== null} onClick={() => void markDelivered(order.id, true)}>
-                    {busy === order.id ? "Opslaan…" : "✓ Afgeleverd"}
+                  <button type="button" className={bigButton} onClick={() => void markDelivered(order.id, true)}>
+                    ✓ Afgeleverd
                   </button>
                 </Card>
-              );
+              ];
             })}
             {stops.length === 0 ? <EmptyState title={`Geen stops voor ${name} op deze dag.`} text="Kies een andere dag of wissel van bezorger." /> : null}
           </div>

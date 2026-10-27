@@ -20,7 +20,7 @@ import logoUrl from "./assets/logo-oliebollenbar.svg";
 import { CONTACT_EMAIL, applyAgenda } from "./config";
 import { navigate, useRoute } from "./lib/router";
 import { loadSession, saveSession } from "./lib/session";
-import { useDashboard } from "./lib/useDashboard";
+import { clearSnapshots, useDashboard } from "./lib/useDashboard";
 
 interface NavItem {
   path: string;
@@ -30,25 +30,34 @@ interface NavItem {
   roles: Role[];
   /** Reachable by link only (not in the menu). */
   hidden?: boolean;
+  /** Other name and line for inpakkers and bezorgers. */
+  asVolunteer?: { label: string; description: string };
 }
 
 const NAV: NavItem[] = [
-  { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/zakelijk", label: "Zakelijk", description: "Aanvragen van het zakelijke bestelformulier nakijken, bevestigen of afwijzen.", roles: ["beheer"] },
-  { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
-  { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
   { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren. Achter de discobal-knop: de discozaal.", roles: ["beheer"] },
+  { path: "/agenda", label: "Agenda", description: "Waar nog plek is en wie er op een dag is.", roles: ["beheer"] },
+  { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
+  { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Wie kan wanneer: per vrijwilliger en per dag, met contactgegevens.", roles: ["beheer"] },
-  { path: "/agenda", label: "Agenda", description: "Waar nog plek is en wie er op een dag is.", roles: ["beheer", "inpakker", "bezorger"] },
-  { path: "/kosten", label: "Kosten", description: "Bon declareren en de status volgen; beheer keurt goed en betaalt uit.", roles: ["beheer", "inpakker", "bezorger"] },
+  { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
+  {
+    path: "/kosten",
+    label: "Kosten",
+    description: "Bon declareren en de status volgen; beheer keurt goed en betaalt uit.",
+    roles: ["beheer", "bezorger"],
+    // Volunteers only hand in receipts; beheer also approves and pays.
+    asVolunteer: { label: "Kosten indienen", description: "Maak een foto van je bon, dien hem in en volg de status." }
+  },
   { path: "/pakbonnen", label: "Pakbonnen", description: "Per order een pakbon om te printen en bij de doos te leggen.", roles: ["beheer", "inpakker"], hidden: true }
 ];
 
 /** Pages without login; a logged-in visitor can open them too. */
 const PUBLIC = ["/aanmelden", "/bestellen"];
 
-const HOME: Record<Role, string> = { beheer: "/inpakken", inpakker: "/inpakken", bezorger: "/bezorger" };
+const HOME: Record<Role, string> = { beheer: "/orders", inpakker: "/inpakken", bezorger: "/bezorger" };
 
 const roleLabel: Record<Role, string> = { beheer: "Beheer", inpakker: "Inpakker", bezorger: "Bezorger" };
 
@@ -100,7 +109,12 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const dashboard = useDashboard(session);
 
-  const allowed = session ? NAV.filter((item) => item.roles.includes(session.role)) : [];
+  // Each role's start page comes first in its menu; the rest keeps the NAV order.
+  const allowed = session
+    ? NAV.filter((item) => item.roles.includes(session.role))
+        .sort((a, b) => Number(b.path === HOME[session.role]) - Number(a.path === HOME[session.role]))
+        .map((item) => (item.asVolunteer && session.role !== "beheer" ? { ...item, ...item.asVolunteer } : item))
+    : [];
   const current = allowed.find((item) => item.path === route.path);
 
   useEffect(() => {
@@ -115,6 +129,7 @@ function App() {
   }
 
   function logout() {
+    clearSnapshots();
     saveSession(null);
     setSession(null);
   }
@@ -137,7 +152,7 @@ function App() {
   if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, true);
   if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
-  const { state, error, lastSync, run } = dashboard;
+  const { state, error, lastSync, saving, run } = dashboard;
 
   let page: React.ReactNode = null;
   // The signup options and targets follow the Agenda tab of the Sheet.
@@ -191,7 +206,7 @@ function App() {
             <DemoPill />
             <span className="inline-flex items-center gap-1.5" title={lastSync ? `Bijgewerkt ${lastSync.toLocaleTimeString("nl-NL")}` : undefined}>
               <span className={`inline-block h-2 w-2 rounded-full ${liveDot}`} />
-              <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}</span>
+              <span className="hidden sm:inline">{saving ? "Opslaan…" : error ? "Geen verbinding" : lastSync ? "Live" : state ? "Bijwerken…" : "Verbinden…"}</span>
             </span>
             <span className="hidden items-center gap-2 text-krent sm:inline-flex">
               <Avatar name={session.name} size={28} />

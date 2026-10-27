@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Volunteer } from "../../types/dashboard";
-import { StaffingCalendar } from "../../components/StaffingCalendar";
+import { StaffingOverview } from "../../components/StaffingOverview";
 import { NameTag } from "../../components/Avatar";
 import { countSignups } from "../../utils/staffing";
 import { Card, CopyButton, EmptyState, Icon, SectionTitle, inputClass, secondaryButton, textAction, todayIso } from "../../components/ui";
@@ -66,7 +66,7 @@ export function AgendaPage({ volunteers, contactEmail, me }: { volunteers: Volun
 
       <Card>
         <SectionTitle title="Waar is nog plek?" subtitle="Met een ! zijn er die dag nog weinig mensen. Klik een dag om te zien wie er is." />
-        <StaffingCalendar counts={countSignups(volunteers)} selected={day} onPick={setPicked} />
+        <StaffingOverview counts={countSignups(volunteers)} selected={day} onPick={setPicked} />
       </Card>
 
       {current ? (

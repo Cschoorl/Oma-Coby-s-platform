@@ -37,6 +37,23 @@ export interface RouteRequest {
   /** Departure from the bakery, HH:mm. */
   startTime: string;
   stops: Array<{ orderId: string; address: string }>;
+  /** Dagdeel of the trip; part of the route key when set. */
+  part?: string;
+  /** End of the trip when not back at the loods (the courier's home). */
+  endAddress?: string;
+  /** Minutes per stop for the arrival times. */
+  minutesPerStop?: number;
+}
+
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
+export interface GeocodeResult {
+  /** The loods, where every trip starts. */
+  start: { address: string; point: GeoPoint | null };
+  points: Record<string, GeoPoint | null>;
 }
 
 export interface VolunteerSignup {
@@ -89,7 +106,8 @@ export interface Backend {
   notice?: string;
   login(code: string): Promise<Role>;
   getVersion(session: Session): Promise<number>;
-  getState(session: Session): Promise<DashboardState>;
+  /** With `since`: null when nothing changed after that version (one small request instead of two). */
+  getState(session: Session, since?: number): Promise<DashboardState | null>;
   claim(session: Session, orderId: string): Promise<void>;
   release(session: Session, orderId: string): Promise<void>;
   checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<void>;
@@ -101,6 +119,10 @@ export interface Backend {
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
   sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
   assignCourier(session: Session, orderId: string, courier: string): Promise<void>;
+  /** Several assignments in one go (automatic planning). */
+  assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
+  /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
+  geocode(session: Session, addresses: string[]): Promise<GeocodeResult>;
   computeRoute(session: Session, request: RouteRequest): Promise<RouteInfo>;
   registerVolunteer(signup: VolunteerSignup): Promise<void>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
@@ -171,8 +193,9 @@ function createAppsScriptBackend(url: string): Backend {
       const data = await call<{ version: number }>("version", withSession(session));
       return data.version;
     },
-    async getState(session) {
-      const raw = await call<RawState>("state", withSession(session));
+    async getState(session, since) {
+      const raw = await call<RawState | { unchanged: true; version: number }>("state", withSession(session, since ? { since } : {}));
+      if ("unchanged" in raw) return null;
       const { rows, ...rest } = raw;
       // Older scripts lack the newer fields; fill them so the pages never see undefined.
       return {
@@ -219,6 +242,12 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async assignCourier(session, orderId, courier) {
       await call("assignCourier", withSession(session, { orderId, courier }));
+    },
+    async assignCouriers(session, assignments) {
+      await call("assignCouriers", withSession(session, { assignments }));
+    },
+    async geocode(session, addresses) {
+      return call<GeocodeResult>("geocode", withSession(session, { addresses }));
     },
     async computeRoute(session, request) {
       return call<RouteInfo>("computeRoute", withSession(session, { ...request }));
@@ -318,6 +347,8 @@ function demoVolunteers(): Volunteer[] {
       ...base,
       id: "demo-1",
       name: "Bezorger Anna",
+      address: "Dorpsstraat 5",
+      city: "Aalsmeer",
       phone: "0600000001",
       email: "anna@example.nl",
       cargoBike: true,
@@ -327,6 +358,8 @@ function demoVolunteers(): Volunteer[] {
       ...base,
       id: "demo-2",
       name: "Bezorger Bram",
+      address: "Kostverlorenhof 3",
+      city: "Amstelveen",
       phone: "0600000002",
       email: "",
       roles: { inpakken: { wants: true, days: ["Dinsdag 29 december"] }, fietskoerier: none, autokoerier: { wants: true, days: ["Woensdag 30 december: middag"] }, oliebollenbar: none }
@@ -335,6 +368,8 @@ function demoVolunteers(): Volunteer[] {
       ...base,
       id: "demo-3",
       name: "Bezorger Chris",
+      address: "Zijdstraat 20",
+      city: "Aalsmeer",
       phone: "0600000003",
       email: "chris@example.nl",
       remark: "Liefst samen met Bram",
@@ -453,6 +488,32 @@ function demoHistory() {
   return rows;
 }
 
+const DEMO_LOODS = "Aalsmeerderweg 85, Aalsmeer";
+
+/** Demo has no Maps: a fixed spot per town plus a small offset per address, so the planner has something to work with. */
+const DEMO_TOWNS: Record<string, GeoPoint> = {
+  aalsmeer: { lat: 52.263, lng: 4.762 },
+  amstelveen: { lat: 52.303, lng: 4.862 },
+  amsterdam: { lat: 52.372, lng: 4.894 },
+  uithoorn: { lat: 52.237, lng: 4.826 },
+  hoofddorp: { lat: 52.302, lng: 4.69 },
+  haarlem: { lat: 52.381, lng: 4.636 },
+  "den haag": { lat: 52.078, lng: 4.288 },
+  kudelstaart: { lat: 52.235, lng: 4.749 },
+  leiden: { lat: 52.16, lng: 4.497 },
+  utrecht: { lat: 52.091, lng: 5.122 }
+};
+
+function demoPoint(address: string): GeoPoint | null {
+  if (!address.trim()) return null;
+  const lower = address.toLowerCase();
+  const town = Object.keys(DEMO_TOWNS).find((t) => lower.includes(t)) ?? "amsterdam";
+  let hash = 0;
+  for (const ch of lower) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+  const spread = address === DEMO_LOODS ? 0 : 0.02;
+  return { lat: DEMO_TOWNS[town].lat + (((hash & 0xff) / 255) - 0.5) * spread, lng: DEMO_TOWNS[town].lng + ((((hash >> 8) & 0xff) / 255) - 0.5) * spread * 1.6 };
+}
+
 function createDemoBackend(notice?: string): Backend {
   let ordersPromise: Promise<Order[]> | null = null;
   const getOrders = () => {
@@ -489,8 +550,9 @@ function createDemoBackend(notice?: string): Backend {
     async getVersion() {
       return readStore().version;
     },
-    async getState(session) {
+    async getState(session, since) {
       const store = readStore();
+      if (since && since === store.version) return null;
       // Confirmed business requests join the orders, unless the order list already has that number.
       const sheetOrders = await getOrders();
       const known = new Set(sheetOrders.map((o) => o.id));
@@ -634,6 +696,23 @@ function createDemoBackend(notice?: string): Backend {
         m.updatedAt = nowStamp();
       });
     },
+    async assignCouriers(session, assignments) {
+      await delay(250);
+      mutate((store) => {
+        for (const a of assignments) {
+          const m = metaFor(store, a.orderId);
+          m.courier = a.courier.trim();
+          m.updatedBy = session.name;
+          m.updatedAt = nowStamp();
+        }
+      });
+    },
+    async geocode(_session, addresses) {
+      await delay(300);
+      const points: Record<string, GeoPoint | null> = {};
+      for (const a of addresses) points[a] = demoPoint(a);
+      return { start: { address: DEMO_LOODS, point: demoPoint(DEMO_LOODS) }, points };
+    },
     async computeRoute(_session, request) {
       await delay(500);
       // No Maps in demo mode: rough estimate of 3.5 km per stop by car, 2.5 km by bike.
@@ -642,17 +721,20 @@ function createDemoBackend(notice?: string): Backend {
       // Rough arrival times: first stop after 15 minutes, then the travel time per stop plus 5 minutes there.
       const [h, m] = (/^\d{1,2}:\d{2}$/.test(request.startTime) ? request.startTime : "09:00").split(":").map(Number);
       const legMinutes = Math.round(perStop * (request.mode === "bicycling" ? 4 : 2.2));
+      const perStopMinutes = request.minutesPerStop ?? 15;
       const stopTimes = request.stops.map((_, i) => {
-        const t = h * 60 + m + 15 + i * (legMinutes + 5);
+        const t = h * 60 + m + 15 + i * (legMinutes + perStopMinutes);
         return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
       });
       const info: RouteInfo = {
-        key: `${request.date}|${request.courier}`,
+        key: request.part ? `${request.date}|${request.courier}|${request.part}` : `${request.date}|${request.courier}`,
+        part: request.part ?? "",
+        endAddress: request.endAddress ?? "",
         date: request.date,
         courier: request.courier,
         mode: request.mode,
         km,
-        minutes: Math.round(km * (request.mode === "bicycling" ? 4 : 2.2) + request.stops.length * 5),
+        minutes: Math.round(km * (request.mode === "bicycling" ? 4 : 2.2) + request.stops.length * perStopMinutes),
         orderIds: request.stops.map((s) => s.orderId),
         mapsUrl: "",
         computedAt: nowStamp(),

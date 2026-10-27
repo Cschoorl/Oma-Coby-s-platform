@@ -9,7 +9,7 @@ import { effectiveCourier, effectiveNote, stopAddress } from "../../utils/orderU
 import { PARTS } from "../routes/routeUtils";
 import { boxPlan } from "./LabelPanel";
 
-const typeLabel: Record<Order["customerType"], string> = { particulier: "Particulier", zakelijk: "Zakelijk", barter: "Barter", onbekend: "" };
+const typeLabel: Record<Order["customerType"], string> = { particulier: "Particulier", zakelijk: "Zakelijk", barter: "Barter", popup: "Pop-upvoorraad", onbekend: "" };
 
 /** Printable packing slips: one block per order, sorted by courier and route order, pickups last. */
 export function PackingSlipsPage({ state, date: dateParam }: { state: DashboardState; date: string | null }) {

@@ -1,4 +1,5 @@
 import type { CustomerType, DeliveryStatus, Fulfilment, Order } from "../types/order";
+import { categoryOf } from "../lib/categories";
 
 // Schema of the rows as they arrive from Google Sheets via n8n. Sheets often sends
 // numbers as strings and leaves cells empty, so every field is treated as loose input.
@@ -59,6 +60,7 @@ function pad(n: number): string {
 function toCustomerType(value: unknown): CustomerType {
   const lower = text(value).toLowerCase();
   if (!lower) return "onbekend";
+  if (/pop.?up/.test(lower)) return "popup";
   if (/barter/.test(lower)) return "barter";
   if (/zakelijk|b2b|bedrijf/.test(lower)) return "zakelijk";
   return "particulier";
@@ -121,6 +123,7 @@ export function mapSheetRowToOrder(row: LooseRow, index = 0): Order {
     extras: extras || undefined,
     email: text(row.email) || undefined,
     customerType: toCustomerType(row.type_klant),
+    category: categoryOf(toCustomerType(row.type_klant)),
     amount: toAmount(row.bedrag),
     orderDate: row.besteldatum ? toIsoDate(row.besteldatum) : undefined,
     fulfilment: toFulfilment(row.afhalen_bezorgen),

@@ -8,6 +8,9 @@ import { confirmationSubject, defaultConfirmation } from "../../utils/confirmati
 import { effectiveNote } from "../../utils/orderUtils";
 import { OrderEditCard, OrderHistory } from "./OrderEditCard";
 import { changesFor } from "../../lib/orderChanges";
+import { NewOrderCard, PopupSalesCard } from "./OrderCategoryCards";
+import { categoryLabel } from "../../lib/categories";
+import type { OrderCategory } from "../../types/order";
 
 interface OrdersAdminPageProps {
   state: DashboardState;
@@ -16,11 +19,15 @@ interface OrdersAdminPageProps {
 }
 
 type Filter = "review" | "confirm" | "all";
+type Kind = "alle" | OrderCategory;
 
 export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
   const [filter, setFilter] = useState<Filter>("review");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [kind, setKind] = useState<Kind>("alle");
+  // "Nieuw": the right column shows the form for a new order or pop-up stock.
+  const [creating, setCreating] = useState<string | null>(null);
 
   const metaOf = (id: string): OrderMeta => state.meta[id] ?? emptyMeta;
 
@@ -30,12 +37,14 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
       .sort((a, b) => (a.deliveryDate + a.plannedTime).localeCompare(b.deliveryDate + b.plannedTime))
       .filter((order) => {
         const meta = state.meta[order.id] ?? emptyMeta;
+        if (kind !== "alle" && order.category !== kind) return false;
         if (filter === "review" && !(order.extras && meta.noteStatus !== "beoordeeld")) return false;
-        if (filter === "confirm" && meta.confirmationStatus === "verzonden") return false;
+        // Pop-up stock has no buyer to confirm to.
+        if (filter === "confirm" && (meta.confirmationStatus === "verzonden" || order.category === "popup")) return false;
         if (!q) return true;
         return [order.id, order.locationName, order.contactPerson, order.city, order.email ?? ""].some((v) => v.toLowerCase().includes(q));
       });
-  }, [state.orders, state.meta, filter, query]);
+  }, [state.orders, state.meta, filter, query, kind]);
 
   const counts = useMemo(() => {
     let review = 0;
@@ -43,9 +52,11 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
     for (const order of state.orders) {
       const meta = state.meta[order.id] ?? emptyMeta;
       if (order.extras && meta.noteStatus !== "beoordeeld") review += 1;
-      if (meta.confirmationStatus !== "verzonden") confirm += 1;
+      if (meta.confirmationStatus !== "verzonden" && order.category !== "popup") confirm += 1;
     }
-    return { review, confirm };
+    const byKind = { regulier: 0, particulier: 0, popup: 0 };
+    for (const order of state.orders) byKind[order.category] += 1;
+    return { review, confirm, byKind };
   }, [state.orders, state.meta]);
 
   // Keep the open order selected after it drops out of the filter (e.g. once reviewed).
@@ -67,6 +78,25 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
             ["all", "Alle", state.orders.length]
           ]}
         />
+        <Segmented
+          label="Soort"
+          value={kind}
+          onChange={setKind}
+          options={[
+            ["alle", "Alle soorten"],
+            ["regulier", "Regulier", counts.byKind.regulier],
+            ["particulier", "Particulier", counts.byKind.particulier],
+            ["popup", "Pop-up", counts.byKind.popup]
+          ]}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={ghostButton} onClick={() => setCreating("Particulier")}>
+            + Bestelling
+          </button>
+          <button type="button" className={ghostButton} onClick={() => setCreating("Pop-up")}>
+            + Pop-upvoorraad
+          </button>
+        </div>
         <label className="relative w-full sm:max-w-xs">
           <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
           <input className={`${inputClass} pl-9`} type="search" placeholder="Zoek op naam, plaats of order" aria-label="Zoek bestellingen" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -95,6 +125,7 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
                   <span className="flex flex-wrap gap-1">
                     {order.extras ? meta.noteStatus === "beoordeeld" ? <Badge tone="klaar">Opmerking beoordeeld</Badge> : <Badge tone="aandacht">Opmerking nieuw</Badge> : null}
                     {meta.confirmationStatus === "verzonden" ? <Badge tone="klaar">Bevestigd</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept klaar</Badge> : null}
+                    {order.category !== "regulier" ? <Badge tone={order.category === "popup" ? "aandacht" : "zacht"}>{categoryLabel[order.category]}</Badge> : null}
                     {changesFor(state, order.id).length ? <Badge tone="zacht">Gewijzigd</Badge> : null}
                   </span>
                 </button>
@@ -104,7 +135,25 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
           </div>
         </Card>
 
-        {selected ? <OrderEditor key={selected.id} order={selected} meta={metaOf(selected.id)} state={state} session={session} run={run} /> : null}
+        {creating ? (
+          <NewOrderCard
+            key={creating}
+            state={state}
+            session={session}
+            run={run}
+            initialType={creating}
+            onDone={(id) => {
+              setCreating(null);
+              if (id) {
+                setFilter("all");
+                setKind("alle");
+                setSelectedId(id);
+              }
+            }}
+          />
+        ) : selected ? (
+          <OrderEditor key={selected.id} order={selected} meta={metaOf(selected.id)} state={state} session={session} run={run} />
+        ) : null}
       </section>
     </div>
   );
@@ -188,7 +237,10 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
             <div><span className="text-muted">Contact:</span> {order.contactPerson || "–"}</div>
             <div><span className="text-muted">Telefoon:</span> {order.phone || "–"}</div>
             <div><span className="text-muted">E-mail:</span> {order.email || <span className="text-gouwe-ink">geen e-mailadres</span>}</div>
-            <div><span className="text-muted">Klant:</span> {order.customerType === "onbekend" ? "type onbekend" : order.customerType}</div>
+            <div>
+              <span className="text-muted">Soort:</span> {categoryLabel[order.category]}
+              {order.category === "regulier" ? <span className="text-muted"> ({order.customerType === "onbekend" ? "type onbekend" : order.customerType})</span> : null}
+            </div>
             <div><span className="text-muted">Bezorger:</span> {meta.courier || order.supplierName || "–"}</div>
             <div className="sm:col-span-2">
               <span className="text-muted">{order.fulfilment === "afhalen" ? "Afhalen:" : "Bezorgen:"}</span>{" "}
@@ -211,6 +263,8 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
           />
         </div>
       </Card>
+
+      {order.category === "popup" ? <PopupSalesCard order={order} state={state} session={session} run={run} /> : null}
 
       <OrderHistory state={state} orderId={order.id} />
 
@@ -242,71 +296,74 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
         </div>
       </Card>
 
-      <Card>
-        <SectionTitle
-          title="Klantbevestiging"
-          subtitle="Controleer en pas de tekst aan voordat je verstuurt. Dit is een bevestiging, geen factuur."
-          action={
-            sent ? <Badge tone="klaar">Verzonden {meta.confirmationSentAt}</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept opgeslagen</Badge> : <Badge tone="zacht">Nog niet klaargezet</Badge>
-          }
-        />
-        <p className="mb-2 text-xs text-muted">Onderwerp: {confirmationSubject(order)}</p>
-        <textarea
-          className={`${inputClass} min-h-[320px] text-[13px] leading-relaxed`}
-          value={text}
-          disabled={sent}
-          onChange={(e) => {
-            setText(e.target.value);
-            setTextDirty(true);
-          }}
-        />
-        {!order.email ? (
-          <div className="mt-2">
-            <Notice tone="warning">Deze order heeft geen e-mailadres in de Sheet. Je kunt de bevestiging wel klaarzetten en kopiëren.</Notice>
-          </div>
-        ) : null}
-        {!sent ? (
-          askSend ? (
-            <div className="mt-3">
-              <ConfirmPanel confirmLabel="Ja, versturen" busy={busy === "send"} onConfirm={() => void sendConfirmation()} onCancel={() => setAskSend(false)}>
-                <p>
-                  Bevestiging versturen naar <b>{order.email}</b>?
-                </p>
-              </ConfirmPanel>
+      {/* Pop-up stock has no buyer: no confirmation. */}
+      {order.category !== "popup" ? (
+        <Card>
+          <SectionTitle
+            title="Klantbevestiging"
+            subtitle="Controleer en pas de tekst aan voordat je verstuurt. Dit is een bevestiging, geen factuur."
+            action={
+              sent ? <Badge tone="klaar">Verzonden {meta.confirmationSentAt}</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept opgeslagen</Badge> : <Badge tone="zacht">Nog niet klaargezet</Badge>
+            }
+          />
+          <p className="mb-2 text-xs text-muted">Onderwerp: {confirmationSubject(order)}</p>
+          <textarea
+            className={`${inputClass} min-h-[320px] text-[13px] leading-relaxed`}
+            value={text}
+            disabled={sent}
+            onChange={(e) => {
+              setText(e.target.value);
+              setTextDirty(true);
+            }}
+          />
+          {!order.email ? (
+            <div className="mt-2">
+              <Notice tone="warning">Deze order heeft geen e-mailadres in de Sheet. Je kunt de bevestiging wel klaarzetten en kopiëren.</Notice>
             </div>
-          ) : (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <button type="button" className={primaryButton} disabled={busy !== null || !order.email} onClick={() => setAskSend(true)}>
-                <Icon name="mail" />
-                {busy === "send" ? "Versturen…" : "Versturen per e-mail"}
-              </button>
-              <button
-                type="button"
-                className={ghostButton}
-                disabled={busy !== null}
-                onClick={async () => {
-                  const ok = await act("save", () => backend.saveConfirmation(session, order.id, text), "Concept opgeslagen.");
-                  if (ok) setTextDirty(false);
-                }}
-              >
-                Concept opslaan
-              </button>
-              <button
-                type="button"
-                className={ghostButton}
-                disabled={busy !== null}
-                onClick={() => {
-                  setText(defaultConfirmation(order, effectiveNote(order, meta)));
-                  setTextDirty(true);
-                }}
-              >
-                Standaardtekst
-              </button>
-              <CopyButton text={text} label="Kopiëren" className={ghostButton} />
-            </div>
-          )
-        ) : null}
-      </Card>
+          ) : null}
+          {!sent ? (
+            askSend ? (
+              <div className="mt-3">
+                <ConfirmPanel confirmLabel="Ja, versturen" busy={busy === "send"} onConfirm={() => void sendConfirmation()} onCancel={() => setAskSend(false)}>
+                  <p>
+                    Bevestiging versturen naar <b>{order.email}</b>?
+                  </p>
+                </ConfirmPanel>
+              </div>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <button type="button" className={primaryButton} disabled={busy !== null || !order.email} onClick={() => setAskSend(true)}>
+                  <Icon name="mail" />
+                  {busy === "send" ? "Versturen…" : "Versturen per e-mail"}
+                </button>
+                <button
+                  type="button"
+                  className={ghostButton}
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    const ok = await act("save", () => backend.saveConfirmation(session, order.id, text), "Concept opgeslagen.");
+                    if (ok) setTextDirty(false);
+                  }}
+                >
+                  Concept opslaan
+                </button>
+                <button
+                  type="button"
+                  className={ghostButton}
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setText(defaultConfirmation(order, effectiveNote(order, meta)));
+                    setTextDirty(true);
+                  }}
+                >
+                  Standaardtekst
+                </button>
+                <CopyButton text={text} label="Kopiëren" className={ghostButton} />
+              </div>
+            )
+          ) : null}
+        </Card>
+      ) : null}
     </div>
   );
 }

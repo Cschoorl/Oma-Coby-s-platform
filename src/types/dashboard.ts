@@ -233,6 +233,18 @@ export interface DashboardState {
   business: BusinessOrder[];
   /** Wijzigingslog, newest first. */
   changes: ChangeEntry[];
+  /** Sold so far per pop-up (order id of the pop-up stock). */
+  popupSales: Record<string, PopupSales>;
+}
+
+/** What was sold of the extra stock at one pop-up (tab Pop-up verkoop). */
+export interface PopupSales {
+  withRaisins: number;
+  withoutRaisins: number;
+  /** Money taken, when filled in; otherwise the tussenstand estimates with the price per oliebol. */
+  amount: number | null;
+  updatedBy: string;
+  updatedAt: string;
 }
 
 export const emptyMeta: OrderMeta = {

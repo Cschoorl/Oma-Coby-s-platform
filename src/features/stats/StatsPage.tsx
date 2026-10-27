@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { salesOf } from "../../lib/categories";
 import type { DashboardState } from "../../types/dashboard";
 import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, todayIso, type Delta } from "../../components/ui";
 import { DiscoBallIcon, Discozaal, oudjesFor } from "./Discozaal";
@@ -65,7 +66,7 @@ export function StatsPage({ state }: { state: DashboardState }) {
       days.set(daysBefore, point);
     };
 
-    const hasAmounts = state.orders.some((o) => o.amount !== undefined);
+    const hasAmounts = state.orders.some((o) => o.amount !== undefined) || Object.values(state.popupSales ?? {}).some((s) => s.amount !== null);
     const source: "amount" | "estimate" | "none" = hasAmounts ? "amount" : state.pricePerPiece ? "estimate" : "none";
 
     const placed = state.orders
@@ -76,11 +77,13 @@ export function StatsPage({ state }: { state: DashboardState }) {
     const seasonCutoff = todayAt && todayAt.year === current ? Math.max(0, todayAt.daysBefore) : 0;
 
     for (const { order, at } of placed) {
-      const pieces = order.withRaisins + order.withoutRaisins;
-      const revenue = source === "amount" ? order.amount ?? 0 : source === "estimate" ? pieces * (state.pricePerPiece ?? 0) : null;
+      // Pop-up stock counts only for what was sold (see salesOf); regular and private orders in full.
+      const sale = salesOf(order, state, state.pricePerPiece);
+      if (sale.orders === 0 && sale.oliebollen === 0 && !sale.revenue) continue;
+      const revenue = source === "amount" ? (order.category === "popup" ? sale.revenue ?? 0 : order.amount ?? 0) : source === "estimate" ? sale.oliebollen * (state.pricePerPiece ?? 0) : null;
       // An order dated in the future (only a leverdatum known) is already sold, so it counts as today.
       const daysBefore = at.year === current ? Math.max(at.daysBefore, seasonCutoff) : at.daysBefore;
-      add(at.year, daysBefore, 1, pieces, revenue);
+      add(at.year, daysBefore, sale.orders, sale.oliebollen, revenue);
     }
 
     for (const row of state.history) {
@@ -94,7 +97,7 @@ export function StatsPage({ state }: { state: DashboardState }) {
       .map(([year, days]) => ({ year, current: year === current, days: Array.from(days.values()).sort((a, b) => b.daysBefore - a.daysBefore) }))
       .sort((a, b) => b.year - a.year);
     return { seasons: list, revenueSource: source, currentYear: current, cutoff: seasonCutoff };
-  }, [state.orders, state.history, state.pricePerPiece]);
+  }, [state, state.orders, state.history, state.pricePerPiece]);
 
   const thisSeason = seasons.find((s) => s.current);
   const pastSeasons = seasons.filter((s) => !s.current);
@@ -258,10 +261,15 @@ export function StatsPage({ state }: { state: DashboardState }) {
 
 /** Where the action stands now: packed, delivered, and revenue against approved costs. */
 function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardState; revenue: number | null; revenueIsEstimate: boolean }) {
-  const orders = state.orders;
-  const packed = orders.filter((o) => state.packing[o.id]?.packedBy).length;
+  // Sold to a known buyer; pop-up stock is shown apart (it only counts once sold).
+  const orders = state.orders.filter((o) => o.category !== "popup");
+  const popups = state.orders.filter((o) => o.category === "popup");
+  const popupPieces = popups.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
+  const popupSold = popups.reduce((sum, o) => sum + salesOf(o, state, null).oliebollen, 0);
   const piecesTotal = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-  const piecesPacked = orders.filter((o) => state.packing[o.id]?.packedBy).reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
+  // Packing includes the pop-up stock: it has to go along too.
+  const packed = state.orders.filter((o) => state.packing[o.id]?.packedBy).length;
+  const piecesPacked = state.orders.filter((o) => state.packing[o.id]?.packedBy).reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
   const deliveries = orders.filter((o) => o.fulfilment === "bezorgen");
   const delivered = deliveries.filter((o) => state.delivery[o.id]).length;
   const approved = state.costs.filter((c) => c.status === "goedgekeurd" || c.status === "uitbetaald").reduce((sum, c) => sum + c.amount, 0);
@@ -270,8 +278,12 @@ function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardS
   return (
     <StatStrip
       items={[
-        { label: "Besteld", value: formatNumber(orders.length), hint: `${formatNumber(piecesTotal)} oliebollen` },
-        { label: "Ingepakt", value: `${packed} / ${orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
+        {
+          label: "Besteld",
+          value: formatNumber(orders.length),
+          hint: `${formatNumber(piecesTotal)} oliebollen${popups.length ? ` · pop-ups: ${formatNumber(popupSold)} van ${formatNumber(popupPieces)} verkocht` : ""}`
+        },
+        { label: "Ingepakt", value: `${packed} / ${state.orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen${popups.length ? " (incl. pop-upvoorraad)" : ""}` },
         { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
         {
           label: "Omzet min kosten",

@@ -1,5 +1,6 @@
 import type { ChangeEntry, DashboardState, RouteInfo } from "../types/dashboard";
 import type { Order } from "../types/order";
+import { categoryOf, typeLabel } from "./categories";
 
 /*
  * Order edits and the change log, shared by every page that needs them: the order editor on
@@ -7,7 +8,7 @@ import type { Order } from "../types/order";
  */
 
 /** Fields beheer can edit; the same names the script uses (ORDER_EDIT_FIELDS in Code.gs). */
-export type OrderField = "withRaisins" | "withoutRaisins" | "deliveryDate" | "fulfilment" | "deliveryMoment" | "pickupLocation" | "address" | "postalCode" | "city" | "amount";
+export type OrderField = "withRaisins" | "withoutRaisins" | "deliveryDate" | "fulfilment" | "deliveryMoment" | "pickupLocation" | "address" | "postalCode" | "city" | "amount" | "type" | "locationName";
 
 export interface OrderFieldChange {
   field: OrderField;
@@ -39,6 +40,10 @@ export function orderFieldValue(order: Order, field: OrderField): string {
       return order.city;
     case "amount":
       return order.amount === undefined ? "" : String(order.amount);
+    case "type":
+      return typeLabel[order.customerType];
+    case "locationName":
+      return order.locationName;
   }
 }
 
@@ -56,7 +61,13 @@ export const fieldLabel: Record<string, string> = {
   amount: "Bedrag",
   note: "Opmerking",
   packing: "Inpakken",
-  courier: "Bezorger"
+  courier: "Bezorger",
+  type: "Soort",
+  locationName: "Naam",
+  created: "Aangemaakt",
+  soldWithRaisins: "Verkocht MET",
+  soldWithoutRaisins: "Verkocht ZONDER",
+  soldAmount: "Opbrengst pop-up"
 };
 
 const MONTHS = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
@@ -69,7 +80,8 @@ export function formatChangeValue(field: string, value: string): string {
     return `${["zo", "ma", "di", "wo", "do", "vr", "za"][d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
   }
   if (field === "fulfilment") return value === "afhalen" ? "Afhalen" : "Bezorgen";
-  if (field === "amount" && Number.isFinite(Number(value))) return `€ ${Number(value).toFixed(2).replace(".", ",")}`;
+  if ((field === "amount" || field === "soldAmount") && Number.isFinite(Number(value))) return `€ ${Number(value).toFixed(2).replace(".", ",")}`;
+  if (field === "type" && value === "Pop-up") return "Pop-upvoorraad";
   return value;
 }
 
@@ -114,6 +126,11 @@ export function applyOrderEdits(order: Order, edits: Partial<Record<OrderField, 
     else if (field === "postalCode") next.postalCode = value;
     else if (field === "city") next.city = value;
     else if (field === "amount") next.amount = value === "" ? undefined : Number(value);
+    else if (field === "locationName") next.locationName = value;
+    else if (field === "type") {
+      next.customerType = /pop.?up/i.test(value) ? "popup" : /barter/i.test(value) ? "barter" : /zakelijk/i.test(value) ? "zakelijk" : value ? "particulier" : "onbekend";
+      next.category = categoryOf(next.customerType);
+    }
     // Demo only: the Bezorger column cleared when the date moved.
     else if ((field as string) === "supplierName") next.supplierName = value;
   }

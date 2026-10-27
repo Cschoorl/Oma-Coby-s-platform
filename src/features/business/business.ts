@@ -136,6 +136,7 @@ export function businessToOrder(b: BusinessOrder): Order {
     extras: b.remark || undefined,
     email: b.email,
     customerType: "zakelijk",
+    category: "regulier",
     amount: b.totals.total,
     orderDate: b.createdAt.slice(0, 10),
     fulfilment: b.fulfilment,

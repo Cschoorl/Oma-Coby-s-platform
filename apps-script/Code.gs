@@ -47,7 +47,10 @@ const CONFIG = {
     aantal_dozen: ['dozen #'],
     aantal_zakjes: ['zakjes #'],
     bezorgomgeving: ['bezorgomgeving'],
-    bezorgmoment: ['bezorgmoment']
+    bezorgmoment: ['bezorgmoment'],
+    // Only used when beheer edits an order: kept in line with the date and the counts.
+    datum_volledig: ['datum volledig'],
+    totaal: ['totaal']
   },
   /** Startpunt (en eindpunt) van elke bezorgroute. */
   START_ADDRESS: 'Aalsmeerderweg 85, Aalsmeer',
@@ -186,7 +189,9 @@ const TABS = {
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
-  places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']]
+  places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
+  // Every change to an order (and later other things): who changed what, when, from what to what.
+  changelog: ['Wijzigingslog', ['tijd', 'soort', 'order_id', 'veld', 'oud', 'nieuw', 'door', 'rol', 'toelichting']]
 };
 
 const PERMISSIONS = {
@@ -200,6 +205,7 @@ const PERMISSIONS = {
   signupStats: ['public'],
   setBaked: ['beheer', 'inpakker'],
   updateNote: ['beheer'],
+  updateOrder: ['beheer'],
   saveConfirmation: ['beheer'],
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
@@ -421,9 +427,17 @@ const HANDLERS = {
       return bump_();
     });
   },
-  updateNote: function (body) {
+  updateNote: function (body, role) {
     return withLock_(function () {
       const row = findOrCreate_('meta', body.orderId);
+      // In the log: the remark as packers and couriers saw it before and after.
+      const order = findOrder_(body.orderId) || {};
+      const original = String(order.extra_notities || '').trim();
+      const before = String(row.values.opmerking_aangepast || '').trim() || original;
+      const after = String(body.note || '').trim() || original;
+      if (before !== after) {
+        logChanges_([{ soort: 'opmerking', order_id: body.orderId, veld: 'note', oud: before, nieuw: after, door: String(body.name || ''), rol: role }]);
+      }
       row.set({
         opmerking_aangepast: String(body.note || ''),
         opmerking_status: body.reviewed ? 'beoordeeld' : 'nieuw',
@@ -753,7 +767,8 @@ function buildFullState_() {
     delivery: {},
     agenda: readAgenda_(),
     // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
-    business: readBusiness_()
+    business: readBusiness_(),
+    changes: []
   };
 
   readTab_('meta').forEach(function (r) {
@@ -817,6 +832,14 @@ function buildFullState_() {
       reviewedBy: String(r.beoordeeld_door || ''), reviewedAt: String(r.beoordeeld_op || ''), paidAt: isoDate_(r.uitbetaald_op)
     };
   });
+  // Newest first: that is how every page shows them.
+  state.changes = readTab_('changelog').filter(function (r) { return r.order_id && r.veld; }).map(function (r) {
+    return {
+      at: String(r.tijd), kind: String(r.soort || ''), orderId: String(r.order_id), field: String(r.veld),
+      from: String(r.oud === undefined ? '' : r.oud), to: String(r.nieuw === undefined ? '' : r.nieuw),
+      by: String(r.door || ''), note: String(r.toelichting || '')
+    };
+  }).reverse();
   state.history = readTab_('history').map(function (r) {
     const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
     return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
@@ -848,7 +871,11 @@ function viewFor_(full, role, name) {
       return isAdmin || !c.iban ? c : Object.assign({}, c, { iban: '•••• ' + c.iban.slice(-4) });
     }),
     history: isAdmin ? full.history : [],
-    business: isAdmin ? full.business : []
+    business: isAdmin ? full.business : [],
+    // Everyone sees what changed (packers need it), contact details only for beheer.
+    changes: isAdmin ? full.changes : (full.changes || []).map(function (c) {
+      return PRIVATE_LOG_FIELDS.indexOf(c.field) === -1 ? c : Object.assign({}, c, { from: '', to: '' });
+    })
   });
 }
 
@@ -933,6 +960,8 @@ function readOrders_() {
     if (seen[id]) id = id + '-' + (i + 2);
     seen[id] = true;
     out.order_id = id;
+    // Where the order lives, for editing (row number in the Sheet, 1-based).
+    out._row = i + 2;
 
     const placed = index.besteldatum !== undefined ? row[index.besteldatum] : '';
     out.besteldatum = placed instanceof Date ? Utilities.formatDate(placed, tz, 'yyyy-MM-dd') : dutchDate_(placed, defaultSeason);
@@ -1407,6 +1436,8 @@ function anonymize_() {
   clearRows_(sheet_('routes'));
   // Looked-up addresses include volunteers' home addresses.
   clearRows_(sheet_('places'));
+  // The change log holds names, addresses and remarks.
+  clearRows_(sheet_('changelog'));
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
@@ -1728,7 +1759,8 @@ function businessOrderRows_(orders) {
       oliebollen_met_krenten: b.withRaisins, oliebollen_zonder_krenten: b.withoutRaisins, extra_notities: b.remark,
       type_klant: 'Zakelijk', bedrag: b.totals.total, besteldatum: b.createdAt.slice(0, 10),
       afhalen_bezorgen: bezorgen ? 'Bezorgen' : 'Afhalen', flyers: b.flyers ? 'Ja' : 'Nee',
-      bezorgomgeving: bezorgen ? BUSINESS_AREAS[b.area] || '' : '', bezorgmoment: bezorgen ? BUSINESS_MOMENTS[b.moment] : ''
+      bezorgomgeving: bezorgen ? BUSINESS_AREAS[b.area] || '' : '', bezorgmoment: bezorgen ? BUSINESS_MOMENTS[b.moment] : '',
+      _business: true
     };
   });
 }
@@ -1783,3 +1815,218 @@ function sendBusinessMails_(id, i, t, info) {
     });
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// Bestellingen bewerken + wijzigingslog
+//
+// Beheer past een bestelling aan op de pagina Bestellingen. Het script schrijft de nieuwe waarden
+// in de bron (Totaal_lijst bestellingen, of Zakelijke aanvragen voor een bevestigde zakelijke
+// aanvraag), zodat alles wat daarvan afhangt (totalen, inpaklijst, tussenstand, routes) vanzelf
+// meeloopt. Elke wijziging komt in het tabblad Wijzigingslog: bestelling, veld, oud, nieuw, wie, wanneer.
+// logChanges_ is algemeen: ook andere functies (opmerkingen, inpakken) schrijven erin.
+
+/** Velden die beheer mag aanpassen: naam op het platform → kolom in Totaal_lijst / Zakelijke aanvragen. */
+const ORDER_EDIT_FIELDS = {
+  withRaisins: { sheet: 'oliebollen_met_krenten', business: 'met_krenten', kind: 'count' },
+  withoutRaisins: { sheet: 'oliebollen_zonder_krenten', business: 'zonder_krenten', kind: 'count' },
+  deliveryDate: { sheet: 'leverdatum', business: 'leverdatum', kind: 'date' },
+  fulfilment: { sheet: 'afhalen_bezorgen', business: 'afhalen_bezorgen', kind: 'fulfilment' },
+  deliveryMoment: { sheet: 'bezorgmoment', business: 'bezorgmoment', kind: 'text' },
+  pickupLocation: { sheet: 'afhaallocatie', business: '', kind: 'text' },
+  address: { sheet: 'adres', business: 'adres', kind: 'text' },
+  postalCode: { sheet: 'postcode', business: 'postcode', kind: 'text' },
+  city: { sheet: 'plaats', business: 'plaats', kind: 'text' },
+  amount: { sheet: 'bedrag', business: '', kind: 'money' }
+};
+
+/** Contact details in the log are only shown to beheer. */
+const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email'];
+
+/** Adds rows to the Wijzigingslog in one write. entries: {soort, order_id, veld, oud, nieuw, door, rol, toelichting}. */
+function logChanges_(entries) {
+  if (!entries.length) return;
+  const sheet = sheet_('changelog');
+  const headers = TABS.changelog[1];
+  const at = now_();
+  const rows = entries.map(function (e) {
+    return headers.map(function (h) {
+      if (h === 'tijd') return e.tijd || at;
+      const v = e[h];
+      return v === undefined || v === null ? '' : String(v);
+    });
+  });
+  // Text, so "0612…" and "2026-12-16" stay exactly as written.
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setNumberFormat('@').setValues(rows);
+}
+
+/** The value as the platform shows it, to compare with what the person editing saw. */
+function editValue_(field, value) {
+  const def = ORDER_EDIT_FIELDS[field];
+  if (value === null || value === undefined) value = '';
+  if (def.kind === 'count' || def.kind === 'money') return value === '' ? '' : String(num_(value));
+  if (def.kind === 'date') return value instanceof Date ? isoDate_(value) : String(value).trim();
+  if (def.kind === 'fulfilment') return /afhal|ophal|pick/i.test(String(value)) ? 'afhalen' : 'bezorgen';
+  // "1431 AB" and "1431ab" are the same postcode.
+  if (field === 'postalCode') return String(value).replace(/\s+/g, '').toUpperCase();
+  return String(value).trim();
+}
+
+function checkEditValue_(field, value) {
+  const def = ORDER_EDIT_FIELDS[field];
+  const v = String(value === null || value === undefined ? '' : value).trim();
+  if (def.kind === 'count') {
+    if (!/^\d+$/.test(v)) throw new Error('Aantal moet een heel getal van 0 of meer zijn.');
+    return Number(v);
+  }
+  if (def.kind === 'money') {
+    if (v === '') return '';
+    const n = num_(v);
+    if (!isFinite(n) || n < 0) throw new Error('Bedrag klopt niet.');
+    return Math.round(n * 100) / 100;
+  }
+  if (def.kind === 'date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error('Kies een leverdatum.');
+    return v;
+  }
+  if (def.kind === 'fulfilment') {
+    if (v !== 'bezorgen' && v !== 'afhalen') throw new Error('Kies bezorgen of afhalen.');
+    return v;
+  }
+  return v;
+}
+
+function weekdayLabel_(iso) {
+  const d = new Date(iso + 'T12:00:00');
+  return ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][d.getDay()] + ' ' + d.getDate() + ' ' + DUTCH_MONTHS[d.getMonth()];
+}
+
+Object.assign(HANDLERS, {
+  /**
+   * body.orderId, body.changes: [{ field, from, to }]. "from" is what the person saw; when the order
+   * changed in the meantime the edit is refused, so nobody overwrites someone else's change unseen.
+   */
+  updateOrder: function (body, role) {
+    const name = requireName_(body.name);
+    const changes = (body.changes || []).filter(function (c) { return c && ORDER_EDIT_FIELDS[c.field]; });
+    if (changes.length === 0) throw new Error('Er is niets gewijzigd.');
+    return withLock_(function () {
+      const order = findOrder_(body.orderId);
+      if (!order) throw new Error('Bestelling niet gevonden.');
+      const business = order._business === true;
+      const updates = [];
+      changes.forEach(function (c) {
+        const def = ORDER_EDIT_FIELDS[c.field];
+        const column = business ? def.business : def.sheet;
+        if (!column) throw new Error('Dit veld kun je bij deze bestelling niet aanpassen.');
+        const current = editValue_(c.field, order[def.sheet]);
+        if (current !== editValue_(c.field, c.from)) {
+          throw new Error('Deze bestelling is net door iemand anders aangepast. Ververs en probeer het opnieuw.');
+        }
+        const next = checkEditValue_(c.field, c.to);
+        if (editValue_(c.field, next) === current) return;
+        updates.push({ field: c.field, column: column, from: current, to: next });
+      });
+      if (updates.length === 0) throw new Error('Er is niets gewijzigd.');
+
+      const byField = {};
+      updates.forEach(function (u) { byField[u.field] = u; });
+      const log = updates.map(function (u) {
+        return { soort: 'bestelling', order_id: order.order_id, veld: u.field, oud: u.from, nieuw: editValue_(u.field, u.to), door: name, rol: role };
+      });
+
+      if (business) {
+        const row = findRow_('business', order.order_id);
+        const set = {};
+        updates.forEach(function (u) {
+          set[u.column] = u.field === 'fulfilment' ? (u.to === 'afhalen' ? 'Afhalen' : 'Bezorgen') : u.to;
+        });
+        // A business order's amount follows from the counts, the delivery and the moment.
+        const b = readBusiness_().filter(function (x) { return x.id === order.order_id; })[0];
+        const input = {
+          withRaisins: byField.withRaisins ? byField.withRaisins.to : b.withRaisins,
+          withoutRaisins: byField.withoutRaisins ? byField.withoutRaisins.to : b.withoutRaisins,
+          fulfilment: byField.fulfilment ? byField.fulfilment.to : b.fulfilment,
+          moment: byField.deliveryMoment ? Object.keys(BUSINESS_MOMENTS).filter(function (k) { return BUSINESS_MOMENTS[k] === byField.deliveryMoment.to; })[0] || b.moment : b.moment,
+          area: b.area,
+          donation: b.donation
+        };
+        if (byField.deliveryMoment && !Object.keys(BUSINESS_MOMENTS).some(function (k) { return BUSINESS_MOMENTS[k] === byField.deliveryMoment.to; })) {
+          throw new Error('Kies een bezorgmoment: ' + Object.keys(BUSINESS_MOMENTS).map(function (k) { return BUSINESS_MOMENTS[k]; }).join(', ') + '.');
+        }
+        const t = businessTotals_(input, businessInfo_());
+        Object.assign(set, {
+          oliebollen: t.oliebollen, bedrag_excl_btw: t.subtotal, btw: t.vat, bedrag_incl_btw: t.total,
+          donatie_bedrag: t.donation, factuurbedrag: t.invoice, ouderen: t.ouderen
+        });
+        if (t.total !== b.totals.total) {
+          log.push({ soort: 'bestelling', order_id: order.order_id, veld: 'amount', oud: String(b.totals.total), nieuw: String(t.total), door: name, rol: role, toelichting: 'opnieuw berekend' });
+        }
+        row.set(set);
+      } else {
+        const sheet = ss_().getSheetByName(CONFIG.ORDERS_SHEET);
+        const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim().toLowerCase(); });
+        const col = function (field) {
+          const names = CONFIG.COLUMNS[field] || [];
+          for (let i = 0; i < names.length; i++) {
+            const at = headers.indexOf(names[i].toLowerCase());
+            if (at !== -1) return at + 1;
+          }
+          return 0;
+        };
+        const r = order._row;
+        updates.forEach(function (u) {
+          const c = col(u.column);
+          if (!c) throw new Error('De kolom voor "' + u.field + '" staat niet in ' + CONFIG.ORDERS_SHEET + '.');
+          let value = u.to;
+          if (u.field === 'fulfilment') value = u.to === 'afhalen' ? 'Afhalen' : 'Bezorgen';
+          if (u.field === 'deliveryDate') {
+            const p = u.to.split('-').map(Number);
+            value = new Date(p[0], p[1] - 1, p[2]);
+          }
+          sheet.getRange(r, c).setValue(value);
+        });
+        // Columns derived from the edited ones, unless they hold a formula.
+        const keep = function (c) { return c && !sheet.getRange(r, c).getFormula(); };
+        const full = col('datum_volledig');
+        if (byField.deliveryDate && keep(full)) sheet.getRange(r, full).setValue(weekdayLabel_(byField.deliveryDate.to));
+        const total = col('totaal');
+        if ((byField.withRaisins || byField.withoutRaisins) && keep(total)) {
+          const met = byField.withRaisins ? byField.withRaisins.to : num_(order.oliebollen_met_krenten);
+          const zonder = byField.withoutRaisins ? byField.withoutRaisins.to : num_(order.oliebollen_zonder_krenten);
+          sheet.getRange(r, total).setValue(met + zonder);
+        }
+      }
+
+      // Packed with the old counts: the order has to be packed again.
+      if (byField.withRaisins || byField.withoutRaisins) {
+        const p = readTab_('packing').filter(function (x) { return x.order_id === order.order_id; })[0];
+        if (p && (p.ingepakt_door || truthy_(p.met_klaar) || truthy_(p.zonder_klaar) || truthy_(p.totaal_klaar))) {
+          findOrCreate_('packing', order.order_id).set({ met_klaar: false, zonder_klaar: false, totaal_klaar: false, ingepakt_door: '', ingepakt_op: '' });
+          log.push({ soort: 'inpakken', order_id: order.order_id, veld: 'packing', oud: p.ingepakt_door ? 'ingepakt door ' + p.ingepakt_door : 'deels afgevinkt', nieuw: 'opnieuw inpakken', door: name, rol: role, toelichting: 'aantallen gewijzigd' });
+          logPacking_(order.order_id, 'opnieuw inpakken (aantallen gewijzigd)', name);
+        }
+      }
+      // Another day: the courier of the old day no longer applies (set on the platform, or in the
+      // Bezorger column of the Sheet).
+      if (byField.deliveryDate) {
+        const m = readTab_('meta').filter(function (x) { return x.order_id === order.order_id; })[0];
+        const fromSheet = !business ? String(order.leverancier_naam || '').trim() : '';
+        const was = (m && String(m.bezorger || '').trim()) || fromSheet;
+        if (m && m.bezorger) findOrCreate_('meta', order.order_id).set({ bezorger: '', bijgewerkt_door: name, bijgewerkt_op: now_() });
+        if (fromSheet) {
+          const sheet = ss_().getSheetByName(CONFIG.ORDERS_SHEET);
+          const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim().toLowerCase(); });
+          const names = CONFIG.COLUMNS.leverancier_naam;
+          for (let i = 0; i < names.length; i++) {
+            const at = headers.indexOf(names[i]);
+            if (at !== -1) { sheet.getRange(order._row, at + 1).setValue(''); break; }
+          }
+        }
+        if (was) log.push({ soort: 'bestelling', order_id: order.order_id, veld: 'courier', oud: was, nieuw: '', door: name, rol: role, toelichting: 'andere leverdatum' });
+      }
+      logChanges_(log);
+      return bump_();
+    });
+  }
+});

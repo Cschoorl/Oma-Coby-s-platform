@@ -6,6 +6,8 @@ import type { Order } from "../../types/order";
 import { Badge, Bollenteller, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Notice, SectionTitle, Segmented, formatDayLabel, ghostButton, inputClass, primaryButton, toast } from "../../components/ui";
 import { confirmationSubject, defaultConfirmation } from "../../utils/confirmation";
 import { effectiveNote } from "../../utils/orderUtils";
+import { OrderEditCard, OrderHistory } from "./OrderEditCard";
+import { changesFor } from "../../lib/orderChanges";
 
 interface OrdersAdminPageProps {
   state: DashboardState;
@@ -93,6 +95,7 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
                   <span className="flex flex-wrap gap-1">
                     {order.extras ? meta.noteStatus === "beoordeeld" ? <Badge tone="klaar">Opmerking beoordeeld</Badge> : <Badge tone="aandacht">Opmerking nieuw</Badge> : null}
                     {meta.confirmationStatus === "verzonden" ? <Badge tone="klaar">Bevestigd</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept klaar</Badge> : null}
+                    {changesFor(state, order.id).length ? <Badge tone="zacht">Gewijzigd</Badge> : null}
                   </span>
                 </button>
               );
@@ -101,7 +104,7 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
           </div>
         </Card>
 
-        {selected ? <OrderEditor key={selected.id} order={selected} meta={metaOf(selected.id)} session={session} run={run} /> : null}
+        {selected ? <OrderEditor key={selected.id} order={selected} meta={metaOf(selected.id)} state={state} session={session} run={run} /> : null}
       </section>
     </div>
   );
@@ -110,11 +113,13 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
 interface OrderEditorProps {
   order: Order;
   meta: OrderMeta;
+  state: DashboardState;
   session: Session;
   run: (change: () => Promise<unknown>) => Promise<void>;
 }
 
-function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
+function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
+  const [editing, setEditing] = useState(false);
   const [note, setNote] = useState(meta.noteOverride || order.extras || "");
   const [text, setText] = useState(meta.confirmationText || defaultConfirmation(order, effectiveNote(order, meta)));
   const [busy, setBusy] = useState<string | null>(null);
@@ -167,15 +172,34 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
 
   return (
     <div className="grid content-start gap-4">
-      <Card>
-        <SectionTitle title={order.locationName || order.contactPerson} subtitle={`${order.id} · ${formatDayLabel(order.deliveryDate)} ${order.plannedTime}`} />
+      {editing ? <OrderEditCard order={order} state={state} session={session} run={run} onClose={() => setEditing(false)} /> : null}
+      <Card className={editing ? "hidden" : ""}>
+        <SectionTitle
+          title={order.locationName || order.contactPerson}
+          subtitle={`${order.id} · ${formatDayLabel(order.deliveryDate)} ${order.plannedTime}`}
+          action={
+            <button type="button" className={ghostButton} onClick={() => setEditing(true)}>
+              Bewerken
+            </button>
+          }
+        />
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px]">
           <dl className="grid content-start gap-1 text-sm text-krent sm:grid-cols-2">
             <div><span className="text-muted">Contact:</span> {order.contactPerson || "–"}</div>
             <div><span className="text-muted">Telefoon:</span> {order.phone || "–"}</div>
             <div><span className="text-muted">E-mail:</span> {order.email || <span className="text-gouwe-ink">geen e-mailadres</span>}</div>
             <div><span className="text-muted">Klant:</span> {order.customerType === "onbekend" ? "type onbekend" : order.customerType}</div>
-            <div><span className="text-muted">Bezorger:</span> {order.supplierName || "–"}</div>
+            <div><span className="text-muted">Bezorger:</span> {meta.courier || order.supplierName || "–"}</div>
+            <div className="sm:col-span-2">
+              <span className="text-muted">{order.fulfilment === "afhalen" ? "Afhalen:" : "Bezorgen:"}</span>{" "}
+              {order.fulfilment === "afhalen" ? order.pickupLocation || "–" : [order.address, [order.postalCode, order.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "–"}
+              {order.deliveryMoment ? <span className="text-muted"> · {order.deliveryMoment}</span> : null}
+            </div>
+            {order.amount !== undefined ? (
+              <div>
+                <span className="text-muted">Bedrag:</span> € {order.amount.toFixed(2).replace(".", ",")}
+              </div>
+            ) : null}
           </dl>
           <Bollenteller
             compact
@@ -187,6 +211,8 @@ function OrderEditor({ order, meta, session, run }: OrderEditorProps) {
           />
         </div>
       </Card>
+
+      <OrderHistory state={state} orderId={order.id} />
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 

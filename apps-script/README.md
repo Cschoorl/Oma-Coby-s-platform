@@ -144,6 +144,17 @@ Een vrijwilliger dient een declaratie in met bon, bedrag en IBAN. Daarna:
 
 De tabel `Kosten` krijgt daarvoor de kolommen `iban`, `status`, `reden`, `beoordeeld_door`, `beoordeeld_op` en `uitbetaald_op`; het script voegt ze zelf toe. Bestaande regels zonder status tellen als "ingediend".
 
+## Bestellingen bewerken en het wijzigingslog
+
+Op **Bestellingen → Bewerken** past beheer een bestelling aan. Het script (`updateOrder`):
+
+- schrijft de nieuwe waarden in de bron: `Totaal_lijst bestellingen` (alleen de gewijzigde cellen; `Datum volledig` en `TOTAAL` gaan mee, tenzij daar een formule staat), of `Zakelijke aanvragen` voor een bevestigde zakelijke aanvraag (het bedrag wordt dan opnieuw berekend);
+- weigert de wijziging als iemand anders de bestelling net heeft aangepast ("Ververs en probeer het opnieuw");
+- zet een (deels) ingepakte order terug naar "opnieuw inpakken" als de aantallen veranderen, en haalt de bezorger weg als de leverdatum verandert;
+- legt elke wijziging vast in het tabblad **`Wijzigingslog`**: tijd, soort, bestelling, veld, oud, nieuw, door, rol, toelichting. Ook wijzigingen in de opmerking komen erin.
+
+Inpakkers en bezorgers zien welke velden zijn gewijzigd, maar niet de oude en nieuwe adresgegevens. Bij "Na de actie" wordt het log gewist.
+
 ## Na de actie: persoonsgegevens verwijderen
 
 Onder **Vrijwilligers → Na de actie** kan beheer met één knop (na het typen van VERWIJDER) alles wissen wat de toestemmingstekst belooft:

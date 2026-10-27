@@ -190,6 +190,26 @@ export interface RouteInfo {
   endAddress?: string;
 }
 
+/**
+ * One line of the change log (tab Wijzigingslog), newest first in the state. Written by the script
+ * on every edit of an order, a remark, or a reset of the packing; later features read it too.
+ */
+export interface ChangeEntry {
+  /** "2026-12-16 10:12:00". */
+  at: string;
+  /** What kind of change: "bestelling", "opmerking", "inpakken", … */
+  kind: string;
+  orderId: string;
+  /** Field on the platform: withRaisins, deliveryDate, address, note, packing, courier, amount, … */
+  field: string;
+  /** As text; empty for others than beheer when it is a contact detail. */
+  from: string;
+  to: string;
+  by: string;
+  /** Why, when the script made it on its own ("aantallen gewijzigd", "opnieuw berekend"). */
+  note: string;
+}
+
 export interface DashboardState {
   /** Increases on every change; clients poll it to stay in sync. */
   version: number;
@@ -211,6 +231,8 @@ export interface DashboardState {
   agenda: AgendaSlot[];
   /** Zakelijke aanvragen van het bestelformulier; alleen voor beheer. */
   business: BusinessOrder[];
+  /** Wijzigingslog, newest first. */
+  changes: ChangeEntry[];
 }
 
 export const emptyMeta: OrderMeta = {

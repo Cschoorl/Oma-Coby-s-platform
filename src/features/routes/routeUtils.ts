@@ -1,4 +1,5 @@
-import type { DashboardState, RouteInfo, Volunteer } from "../../types/dashboard";
+import type { ChangeEntry, DashboardState, RouteInfo, Volunteer } from "../../types/dashboard";
+import { routeChangedAfter } from "../../lib/orderChanges";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
 import { OPTION_TIMES, PLANNING } from "../../config";
@@ -88,11 +89,15 @@ export function orderedStops(orders: Order[], route?: RouteInfo): Order[] {
   return byTime.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999));
 }
 
-/** A route is stale when its stops no longer match the orders. */
-export function isRouteStale(orders: Order[], route?: RouteInfo): boolean {
+/**
+ * A route is stale when its stops no longer match the orders, or (with the change log) when an
+ * address, date or delivery choice of one of its stops was edited after it was calculated.
+ */
+export function isRouteStale(orders: Order[], route?: RouteInfo, changes?: ChangeEntry[]): boolean {
   if (!route) return false;
   const ids = new Set(orders.map((o) => o.id));
-  return route.orderIds.length !== ids.size || route.orderIds.some((id) => !ids.has(id));
+  if (route.orderIds.length !== ids.size || route.orderIds.some((id) => !ids.has(id))) return true;
+  return changes ? routeChangedAfter({ changes }, route) : false;
 }
 
 export function courierOrders(state: DashboardState, date: string, courier: string): Order[] {

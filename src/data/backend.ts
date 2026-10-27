@@ -1,6 +1,7 @@
 import type {
   AgendaSlot,
   BakedCount,
+  ChangeEntry,
   CostEntry,
   CostStatus,
   DeliveryState,
@@ -20,9 +21,10 @@ import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus } from "../types/business";
 import { BUSINESS_DEFAULTS } from "../config";
-import { businessToOrder, businessTotals, validateBusiness } from "../features/business/business";
+import { businessToOrder, businessTotals, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
+import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
 
 export interface Session {
   code: string;
@@ -124,6 +126,8 @@ export interface Backend {
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
   sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
   assignCourier(session: Session, orderId: string, courier: string): Promise<void>;
+  /** Beheer edits an order: written in the Sheet and in the change log. */
+  updateOrder(session: Session, orderId: string, changes: OrderFieldChange[]): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
@@ -211,6 +215,7 @@ function createAppsScriptBackend(url: string): Backend {
         costs: (rest.costs ?? []).map(withCostDefaults),
         routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
         business: rest.business ?? [],
+        changes: rest.changes ?? [],
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
     },
@@ -250,6 +255,9 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async assignCouriers(session, assignments) {
       await call("assignCouriers", withSession(session, { assignments }));
+    },
+    async updateOrder(session, orderId, changes) {
+      return call<SavedVersion>("updateOrder", withSession(session, { orderId, changes }));
     },
     async geocode(session, addresses) {
       return call<GeocodeResult>("geocode", withSession(session, { addresses }));
@@ -340,6 +348,9 @@ interface DemoStore {
   costs: CostEntry[];
   delivery: Record<string, DeliveryState>;
   business: BusinessOrder[];
+  /** Edits of the example orders, per order and field. */
+  orderEdits: Record<string, Partial<Record<OrderField, string>>>;
+  changes: ChangeEntry[];
 }
 
 const none: RoleAvailability = { wants: false, days: [] };
@@ -421,7 +432,7 @@ const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["plan
 ];
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness() };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [] };
 }
 
 function readStore(): DemoStore {
@@ -561,7 +572,7 @@ function createDemoBackend(notice?: string): Backend {
       // Confirmed business requests join the orders, unless the order list already has that number.
       const sheetOrders = await getOrders();
       const known = new Set(sheetOrders.map((o) => o.id));
-      const orders = [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id)).map(businessToOrder)];
+      const orders = [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id)).map(businessToOrder)].map((o) => applyOrderEdits(o, store.orderEdits[o.id]));
       const admin = session.role === "beheer";
       return {
         version: store.version,
@@ -582,7 +593,9 @@ function createDemoBackend(notice?: string): Backend {
         delivery: store.delivery,
         // Demo uses the default agenda from config.ts.
         agenda: [],
-        business: admin ? store.business : []
+        business: admin ? store.business : [],
+        // Like the script: everyone sees what changed, contact details only beheer.
+        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city"].includes(c.field) ? { ...c, from: "", to: "" } : c))
       };
     },
     async claim(session, orderId) {
@@ -660,8 +673,12 @@ function createDemoBackend(notice?: string): Backend {
     },
     async updateNote(session, orderId, note, reviewed) {
       await delay(150);
+      const original = ((await getOrders()).find((o) => o.id === orderId)?.extras ?? "").trim();
       mutate((store) => {
         const m = metaFor(store, orderId);
+        const before = m.noteOverride.trim() || original;
+        const after = note.trim() || original;
+        if (before !== after) store.changes = [{ at: nowStamp(), kind: "opmerking", orderId, field: "note", from: before, to: after, by: session.name, note: "" }, ...store.changes];
         m.noteOverride = note;
         m.noteStatus = reviewed ? "beoordeeld" : "nieuw";
         m.updatedBy = session.name;
@@ -690,6 +707,57 @@ function createDemoBackend(notice?: string): Backend {
         m.confirmationSentAt = nowStamp();
         m.updatedBy = session.name;
         m.updatedAt = nowStamp();
+      });
+    },
+    async updateOrder(session, orderId, changes) {
+      await delay(300);
+      const order = (await getOrders()).map((o) => applyOrderEdits(o, readStore().orderEdits[o.id])).find((o) => o.id === orderId)
+        ?? readStore().business.filter((b) => b.id === orderId).map(businessToOrder)[0];
+      if (!order) throw new Error("Bestelling niet gevonden.");
+      const real = changes.filter((c) => c.to.trim() !== orderFieldValue(order, c.field));
+      if (real.length === 0) throw new Error("Er is niets gewijzigd.");
+      for (const c of real) {
+        if (c.from !== orderFieldValue(order, c.field)) throw new Error("Deze bestelling is net door iemand anders aangepast. Ververs en probeer het opnieuw.");
+        if ((c.field === "withRaisins" || c.field === "withoutRaisins") && !/^\d+$/.test(c.to.trim())) throw new Error("Aantal moet een heel getal van 0 of meer zijn.");
+        if (c.field === "deliveryDate" && !/^\d{4}-\d{2}-\d{2}$/.test(c.to)) throw new Error("Kies een leverdatum.");
+      }
+      mutate((store) => {
+        const at = nowStamp();
+        const log: ChangeEntry[] = real.map((c) => ({ at, kind: "bestelling", orderId, field: c.field, from: c.from, to: c.to.trim(), by: session.name, note: "" }));
+        const b = store.business.find((x) => x.id === orderId);
+        if (b) {
+          // A business order lives in its own list; its amount follows from counts, delivery and moment.
+          for (const c of real) {
+            const v = c.to.trim();
+            if (c.field === "withRaisins") b.withRaisins = Number(v);
+            else if (c.field === "withoutRaisins") b.withoutRaisins = Number(v);
+            else if (c.field === "deliveryDate") b.date = v;
+            else if (c.field === "fulfilment") b.fulfilment = v === "afhalen" ? "afhalen" : "bezorgen";
+            else if (c.field === "deliveryMoment") b.moment = (Object.keys(momentLabel) as Array<keyof typeof momentLabel>).find((k) => momentLabel[k] === v) ?? b.moment;
+            else if (c.field === "address") b.street = v;
+            else if (c.field === "postalCode") b.postalCode = v;
+            else if (c.field === "city") b.city = v;
+          }
+          const totals = businessTotals(b, BUSINESS_DEFAULTS);
+          if (totals.total !== b.totals.total) log.push({ at, kind: "bestelling", orderId, field: "amount", from: String(b.totals.total), to: String(totals.total), by: session.name, note: "opnieuw berekend" });
+          b.totals = totals;
+        } else {
+          store.orderEdits[orderId] = { ...store.orderEdits[orderId], ...Object.fromEntries(real.map((c) => [c.field, c.to.trim()])) };
+        }
+        // Same rules as the script: new counts → pack again; another day → courier no longer applies.
+        const p = store.packing[orderId];
+        if (real.some((c) => c.field === "withRaisins" || c.field === "withoutRaisins") && p && (p.packedBy || p.met || p.zonder || p.totaal)) {
+          log.push({ at, kind: "inpakken", orderId, field: "packing", from: p.packedBy ? `ingepakt door ${p.packedBy}` : "deels afgevinkt", to: "opnieuw inpakken", by: session.name, note: "aantallen gewijzigd" });
+          store.packing[orderId] = { ...p, met: false, zonder: false, totaal: false, packedBy: "", packedAt: "" };
+        }
+        const m = store.meta[orderId];
+        const was = m?.courier || order.supplierName;
+        if (real.some((c) => c.field === "deliveryDate") && was) {
+          log.push({ at, kind: "bestelling", orderId, field: "courier", from: was, to: "", by: session.name, note: "andere leverdatum" });
+          if (m) m.courier = "";
+          if (!b) store.orderEdits[orderId] = { ...store.orderEdits[orderId], supplierName: "" } as Partial<Record<OrderField, string>>;
+        }
+        store.changes = [...log.reverse(), ...store.changes];
       });
     },
     async assignCourier(session, orderId, courier) {

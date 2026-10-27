@@ -266,6 +266,9 @@ function App() {
         {!state && !error ? <Skeleton /> : null}
         {page}
         {backend.kind === "demo" ? <p className="pt-2 text-center text-xs text-muted">Demo-modus: {backend.notice}</p> : null}
+        <p className="text-center text-[10px] text-muted/70 print:hidden">
+          Versie {new Date(__BUILD_TIME__).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+        </p>
       </main>
       <Toaster />
     </div>

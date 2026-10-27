@@ -41,6 +41,11 @@ export interface RouteRequest {
   minutesPerStop?: number;
 }
 
+/** What the script answers after a change: the data version that includes it. */
+export interface SavedVersion {
+  version: number;
+}
+
 export interface GeoPoint {
   lat: number;
   lng: number;
@@ -103,11 +108,11 @@ export interface Backend {
   getVersion(session: Session): Promise<number>;
   /** With `since`: null when nothing changed after that version (one small request instead of two). */
   getState(session: Session, since?: number): Promise<DashboardState | null>;
-  claim(session: Session, orderId: string): Promise<void>;
-  release(session: Session, orderId: string): Promise<void>;
-  checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<void>;
-  complete(session: Session, orderId: string): Promise<void>;
-  reopen(session: Session, orderId: string): Promise<void>;
+  claim(session: Session, orderId: string): Promise<SavedVersion | void>;
+  release(session: Session, orderId: string): Promise<SavedVersion | void>;
+  checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<SavedVersion | void>;
+  complete(session: Session, orderId: string): Promise<SavedVersion | void>;
+  reopen(session: Session, orderId: string): Promise<SavedVersion | void>;
   getSignupInfo(): Promise<SignupInfo>;
   setBaked(session: Session, date: string, counts: BakedCount): Promise<void>;
   updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
@@ -122,7 +127,7 @@ export interface Backend {
   registerVolunteer(signup: VolunteerSignup): Promise<void>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
   saveCost(session: Session, cost: CostInput): Promise<void>;
-  setDelivered(session: Session, orderId: string, delivered: boolean): Promise<void>;
+  setDelivered(session: Session, orderId: string, delivered: boolean): Promise<SavedVersion | void>;
   reviewCost(session: Session, id: string, status: Exclude<CostStatus, "uitbetaald">, reason: string): Promise<void>;
   payCost(session: Session, id: string, paid: boolean, date: string): Promise<void>;
   /** After the action: removes names, contact details and IBANs. */
@@ -199,19 +204,19 @@ function createAppsScriptBackend(url: string): Backend {
       };
     },
     async claim(session, orderId) {
-      await call("claim", withSession(session, { orderId }));
+      return call<SavedVersion>("claim", withSession(session, { orderId }));
     },
     async release(session, orderId) {
-      await call("release", withSession(session, { orderId }));
+      return call<SavedVersion>("release", withSession(session, { orderId }));
     },
     async checkPart(session, orderId, part, done) {
-      await call("checkPart", withSession(session, { orderId, part, done }));
+      return call<SavedVersion>("checkPart", withSession(session, { orderId, part, done }));
     },
     async complete(session, orderId) {
-      await call("complete", withSession(session, { orderId }));
+      return call<SavedVersion>("complete", withSession(session, { orderId }));
     },
     async reopen(session, orderId) {
-      await call("reopen", withSession(session, { orderId }));
+      return call<SavedVersion>("reopen", withSession(session, { orderId }));
     },
     async getSignupInfo() {
       const data = await call<{ counts: SignupCounts; agenda?: AgendaSlot[] }>("signupStats", {});
@@ -251,7 +256,7 @@ function createAppsScriptBackend(url: string): Backend {
       await call("saveCost", withSession(session, { ...cost }));
     },
     async setDelivered(session, orderId, delivered) {
-      await call("setDelivered", withSession(session, { orderId, delivered }));
+      return call<SavedVersion>("setDelivered", withSession(session, { orderId, delivered }));
     },
     async reviewCost(session, id, status, reason) {
       await call("reviewCost", withSession(session, { id, status, reason }));

@@ -101,7 +101,8 @@ export interface Backend {
   notice?: string;
   login(code: string): Promise<Role>;
   getVersion(session: Session): Promise<number>;
-  getState(session: Session): Promise<DashboardState>;
+  /** With `since`: null when nothing changed after that version (one small request instead of two). */
+  getState(session: Session, since?: number): Promise<DashboardState | null>;
   claim(session: Session, orderId: string): Promise<void>;
   release(session: Session, orderId: string): Promise<void>;
   checkPart(session: Session, orderId: string, part: PackingPart, done: boolean): Promise<void>;
@@ -182,8 +183,9 @@ function createAppsScriptBackend(url: string): Backend {
       const data = await call<{ version: number }>("version", withSession(session));
       return data.version;
     },
-    async getState(session) {
-      const raw = await call<RawState>("state", withSession(session));
+    async getState(session, since) {
+      const raw = await call<RawState | { unchanged: true; version: number }>("state", withSession(session, since ? { since } : {}));
+      if ("unchanged" in raw) return null;
       const { rows, ...rest } = raw;
       // Older scripts lack the newer fields; fill them so the pages never see undefined.
       return {
@@ -459,9 +461,10 @@ function createDemoBackend(notice?: string): Backend {
     async getVersion() {
       return readStore().version;
     },
-    async getState(session) {
+    async getState(session, since) {
       const orders = await getOrders();
       const store = readStore();
+      if (since && since === store.version) return null;
       const admin = session.role === "beheer";
       return {
         version: store.version,

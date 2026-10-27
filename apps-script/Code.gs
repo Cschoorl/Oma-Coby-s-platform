@@ -181,6 +181,7 @@ function doPost(e) {
 }
 
 function handle_(raw) {
+  resetMemo_();
   try {
     const body = JSON.parse(raw);
     const action = String(body.action || '');
@@ -206,10 +207,9 @@ function json_(value) {
 function roleForCode_(code) {
   const value = String(code || '').trim();
   if (!value) return null;
-  const props = PropertiesService.getScriptProperties();
-  if (value === props.getProperty('CODE_BEHEER')) return 'beheer';
-  if (value === props.getProperty('CODE_INPAKKER')) return 'inpakker';
-  if (value === props.getProperty('CODE_BEZORGER')) return 'bezorger';
+  if (value === prop_('CODE_BEHEER')) return 'beheer';
+  if (value === prop_('CODE_INPAKKER')) return 'inpakker';
+  if (value === prop_('CODE_BEZORGER')) return 'bezorger';
   return null;
 }
 
@@ -223,6 +223,8 @@ const HANDLERS = {
     return { version: getVersion_() };
   },
   state: function (body, role) {
+    // The platform asks "anything new since version X?"; then one request is enough for both.
+    if (body.since && Number(body.since) === getVersion_()) return { unchanged: true, version: getVersion_() };
     return buildState_(role, String(body.name || '').trim());
   },
   setDelivered: function (body) {
@@ -652,10 +654,26 @@ const HANDLERS = {
 // ---------------------------------------------------------------------------
 // State
 
+/**
+ * The state for one person. The full state is built once per data version and kept in the
+ * script cache, so opening the platform or refreshing does not read every tab again; any change
+ * (dashboard, form or a cell in the Sheet) bumps the version and the next request rebuilds it.
+ */
 function buildState_(role, name) {
-  const isAdmin = role === 'beheer';
+  const version = getVersion_();
+  let full = readStateCache_(version);
+  if (!full) {
+    full = buildFullState_();
+    full.version = version;
+    writeStateCache_(version, full);
+  }
+  return viewFor_(full, role, name);
+}
+
+/** Everything, as beheer sees it; viewFor_ takes out what other roles may not see. */
+function buildFullState_() {
   const state = {
-    version: getVersion_(),
+    version: 0,
     rows: readOrders_(),
     meta: {},
     packing: {},
@@ -701,54 +719,114 @@ function buildState_(role, name) {
       key: r.sleutel, date: isoDate_(r.leverdatum), courier: String(r.bezorger), mode: r.vervoer,
       km: num_(r.km), minutes: num_(r.minuten),
       orderIds: String(r.volgorde || '').split(',').filter(String),
-      mapsUrl: String((isAdmin ? r.maps_url : r.maps_url_zonder_eindpunt || (r.eindpunt ? '' : r.maps_url)) || ''),
+      mapsUrl: String(r.maps_url || ''),
+      // For everyone but beheer: the route without the courier's home address.
+      publicMapsUrl: String(r.maps_url_zonder_eindpunt || (r.eindpunt ? '' : r.maps_url) || ''),
       computedAt: String(r.berekend_op || ''),
       startTime: String(r.starttijd || ''), stopTimes: String(r.tijden || '').split(',').filter(String),
-      part: String(r.dagdeel || ''), endAddress: isAdmin ? String(r.eindpunt || '') : ''
+      part: String(r.dagdeel || ''), endAddress: String(r.eindpunt || '')
     };
   });
   readTab_('delivery').forEach(function (r) {
     if (r.afgeleverd_door) state.delivery[r.order_id] = { deliveredBy: String(r.afgeleverd_door), deliveredAt: String(r.afgeleverd_op || '') };
   });
+  state.volunteers = readVolunteers_();
 
-  // Everyone sees who is available when (agenda); contact details only for beheer.
-  state.volunteers = readVolunteers_().map(function (v) {
-    if (isAdmin) return v;
-    return Object.assign({}, v, { phone: '', email: '', remark: '', address: '' });
-  });
-
-  const price = num_(getSetting_('prijs_per_oliebol'));
+  const settings = {};
+  readTab_('settings').forEach(function (r) { settings[r.sleutel] = r.waarde; });
+  const price = num_(settings.prijs_per_oliebol);
   state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
-  const kmRate = num_(getSetting_('km_vergoeding'));
+  const kmRate = num_(settings.km_vergoeding);
   state.kmRate = kmRate > 0 ? kmRate : null;
 
-  // Beheer sees every declaration; a volunteer only their own, with the IBAN masked.
   state.costs = readTab_('costs').map(function (r) {
-    const iban = String(r.iban || '');
     return {
       id: String(r.id), createdAt: String(r.ingevoerd_op), createdBy: String(r.ingevoerd_door || ''),
       date: isoDate_(r.datum), amount: num_(r.bedrag), supplier: String(r.leverancier || ''),
       description: String(r.omschrijving || ''), photoUrl: String(r.foto_url || ''),
-      iban: isAdmin || !iban ? iban : '•••• ' + iban.slice(-4),
+      iban: String(r.iban || ''),
       status: String(r.status || 'ingediend'), reason: String(r.reden || ''),
       reviewedBy: String(r.beoordeeld_door || ''), reviewedAt: String(r.beoordeeld_op || ''), paidAt: isoDate_(r.uitbetaald_op)
     };
-  }).filter(function (c) {
-    return isAdmin || (name && c.createdBy.toLowerCase() === name.toLowerCase());
   });
-
-  if (isAdmin) {
-    state.history = readTab_('history').map(function (r) {
-      const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
-      return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
-    }).filter(function (r) { return r.year && r.date; });
-  }
+  state.history = readTab_('history').map(function (r) {
+    const revenue = r.omzet === '' || r.omzet === null || r.omzet === undefined ? null : num_(r.omzet);
+    return { year: Number(r.jaar), date: isoDate_(r.datum), orders: num_(r.bestellingen), oliebollen: num_(r.oliebollen), revenue: isFinite(revenue) ? revenue : null };
+  }).filter(function (r) { return r.year && r.date; });
   return state;
+}
+
+/** What one role sees: contact details, home addresses, IBANs and other people's costs only for beheer. */
+function viewFor_(full, role, name) {
+  const isAdmin = role === 'beheer';
+  const routes = {};
+  Object.keys(full.routes).forEach(function (key) {
+    const r = full.routes[key];
+    const out = Object.assign({}, r, isAdmin ? {} : { mapsUrl: r.publicMapsUrl, endAddress: '' });
+    delete out.publicMapsUrl;
+    routes[key] = out;
+  });
+  const lower = String(name || '').toLowerCase();
+  return Object.assign({}, full, {
+    routes: routes,
+    // Everyone sees who is available when (agenda); contact details only for beheer.
+    volunteers: isAdmin ? full.volunteers : full.volunteers.map(function (v) {
+      return Object.assign({}, v, { phone: '', email: '', remark: '', address: '' });
+    }),
+    // Beheer sees every declaration; a volunteer only their own, with the IBAN masked.
+    costs: full.costs.filter(function (c) {
+      return isAdmin || (lower && c.createdBy.toLowerCase() === lower);
+    }).map(function (c) {
+      return isAdmin || !c.iban ? c : Object.assign({}, c, { iban: '•••• ' + c.iban.slice(-4) });
+    }),
+    history: isAdmin ? full.history : []
+  });
+}
+
+// The script cache holds at most 100 KB per entry: the state is zipped and split into parts.
+// A change that skips the triggers (e.g. via another app) shows up after at most 5 minutes.
+const STATE_CACHE_SECONDS = 300;
+const STATE_CACHE_PART = 90000;
+
+function readStateCache_(version) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const count = Number(cache.get('state:' + version));
+    if (!count) return null;
+    const keys = [];
+    for (let i = 0; i < count; i++) keys.push('state:' + version + ':' + i);
+    const parts = cache.getAll(keys);
+    let text = '';
+    for (let i = 0; i < count; i++) {
+      if (!parts[keys[i]]) return null;
+      text += parts[keys[i]];
+    }
+    const blob = Utilities.newBlob(Utilities.base64Decode(text), 'application/x-gzip');
+    return JSON.parse(Utilities.ungzip(blob).getDataAsString('UTF-8'));
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeStateCache_(version, state) {
+  try {
+    const zipped = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(state), 'application/json')).getBytes());
+    const entries = {};
+    let count = 0;
+    for (let at = 0; at < zipped.length; at += STATE_CACHE_PART) entries['state:' + version + ':' + count++] = zipped.slice(at, at + STATE_CACHE_PART);
+    // Too big for the cache (very large Sheet): just build it every time.
+    if (count > 50) return;
+    const cache = CacheService.getScriptCache();
+    cache.putAll(entries, STATE_CACHE_SECONDS);
+    cache.put('state:' + version, String(count), STATE_CACHE_SECONDS);
+  } catch (err) {
+    // Without cache the platform still works, only slower.
+  }
 }
 
 /** Reads the order tab and returns rows keyed by the dashboard field names. */
 function readOrders_() {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(CONFIG.ORDERS_SHEET);
+  const sheet = ss_().getSheetByName(CONFIG.ORDERS_SHEET);
   if (!sheet) throw new Error('Tabblad "' + CONFIG.ORDERS_SHEET + '" niet gevonden. Pas CONFIG.ORDERS_SHEET aan.');
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
@@ -762,7 +840,7 @@ function readOrders_() {
     }
   });
   const seen = {};
-  const tz = Session.getScriptTimeZone();
+  const tz = tz_();
   // Season = the most common year among the order timestamps; CONFIG.SEASON_YEAR when there are none.
   const yearCount = {};
   if (index.besteldatum !== undefined) {
@@ -825,8 +903,8 @@ function logPacking_(orderId, action, name) {
 }
 
 function volunteerSheet_() {
-  const id = PropertiesService.getScriptProperties().getProperty('VOLUNTEERS_SPREADSHEET_ID');
-  const ss = id ? SpreadsheetApp.openById(id) : SpreadsheetApp.getActive();
+  const id = prop_('VOLUNTEERS_SPREADSHEET_ID');
+  const ss = id ? SpreadsheetApp.openById(id) : ss_();
   let sheet = ss.getSheetByName(CONFIG.VOLUNTEERS_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.VOLUNTEERS_SHEET);
@@ -864,7 +942,7 @@ function readVolunteers_() {
   const cell = function (row, field) {
     if (index[field] === undefined) return '';
     const v = row[index[field]];
-    if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm:ss');
     return String(v === null || v === undefined ? '' : v).trim();
   };
   return values.slice(1).map(function (row, i) {
@@ -960,10 +1038,55 @@ function receiptFolder_() {
 // ---------------------------------------------------------------------------
 // Sheet helpers
 
+// Every call to a Google service costs time (often 50–100 ms). Within one request we look up the
+// spreadsheet, the tabs, the script properties and the time zone only once.
+let SS_ = null;
+let PROPS_ = null;
+let TZ_ = null;
+const TAB_SHEETS_ = {};
+const TAB_CHECKED_ = {};
+
+/** Start of a request: forget lookups from an earlier one (the Sheet may have changed in between). */
+function resetMemo_() {
+  SS_ = null;
+  PROPS_ = null;
+  Object.keys(TAB_SHEETS_).forEach(function (k) { delete TAB_SHEETS_[k]; });
+  Object.keys(TAB_CHECKED_).forEach(function (k) { delete TAB_CHECKED_[k]; });
+}
+
+function ss_() {
+  if (!SS_) SS_ = SpreadsheetApp.getActive();
+  return SS_;
+}
+
+/** All script properties in one call; setProp_ keeps this copy up to date. */
+function prop_(key) {
+  if (!PROPS_) PROPS_ = PropertiesService.getScriptProperties().getProperties();
+  return PROPS_[key] === undefined ? null : PROPS_[key];
+}
+
+function setProp_(key, value) {
+  PropertiesService.getScriptProperties().setProperty(key, value);
+  if (PROPS_) PROPS_[key] = value;
+}
+
+function tz_() {
+  if (!TZ_) TZ_ = Session.getScriptTimeZone();
+  return TZ_;
+}
+
+/** The tab for reading: no header or format checks, those happen when writing. */
+function readSheet_(tab) {
+  if (TAB_SHEETS_[tab]) return TAB_SHEETS_[tab];
+  const sheet = ss_().getSheetByName(TABS[tab][0]);
+  return sheet ? (TAB_SHEETS_[tab] = sheet) : sheet_(tab);
+}
+
 function sheet_(tab) {
+  if (TAB_CHECKED_[tab]) return TAB_CHECKED_[tab];
   const def = TABS[tab];
-  const ss = SpreadsheetApp.getActive();
-  let sheet = ss.getSheetByName(def[0]);
+  const ss = ss_();
+  let sheet = TAB_SHEETS_[tab] || ss.getSheetByName(def[0]);
   if (!sheet) {
     sheet = ss.insertSheet(def[0]);
     // Keys stay text, so "001" or "2026-12-30" are not turned into numbers or dates.
@@ -982,11 +1105,13 @@ function sheet_(tab) {
       }
     });
   }
+  TAB_SHEETS_[tab] = sheet;
+  TAB_CHECKED_[tab] = sheet;
   return sheet;
 }
 
 function readTab_(tab) {
-  const sheet = sheet_(tab);
+  const sheet = readSheet_(tab);
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
   const headers = values[0].map(String);
@@ -1043,20 +1168,15 @@ function withLock_(fn) {
   }
 }
 
-function getSetting_(key) {
-  const rows = readTab_('settings');
-  for (let i = 0; i < rows.length; i++) if (rows[i].sleutel === key) return rows[i].waarde;
-  return '';
-}
-
 function getVersion_() {
-  return Number(PropertiesService.getScriptProperties().getProperty('DATA_VERSION')) || 1;
+  return Number(prop_('DATA_VERSION')) || 1;
 }
 
 function bump_() {
-  const props = PropertiesService.getScriptProperties();
+  // Read fresh: another request may have bumped in the meantime.
+  PROPS_ = null;
   const next = getVersion_() + 1;
-  props.setProperty('DATA_VERSION', String(next));
+  setProp_('DATA_VERSION', String(next));
   return { version: next };
 }
 
@@ -1204,7 +1324,7 @@ function hhmm_(minutes) {
 /** Key cell → text. Sheets may turn "2026-11-15 10:12:00" into a date; keep the time if it has one. */
 function keyOf_(v) {
   if (v instanceof Date) {
-    const tz = Session.getScriptTimeZone();
+    const tz = tz_();
     const hasTime = Utilities.formatDate(v, tz, 'HH:mm:ss') !== '00:00:00';
     return Utilities.formatDate(v, tz, hasTime ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd');
   }
@@ -1214,12 +1334,11 @@ function keyOf_(v) {
 /** Keeps the key column of a dashboard tab as plain text, so new keys are not turned into dates. Once per tab. */
 function textKeys_(tab, sheet) {
   if (tab === 'history') return;
-  const props = PropertiesService.getScriptProperties();
   const flag = 'TEXT_KEYS_' + tab;
-  if (props.getProperty(flag)) return;
+  if (prop_(flag)) return;
   // The packing log has the time first and the order number second.
   sheet.getRange(tab === 'packlog' ? 'B:B' : 'A:A').setNumberFormat('@');
-  props.setProperty(flag, '1');
+  setProp_(flag, '1');
 }
 
 /** Number from a cell: 12.5, "12,5", "€ 1.234,50" and "" (→ 0) all work. */
@@ -1247,16 +1366,16 @@ function splitList_(v) {
 }
 
 function now_() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  return Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss');
 }
 
 function isoDate_(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');
   return String(v || '');
 }
 
 function formatCell_(date, field) {
-  const tz = Session.getScriptTimeZone();
+  const tz = tz_();
   if (/tijd/.test(field) && date.getFullYear() < 1900) return Utilities.formatDate(date, tz, 'HH:mm');
   if (field === 'geplande_tijd') return Utilities.formatDate(date, tz, 'HH:mm');
   if (/_op$|tijdstempel|timestamp/.test(field)) return Utilities.formatDate(date, tz, 'yyyy-MM-dd HH:mm:ss');

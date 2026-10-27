@@ -145,15 +145,21 @@ Aantallen, bedragen en datums blijven staan, zodat de tussenstand van volgend ja
 
 ## Realtime
 
-Elke wijziging verhoogt een versienummer. Het dashboard vraagt dat elke 3 seconden op en laadt alleen
-opnieuw als er iets veranderd is. Wijzigingen in de Sheet zelf verhogen het versienummer ook:
+Elke wijziging verhoogt een versienummer. Het dashboard vraagt elke 3 seconden "iets nieuw sinds versie X?";
+het antwoord is klein als er niets veranderd is, en bevat meteen de nieuwe stand als er wel iets veranderd is.
+Wijzigingen in de Sheet zelf verhogen het versienummer ook:
 
 | Wat er in de Sheet gebeurt | Trigger | Zichtbaar in het platform |
 |---|---|---|
 | Een cel typen of aanpassen (elk tabblad) | `onEdit` (werkt altijd) | binnen een paar seconden |
 | Rijen invoegen/verwijderen, sorteren, plakken | `bijWijziging` (na `installeer`) | binnen een paar seconden |
 | Nieuwe bestelling of aanmelding via Google Formulier | `bijFormulier` (na `installeer`) | binnen een paar seconden |
-| Iets anders (formules, import, ander script) | — | uiterlijk na 30 seconden (het dashboard laadt dan altijd opnieuw) |
+| Iets anders (formules, import, ander script) | — | uiterlijk na 5 minuten |
+
+**Snelheid.** Het script bouwt de stand (alle tabbladen samen) één keer per versie op en bewaart die 5 minuten
+in de scriptcache (`CacheService`). Openen en verversen leest dan niets uit de Sheet; alleen na een wijziging
+wordt de stand opnieuw opgebouwd. Het platform onthoudt in de browser de laatst bekende stand, zodat een pagina
+direct opent en daarna op de achtergrond bijwerkt ("Bijwerken…" → "Live"). Bij uitloggen wordt die gewist.
 
 Je kunt dus in elk tabblad met de hand corrigeren: een bezorger in `Dashboard_Orders`, een claim in `Inpakken`,
 aantallen in `Gebakken`, de prijs in `Instellingen`. Pas alleen de kolomnamen in rij 1 niet aan.

@@ -28,6 +28,9 @@ import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
 import { categoryOf } from "../lib/categories";
 
+/** Same check as the script: something@domain.tld. */
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 export interface Session {
   code: string;
   role: Role;
@@ -244,6 +247,7 @@ function createAppsScriptBackend(url: string): Backend {
         business: rest.business ?? [],
         changes: rest.changes ?? [],
         popupSales: rest.popupSales ?? {},
+        meta: Object.fromEntries(Object.entries(rest.meta ?? {}).map(([k, m]) => [k, { ...emptyMeta, ...m }])),
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
     },
@@ -599,7 +603,8 @@ function createDemoBackend(notice?: string): Backend {
   }
 
   function metaFor(store: DemoStore, orderId: string): OrderMeta {
-    store.meta[orderId] ??= { ...emptyMeta };
+    // Older saved demo data may miss newer fields.
+    store.meta[orderId] = { ...emptyMeta, ...store.meta[orderId] };
     return store.meta[orderId];
   }
 
@@ -642,7 +647,7 @@ function createDemoBackend(notice?: string): Backend {
         agenda: [],
         business: admin ? store.business : [],
         // Like the script: everyone sees what changed, contact details only beheer.
-        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "locationName"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
+        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "locationName", "confirmation"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
         popupSales: store.popupSales
       };
     },
@@ -746,16 +751,32 @@ function createDemoBackend(notice?: string): Backend {
     },
     async sendConfirmation(session, orderId, _subject, text) {
       await delay(400);
-      const order = (await getOrders()).find((o) => o.id === orderId);
+      // All orders, edits included: also confirmed business requests and a corrected e-mail address.
+      const order = (await allOrders(readStore())).find((o) => o.id === orderId);
       if (!order?.email) throw new Error("Deze order heeft geen e-mailadres.");
+      // Like Gmail: an address it cannot send to fails, and the failure is saved. In the demo, a
+      // domain ending in ".invalid" (e.g. typed by hand in the Sheet) also fails, to try it out.
+      const address = order.email.trim();
+      const failure = EMAIL_RE.test(address) && !/\.invalid$/i.test(address) ? "" : `Invalid email: ${address}`;
       mutate((store) => {
         const m = metaFor(store, orderId);
+        const at = nowStamp();
         m.confirmationText = text;
-        m.confirmationStatus = "verzonden";
-        m.confirmationSentAt = nowStamp();
+        m.confirmationAttemptAt = at;
         m.updatedBy = session.name;
-        m.updatedAt = nowStamp();
+        m.updatedAt = at;
+        if (failure) {
+          if (m.confirmationStatus !== "verzonden") m.confirmationStatus = "mislukt";
+          m.confirmationError = failure;
+        } else {
+          m.confirmationStatus = "verzonden";
+          m.confirmationSentAt = at;
+          m.confirmationSentTo = order.email ?? "";
+          m.confirmationError = "";
+        }
+        store.changes = [{ at, kind: "bevestiging", orderId, field: "confirmation", from: "", to: failure ? `Mislukt: ${failure}` : "Verzonden", by: session.name, note: "" }, ...store.changes];
       });
+      if (failure) throw new Error(`Versturen is mislukt: ${failure}`);
     },
     async createOrder(session, input) {
       await delay(300);
@@ -764,6 +785,7 @@ function createDemoBackend(notice?: string): Backend {
       if (!input.locationName.trim()) throw new Error(type === "Pop-up" ? "Geef de pop-up een naam of plek." : "Vul de naam van de klant in.");
       if (input.withRaisins + input.withoutRaisins <= 0) throw new Error("Vul in hoeveel oliebollen.");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.deliveryDate)) throw new Error("Kies een leverdatum.");
+      if (input.email?.trim() && !EMAIL_RE.test(input.email.trim())) throw new Error("Dit e-mailadres klopt niet.");
       const store = readStore();
       const prefix = type === "Pop-up" ? "POP-" : "OB-";
       const max = Math.max(0, ...(await allOrders(store)).filter((o) => o.id.startsWith(prefix)).map((o) => Number(o.id.slice(prefix.length)) || 0));
@@ -830,6 +852,7 @@ function createDemoBackend(notice?: string): Backend {
         if (c.from !== orderFieldValue(order, c.field)) throw new Error("Deze bestelling is net door iemand anders aangepast. Ververs en probeer het opnieuw.");
         if ((c.field === "withRaisins" || c.field === "withoutRaisins") && !/^\d+$/.test(c.to.trim())) throw new Error("Aantal moet een heel getal van 0 of meer zijn.");
         if (c.field === "deliveryDate" && !/^\d{4}-\d{2}-\d{2}$/.test(c.to)) throw new Error("Kies een leverdatum.");
+        if (c.field === "email" && c.to.trim() && !EMAIL_RE.test(c.to.trim())) throw new Error("Dit e-mailadres klopt niet.");
       }
       mutate((store) => {
         const at = nowStamp();
@@ -847,6 +870,7 @@ function createDemoBackend(notice?: string): Backend {
             else if (c.field === "address") b.street = v;
             else if (c.field === "postalCode") b.postalCode = v;
             else if (c.field === "city") b.city = v;
+            else if (c.field === "email") b.email = v;
           }
           const totals = businessTotals(b, BUSINESS_DEFAULTS);
           if (totals.total !== b.totals.total) log.push({ at, kind: "bestelling", orderId, field: "amount", from: String(b.totals.total), to: String(totals.total), by: session.name, note: "opnieuw berekend" });

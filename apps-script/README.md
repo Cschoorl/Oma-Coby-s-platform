@@ -155,6 +155,17 @@ Op **Bestellingen → Bewerken** past beheer een bestelling aan. Het script (`up
 
 Inpakkers en bezorgers zien welke velden zijn gewijzigd, maar niet de oude en nieuwe adresgegevens. Bij "Na de actie" wordt het log gewist.
 
+## Klantbevestiging en het tabblad Bevestigd
+
+- **Versturen per e-mail** (`sendConfirmation`) verstuurt de mail met `MailApp`. Pas als dat lukt, wordt in `Dashboard_Orders` vastgelegd: `bevestiging_status` = `verzonden`, `bevestiging_verzonden_op` (tijdstip), `bevestiging_verzonden_naar` (adres).
+- Lukt het niet (ongeldig adres, dagquotum op, storing), dan wordt `bevestiging_status` = `mislukt`, met de fout in `bevestiging_fout` en het tijdstip in `bevestiging_poging_op`. De order blijft dan uit **Bevestigd** en de fout staat bij de order. Een mislukte nieuwe poging maakt een eerder verstuurde mail niet ongedaan.
+- Alleen orders met `verzonden` staan op het tabblad **Bevestigd**. Dat staat los van *Beoordeeld* (de opmerking) en van een opgeslagen concept.
+- Bestaande regels met `verzonden` (van vóór deze versie) tellen gewoon mee, met hun tijdstip. De nieuwe kolommen komen er vanzelf bij.
+- Pogingen staan ook in het wijzigingslog (veld *Bevestigingsmail*).
+- Het e-mailadres pas je aan via **Bewerken → E-mail** (kolom `Info`).
+
+Let op: "verzonden" betekent dat Gmail de mail heeft aangenomen. Een mail die later terugkomt (bounce) ziet het script niet; die komt binnen in de mailbox van het account dat het script draait.
+
 ## Particulier en pop-upvoorraad
 
 - **+ Bestelling** en **+ Pop-upvoorraad** op de pagina Bestellingen zetten een nieuwe regel onderaan `Totaal_lijst bestellingen` (`createOrder`). Pop-upvoorraad krijgt een nummer `POP-001`, `POP-002`, …; andere bestellingen `OB-001`, …. Pop-ups zijn altijd *Afhalen* en komen dus niet in de routes.

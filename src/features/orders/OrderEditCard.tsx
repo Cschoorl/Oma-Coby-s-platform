@@ -18,7 +18,7 @@ interface OrderEditCardProps {
 
 type Draft = Record<OrderField, string>;
 
-const FIELDS: OrderField[] = ["type", "locationName", "withRaisins", "withoutRaisins", "deliveryDate", "fulfilment", "deliveryMoment", "pickupLocation", "address", "postalCode", "city", "amount"];
+const FIELDS: OrderField[] = ["type", "locationName", "withRaisins", "withoutRaisins", "deliveryDate", "fulfilment", "deliveryMoment", "pickupLocation", "address", "postalCode", "city", "email", "amount"];
 
 /** The moments a business order can have (same as the order form). */
 const BUSINESS_MOMENTS = Object.values(momentLabel);
@@ -174,6 +174,13 @@ export function OrderEditCard({ order, state, session, run, onClose }: OrderEdit
               <input className={`${inputClass} ${mark("city")}`} value={draft.city} onChange={(e) => set("city")(e.target.value)} placeholder="Plaats" aria-label="Plaats" />
             </div>
           </fieldset>
+        ) : null}
+
+        {order.category !== "popup" ? (
+          <label className="grid gap-1 text-sm">
+            <span className={fieldLabel}>E-mail (voor de klantbevestiging)</span>
+            <input className={`${inputClass} ${mark("email")}`} type="email" value={draft.email} onChange={(e) => set("email")(e.target.value)} aria-label="E-mail" />
+          </label>
         ) : null}
 
         {order.amount !== undefined && !business ? (

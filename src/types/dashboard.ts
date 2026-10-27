@@ -4,7 +4,8 @@ import type { Order } from "./order";
 export type Role = "beheer" | "inpakker" | "bezorger";
 
 export type NoteStatus = "nieuw" | "beoordeeld";
-export type ConfirmationStatus = "geen" | "concept" | "verzonden";
+/** "verzonden" only once the mail was really sent; "mislukt" after a failed attempt. */
+export type ConfirmationStatus = "geen" | "concept" | "verzonden" | "mislukt";
 
 /** Dashboard-only data per order, stored in its own tab so the order sheet stays untouched. */
 export interface OrderMeta {
@@ -13,7 +14,14 @@ export interface OrderMeta {
   noteOverride: string;
   confirmationText: string;
   confirmationStatus: ConfirmationStatus;
+  /** When the confirmation mail was sent (yyyy-MM-dd HH:mm:ss); empty when not sent. */
   confirmationSentAt: string;
+  /** The address it went to. */
+  confirmationSentTo: string;
+  /** Error of the last failed attempt; cleared once a mail goes out. */
+  confirmationError: string;
+  /** Time of the last attempt, sent or failed. */
+  confirmationAttemptAt: string;
   /** Courier assigned in the dashboard; overrides a courier column in the sheet. */
   courier: string;
   updatedBy: string;
@@ -253,6 +261,9 @@ export const emptyMeta: OrderMeta = {
   confirmationText: "",
   confirmationStatus: "geen",
   confirmationSentAt: "",
+  confirmationSentTo: "",
+  confirmationError: "",
+  confirmationAttemptAt: "",
   courier: "",
   updatedBy: "",
   updatedAt: ""

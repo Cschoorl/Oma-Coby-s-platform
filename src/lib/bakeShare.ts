@@ -2,7 +2,7 @@ import type { BakeShare, DashboardState } from "../types/dashboard";
 import { formatChangeTime } from "./orderChanges";
 
 /*
- * Inpakken › Bakkerij: the bake counts of one delivery day, passed on by WhatsApp, e-mail or the
+ * Beheer › Bakkerij: the bake counts of one delivery day, passed on by WhatsApp, e-mail or the
  * phone's share menu. Every share is saved (tab "Bakkerij doorgegeven"), so the platform can warn
  * when the counts changed afterwards.
  */
@@ -14,6 +14,24 @@ export const channelLabel: Record<ShareChannel, string> = { whatsapp: "WhatsApp"
 export interface BakeCounts {
   withRaisins: number;
   withoutRaisins: number;
+}
+
+/** "2026-10-27" + 1 → "2026-10-28" (calendar days, no time zone trouble). */
+export function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + days));
+  return next.toISOString().slice(0, 10);
+}
+
+/** What has to be baked for a delivery day: all orders, pop-up stock included. */
+export function bakeCounts(state: Pick<DashboardState, "orders">, date: string): BakeCounts {
+  const out = { withRaisins: 0, withoutRaisins: 0 };
+  for (const o of state.orders) {
+    if (o.deliveryDate !== date) continue;
+    out.withRaisins += o.withRaisins;
+    out.withoutRaisins += o.withoutRaisins;
+  }
+  return out;
 }
 
 /** The shares of one day, newest first. */
@@ -41,13 +59,7 @@ export function changedDays(state: Pick<DashboardState, "bakeShares" | "orders">
   for (const s of state.bakeShares ?? []) if (!latest.has(s.date)) latest.set(s.date, s);
   const out: string[] = [];
   for (const [date, last] of latest) {
-    const now = { withRaisins: 0, withoutRaisins: 0 };
-    for (const o of state.orders) {
-      if (o.deliveryDate !== date) continue;
-      now.withRaisins += o.withRaisins;
-      now.withoutRaisins += o.withoutRaisins;
-    }
-    if (diffSince(last, now).changed) out.push(date);
+    if (diffSince(last, bakeCounts(state, date)).changed) out.push(date);
   }
   return out.sort();
 }
@@ -63,10 +75,11 @@ function dayName(iso: string): string {
 }
 
 /** The message as it goes out. Mentions the change when counts were passed on before. */
-export function shareText(date: string, now: BakeCounts, last?: BakeShare): string {
+export function shareText(date: string, now: BakeCounts, last?: BakeShare, today = ""): string {
   const total = now.withRaisins + now.withoutRaisins;
+  const when = today && addDays(today, 1) === date ? `morgen, ${dayName(date)}` : dayName(date);
   const lines = [
-    `Oma Coby's Oliebollenbar – bakken voor ${dayName(date)}`,
+    `Oma Coby's Oliebollenbar – bestellijst voor ${when}`,
     "",
     `Met krenten: ${now.withRaisins}`,
     `Zonder krenten: ${now.withoutRaisins}`,

@@ -36,8 +36,6 @@ import { minBoxes } from "../../utils/boxes";
 import { byRoute, labelsFor, loadAutoPrint, printLabels } from "./labels";
 import { LabelPanel, boxPlan } from "./LabelPanel";
 import { PackingNotes } from "./PackingNotes";
-import { BakeryPanel } from "./BakeryPanel";
-import { changedDays } from "../../lib/bakeShare";
 import { openPackNotes } from "../../lib/packNotes";
 
 interface PackingPageProps {
@@ -65,7 +63,7 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
   // The order whose label panel is open stays in the list, also when the filter would hide it now it is packed.
   const [labelOrder, setLabelsFor] = useState<string | null>(null);
   // Tabs: the orders to pack, or the changes and remarks to process.
-  const [view, setView] = useState<"inpakken" | "opmerkingen" | "bakkerij">("inpakken");
+  const [view, setView] = useState<"inpakken" | "opmerkingen">("inpakken");
   const openNotes = useMemo(() => openPackNotes(state), [state]);
 
   useEffect(() => {
@@ -166,9 +164,6 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     }
   }, [date, totals.packedOrders, dayOrders.length, allPacked]);
 
-  // The counts changed since they were passed on to the bakery: the tab says so.
-  const bakeChanged = useMemo(() => changedDays(state), [state]);
-
   const tabs = (
     <Segmented
       label="Inpakken of opmerkingen"
@@ -176,21 +171,10 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
       onChange={setView}
       options={[
         ["inpakken", "Inpakken"],
-        ["opmerkingen", "Opmerkingen", openNotes],
-        ["bakkerij", bakeChanged.length ? "Bakkerij ⚠" : "Bakkerij"]
+        ["opmerkingen", "Opmerkingen", openNotes]
       ]}
     />
   );
-
-  if (view === "bakkerij") {
-    return (
-      <div className="grid gap-5">
-        {tabs}
-        <OrderFilters selectedDate={date} availableDates={dates} onDateChange={setDate} />
-        <BakeryPanel state={state} session={session} run={run} date={date} counts={{ withRaisins: totals.met, withoutRaisins: totals.zonder }} baked={baked} onDateChange={setDate} />
-      </div>
-    );
-  }
 
   if (view === "opmerkingen") {
     return (

@@ -162,7 +162,7 @@ export interface Backend {
   setPopupSales(session: Session, orderId: string, sales: { withRaisins: number; withoutRaisins: number; amount: number | null }): Promise<SavedVersion | void>;
   /** Inpakken › Opmerkingen: tick an item off as processed (or open it again). */
   setPackNoteDone(session: Session, itemId: string, orderId: string, done: boolean): Promise<SavedVersion | void>;
-  /** Inpakken › Bakkerij: save that the counts of a day were shared, and how. */
+  /** Beheer › Bakkerij: save that the counts of a day were shared, and how. */
   logBakeShare(session: Session, share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;

@@ -17,7 +17,7 @@ import logoUrl from "./assets/logo-oliebollenbar.svg";
 import { CONTACT_EMAIL, applyAgenda } from "./config";
 import { navigate, useRoute } from "./lib/router";
 import { loadSession, saveSession } from "./lib/session";
-import { useDashboard } from "./lib/useDashboard";
+import { clearSnapshots, useDashboard } from "./lib/useDashboard";
 
 interface NavItem {
   path: string;
@@ -109,6 +109,7 @@ function App() {
   }
 
   function logout() {
+    clearSnapshots();
     saveSession(null);
     setSession(null);
   }
@@ -179,7 +180,7 @@ function App() {
             <DemoPill />
             <span className="inline-flex items-center gap-1.5" title={lastSync ? `Bijgewerkt ${lastSync.toLocaleTimeString("nl-NL")}` : undefined}>
               <span className={`inline-block h-2 w-2 rounded-full ${liveDot}`} />
-              <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : "Verbinden…"}</span>
+              <span className="hidden sm:inline">{error ? "Geen verbinding" : lastSync ? "Live" : state ? "Bijwerken…" : "Verbinden…"}</span>
             </span>
             <span className="hidden text-krent sm:inline">
               <b>{session.name}</b> · {roleLabel[session.role]}

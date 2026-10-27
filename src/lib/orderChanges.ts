@@ -8,7 +8,7 @@ import { categoryOf, typeLabel } from "./categories";
  */
 
 /** Fields beheer can edit; the same names the script uses (ORDER_EDIT_FIELDS in Code.gs). */
-export type OrderField = "withRaisins" | "withoutRaisins" | "deliveryDate" | "fulfilment" | "deliveryMoment" | "pickupLocation" | "address" | "postalCode" | "city" | "amount" | "type" | "locationName";
+export type OrderField = "withRaisins" | "withoutRaisins" | "deliveryDate" | "fulfilment" | "deliveryMoment" | "pickupLocation" | "address" | "postalCode" | "city" | "amount" | "type" | "locationName" | "email";
 
 export interface OrderFieldChange {
   field: OrderField;
@@ -44,6 +44,8 @@ export function orderFieldValue(order: Order, field: OrderField): string {
       return typeLabel[order.customerType];
     case "locationName":
       return order.locationName;
+    case "email":
+      return order.email ?? "";
   }
 }
 
@@ -58,6 +60,7 @@ export const fieldLabel: Record<string, string> = {
   address: "Adres",
   postalCode: "Postcode",
   city: "Plaats",
+  email: "E-mail",
   amount: "Bedrag",
   note: "Opmerking",
   packing: "Inpakken",
@@ -65,6 +68,7 @@ export const fieldLabel: Record<string, string> = {
   type: "Soort",
   locationName: "Naam",
   created: "Aangemaakt",
+  confirmation: "Bevestigingsmail",
   soldWithRaisins: "Verkocht MET",
   soldWithoutRaisins: "Verkocht ZONDER",
   soldAmount: "Opbrengst pop-up"
@@ -127,6 +131,7 @@ export function applyOrderEdits(order: Order, edits: Partial<Record<OrderField, 
     else if (field === "city") next.city = value;
     else if (field === "amount") next.amount = value === "" ? undefined : Number(value);
     else if (field === "locationName") next.locationName = value;
+    else if (field === "email") next.email = value || undefined;
     else if (field === "type") {
       next.customerType = /pop.?up/i.test(value) ? "popup" : /barter/i.test(value) ? "barter" : /zakelijk/i.test(value) ? "zakelijk" : value ? "particulier" : "onbekend";
       next.category = categoryOf(next.customerType);

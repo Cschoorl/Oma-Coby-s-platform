@@ -7,7 +7,7 @@ import { Badge, Bollenteller, Card, ConfirmPanel, CopyButton, EmptyState, Icon, 
 import { confirmationSubject, defaultConfirmation } from "../../utils/confirmation";
 import { effectiveNote } from "../../utils/orderUtils";
 import { OrderEditCard, OrderHistory } from "./OrderEditCard";
-import { changesFor } from "../../lib/orderChanges";
+import { changesFor, formatChangeTime } from "../../lib/orderChanges";
 import { NewOrderCard, PopupSalesCard } from "./OrderCategoryCards";
 import { categoryLabel } from "../../lib/categories";
 import type { OrderCategory } from "../../types/order";
@@ -18,7 +18,12 @@ interface OrdersAdminPageProps {
   run: (change: () => Promise<unknown>) => Promise<void>;
 }
 
-type Filter = "review" | "confirm" | "all";
+type Filter = "review" | "confirm" | "confirmed" | "all";
+
+/** Bevestigd: the confirmation mail really went out (set only after a successful send). */
+const isSent = (meta: OrderMeta) => meta.confirmationStatus === "verzonden";
+/** The last attempt failed and nothing went out yet. */
+const sendFailed = (meta: OrderMeta) => !isSent(meta) && Boolean(meta.confirmationError);
 type Kind = "alle" | OrderCategory;
 
 export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
@@ -33,14 +38,17 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
 
   const orders = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const sentAt = (o: Order) => (state.meta[o.id] ?? emptyMeta).confirmationSentAt ?? "";
     return [...state.orders]
-      .sort((a, b) => (a.deliveryDate + a.plannedTime).localeCompare(b.deliveryDate + b.plannedTime))
+      // Bevestigd: most recently sent first; elsewhere by delivery day.
+      .sort((a, b) => (filter === "confirmed" ? sentAt(b).localeCompare(sentAt(a)) : (a.deliveryDate + a.plannedTime).localeCompare(b.deliveryDate + b.plannedTime)))
       .filter((order) => {
         const meta = state.meta[order.id] ?? emptyMeta;
         if (kind !== "alle" && order.category !== kind) return false;
         if (filter === "review" && !(order.extras && meta.noteStatus !== "beoordeeld")) return false;
         // Pop-up stock has no buyer to confirm to.
-        if (filter === "confirm" && (meta.confirmationStatus === "verzonden" || order.category === "popup")) return false;
+        if (filter === "confirm" && (isSent(meta) || order.category === "popup")) return false;
+        if (filter === "confirmed" && !isSent(meta)) return false;
         if (!q) return true;
         return [order.id, order.locationName, order.contactPerson, order.city, order.email ?? ""].some((v) => v.toLowerCase().includes(q));
       });
@@ -49,14 +57,16 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
   const counts = useMemo(() => {
     let review = 0;
     let confirm = 0;
+    let confirmed = 0;
     for (const order of state.orders) {
       const meta = state.meta[order.id] ?? emptyMeta;
       if (order.extras && meta.noteStatus !== "beoordeeld") review += 1;
-      if (meta.confirmationStatus !== "verzonden" && order.category !== "popup") confirm += 1;
+      if (!isSent(meta) && order.category !== "popup") confirm += 1;
+      if (isSent(meta)) confirmed += 1;
     }
     const byKind = { regulier: 0, particulier: 0, popup: 0 };
     for (const order of state.orders) byKind[order.category] += 1;
-    return { review, confirm, byKind };
+    return { review, confirm, confirmed, byKind };
   }, [state.orders, state.meta]);
 
   // Keep the open order selected after it drops out of the filter (e.g. once reviewed).
@@ -75,6 +85,7 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
           options={[
             ["review", "Opmerking beoordelen", counts.review],
             ["confirm", "Nog bevestigen", counts.confirm],
+            ["confirmed", "Bevestigd", counts.confirmed],
             ["all", "Alle", state.orders.length]
           ]}
         />
@@ -124,14 +135,26 @@ export function OrdersAdminPage({ state, session, run }: OrdersAdminPageProps) {
                   <span className="text-xs text-muted">{formatDayLabel(order.deliveryDate)} · {order.withRaisins + order.withoutRaisins} oliebollen</span>
                   <span className="flex flex-wrap gap-1">
                     {order.extras ? meta.noteStatus === "beoordeeld" ? <Badge tone="klaar">Opmerking beoordeeld</Badge> : <Badge tone="aandacht">Opmerking nieuw</Badge> : null}
-                    {meta.confirmationStatus === "verzonden" ? <Badge tone="klaar">Bevestigd</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept klaar</Badge> : null}
+                    {isSent(meta) ? (
+                      <Badge tone="klaar">Bevestigd{meta.confirmationSentAt ? ` · ${formatChangeTime(meta.confirmationSentAt)}` : ""}</Badge>
+                    ) : sendFailed(meta) ? (
+                      <Badge tone="probleem">Mail mislukt</Badge>
+                    ) : meta.confirmationStatus === "concept" ? (
+                      <Badge>Concept klaar</Badge>
+                    ) : null}
                     {order.category !== "regulier" ? <Badge tone={order.category === "popup" ? "aandacht" : "zacht"}>{categoryLabel[order.category]}</Badge> : null}
                     {changesFor(state, order.id).length ? <Badge tone="zacht">Gewijzigd</Badge> : null}
                   </span>
                 </button>
               );
             })}
-            {orders.length === 0 ? <EmptyState title="Niets te doen." text="Alle opmerkingen en bevestigingen in deze selectie zijn afgehandeld. Héééél netjes." /> : null}
+            {orders.length === 0 ? (
+              filter === "confirmed" ? (
+                <EmptyState title="Nog niets bevestigd." text="Hier komt een bestelling zodra de bevestigingsmail echt is verstuurd." />
+              ) : (
+                <EmptyState title="Niets te doen." text="Alle opmerkingen en bevestigingen in deze selectie zijn afgehandeld. Héééél netjes." />
+              )
+            ) : null}
           </div>
         </Card>
 
@@ -187,7 +210,7 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
     setText(meta.confirmationText || defaultConfirmation(order, effectiveNote(order, meta)));
   }, [meta, order, textDirty]);
 
-  const sent = meta.confirmationStatus === "verzonden";
+  const sent = isSent(meta);
 
   async function act(key: string, change: () => Promise<unknown>, success: string) {
     setBusy(key);
@@ -303,9 +326,30 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
             title="Klantbevestiging"
             subtitle="Controleer en pas de tekst aan voordat je verstuurt. Dit is een bevestiging, geen factuur."
             action={
-              sent ? <Badge tone="klaar">Verzonden {meta.confirmationSentAt}</Badge> : meta.confirmationStatus === "concept" ? <Badge>Concept opgeslagen</Badge> : <Badge tone="zacht">Nog niet klaargezet</Badge>
+              sent ? (
+                <Badge tone="klaar">Verzonden {formatChangeTime(meta.confirmationSentAt)}</Badge>
+              ) : sendFailed(meta) ? (
+                <Badge tone="probleem">Versturen mislukt</Badge>
+              ) : meta.confirmationStatus === "concept" ? (
+                <Badge>Concept opgeslagen</Badge>
+              ) : (
+                <Badge tone="zacht">Nog niet klaargezet</Badge>
+              )
             }
           />
+          {sent ? (
+            <p className="mb-2 text-sm text-kerst-ink">
+              Verstuurd op {formatChangeTime(meta.confirmationSentAt)}
+              {meta.confirmationSentTo ? ` naar ${meta.confirmationSentTo}` : ""}.
+            </p>
+          ) : null}
+          {sendFailed(meta) ? (
+            <div className="mb-3">
+              <Notice tone="error">
+                Versturen is mislukt{meta.confirmationAttemptAt ? ` (${formatChangeTime(meta.confirmationAttemptAt)})` : ""}: {meta.confirmationError}. Deze bestelling staat daarom nog niet bij Bevestigd. Controleer het e-mailadres en probeer het opnieuw.
+              </Notice>
+            </div>
+          ) : null}
           <p className="mb-2 text-xs text-muted">Onderwerp: {confirmationSubject(order)}</p>
           <textarea
             className={`${inputClass} min-h-[320px] text-[13px] leading-relaxed`}
@@ -334,7 +378,7 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <button type="button" className={primaryButton} disabled={busy !== null || !order.email} onClick={() => setAskSend(true)}>
                   <Icon name="mail" />
-                  {busy === "send" ? "Versturen…" : "Versturen per e-mail"}
+                  {busy === "send" ? "Versturen…" : sendFailed(meta) ? "Opnieuw versturen" : "Versturen per e-mail"}
                 </button>
                 <button
                   type="button"

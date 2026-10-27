@@ -173,7 +173,8 @@ function planningKey_(map, text) {
  */
 
 const TABS = {
-  meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op']],
+  meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op',
+    'bevestiging_verzonden_naar', 'bevestiging_fout', 'bevestiging_poging_op']],
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
   routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden', 'dagdeel', 'eindpunt', 'maps_url_zonder_eindpunt']],
@@ -466,6 +467,8 @@ const HANDLERS = {
       return bump_();
     });
   },
+  // "Verzonden" only once Gmail accepted the mail. A failed attempt is saved with its error, so the
+  // order stays out of "Bevestigd" and beheer sees what went wrong.
   sendConfirmation: function (body) {
     const order = findOrder_(body.orderId);
     if (!order) throw new Error('Order niet gevonden.');
@@ -473,17 +476,40 @@ const HANDLERS = {
     const text = String(body.text || '').trim();
     if (!text) throw new Error('De bevestiging is leeg.');
     const subject = String(body.subject || ('Bevestiging van je bestelling ' + order.order_id));
-    MailApp.sendEmail({ to: order.email, subject: subject, body: text, name: CONFIG.MAIL_SENDER_NAME });
-    return withLock_(function () {
-      findOrCreate_('meta', body.orderId).set({
+    const by = String(body.name || '');
+    let failure = '';
+    try {
+      MailApp.sendEmail({ to: order.email, subject: subject, body: text, name: CONFIG.MAIL_SENDER_NAME });
+    } catch (err) {
+      failure = String((err && err.message) || err || 'Onbekende fout');
+    }
+    const at = now_();
+    const saved = withLock_(function () {
+      const row = findOrCreate_('meta', body.orderId);
+      // A new failure never undoes an earlier mail that did go out.
+      const wasSent = row.values.bevestiging_status === 'verzonden';
+      row.set(failure ? {
+        bevestiging_tekst: text,
+        bevestiging_status: wasSent ? 'verzonden' : 'mislukt',
+        bevestiging_fout: failure,
+        bevestiging_poging_op: at,
+        bijgewerkt_door: by,
+        bijgewerkt_op: at
+      } : {
         bevestiging_tekst: text,
         bevestiging_status: 'verzonden',
-        bevestiging_verzonden_op: now_(),
-        bijgewerkt_door: String(body.name || ''),
-        bijgewerkt_op: now_()
+        bevestiging_verzonden_op: at,
+        bevestiging_verzonden_naar: order.email,
+        bevestiging_fout: '',
+        bevestiging_poging_op: at,
+        bijgewerkt_door: by,
+        bijgewerkt_op: at
       });
+      logChanges_([{ soort: 'bevestiging', order_id: body.orderId, veld: 'confirmation', oud: '', nieuw: failure ? 'Mislukt: ' + failure : 'Verzonden', door: by, rol: 'beheer' }]);
       return bump_();
     });
+    if (failure) throw new Error('Versturen is mislukt: ' + failure);
+    return saved;
   },
   assignCourier: function (body) {
     return withLock_(function () {
@@ -783,6 +809,9 @@ function buildFullState_() {
       confirmationText: String(r.bevestiging_tekst || ''),
       confirmationStatus: r.bevestiging_status || 'geen',
       confirmationSentAt: String(r.bevestiging_verzonden_op || ''),
+      confirmationSentTo: String(r.bevestiging_verzonden_naar || ''),
+      confirmationError: String(r.bevestiging_fout || ''),
+      confirmationAttemptAt: String(r.bevestiging_poging_op || ''),
       courier: String(r.bezorger || ''),
       updatedBy: String(r.bijgewerkt_door || ''),
       updatedAt: String(r.bijgewerkt_op || '')
@@ -1440,7 +1469,7 @@ function anonymize_() {
     });
     return sheet.getLastRow() - 1;
   };
-  blank('meta', ['opmerking_aangepast', 'bevestiging_tekst', 'bezorger', 'bijgewerkt_door']);
+  blank('meta', ['opmerking_aangepast', 'bevestiging_tekst', 'bezorger', 'bijgewerkt_door', 'bevestiging_verzonden_naar', 'bevestiging_fout']);
   blank('packing', ['geclaimd_door', 'ingepakt_door']);
   blank('packlog', ['klant', 'door']);
   blank('delivery', ['afgeleverd_door']);
@@ -1854,7 +1883,9 @@ const ORDER_EDIT_FIELDS = {
   amount: { sheet: 'bedrag', business: '', kind: 'money' },
   // Soort bestelling (kolom Type): Zakelijk, Barter, Particulier of Pop-up (extra pop-upvoorraad).
   type: { sheet: 'type_klant', business: '', kind: 'type' },
-  locationName: { sheet: 'locatie_naam', business: '', kind: 'text' }
+  locationName: { sheet: 'locatie_naam', business: '', kind: 'text' },
+  // Kolom Info (of E-mail); voor de klantbevestiging.
+  email: { sheet: 'email', business: 'email', kind: 'email' }
 };
 
 /** The order types in the column Type, as the platform knows them. */
@@ -1871,7 +1902,7 @@ function orderType_(value) {
 }
 
 /** Contact details in the log are only shown to beheer. */
-const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email', 'locationName'];
+const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email', 'locationName', 'confirmation'];
 
 /** Adds rows to the Wijzigingslog in one write. entries: {soort, order_id, veld, oud, nieuw, door, rol, toelichting}. */
 function logChanges_(entries) {
@@ -1922,6 +1953,10 @@ function checkEditValue_(field, value) {
   }
   if (def.kind === 'fulfilment') {
     if (v !== 'bezorgen' && v !== 'afhalen') throw new Error('Kies bezorgen of afhalen.');
+    return v;
+  }
+  if (def.kind === 'email') {
+    if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) throw new Error('Dit e-mailadres klopt niet.');
     return v;
   }
   if (def.kind === 'type') {
@@ -2086,6 +2121,7 @@ Object.assign(HANDLERS, {
     const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
     if (met + zonder === 0) throw new Error('Vul in hoeveel oliebollen.');
     const date = checkEditValue_('deliveryDate', body.deliveryDate);
+    checkEditValue_('email', body.email);
     const fulfilment = type === 'Pop-up' ? 'afhalen' : checkEditValue_('fulfilment', body.fulfilment || 'bezorgen');
 
     return withLock_(function () {

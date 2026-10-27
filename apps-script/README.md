@@ -166,9 +166,9 @@ Inpakkers en bezorgers zien welke velden zijn gewijzigd, maar niet de oude en ni
 
 Let op: "verzonden" betekent dat Gmail de mail heeft aangenomen. Een mail die later terugkomt (bounce) ziet het script niet; die komt binnen in de mailbox van het account dat het script draait.
 
-## Inpakken › Bakkerij
+## Bakkerij (beheer)
 
-Op **Inpakken → Bakkerij** deel je de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon. Elke keer delen legt het script vast (`logBakeShare`) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email` of `deelmenu`), `door`, `verzonden_op`. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
+De pagina **Bakkerij** (alleen beheer) opent op de leverdag van morgen: een dag van tevoren zet je de bestellijst klaar en stuur je hem naar de bakker. Je deelt de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon. Elke keer delen legt het script vast (`logBakeShare`, alleen beheer) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email` of `deelmenu`), `door`, `verzonden_op`. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
 
 Optioneel in **Instellingen**: `bakkerij_whatsapp` (telefoonnummer, bijv. `06 12345678`) en `bakkerij_email`. Dan gaat het bericht meteen naar de bakkerij; anders kies je bij het delen zelf de ontvanger.
 

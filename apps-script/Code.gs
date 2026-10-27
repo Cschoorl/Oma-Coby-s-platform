@@ -197,7 +197,7 @@ const TABS = {
   popupSales: ['Pop-up verkoop', ['order_id', 'met_verkocht', 'zonder_verkocht', 'bedrag', 'bijgewerkt_door', 'bijgewerkt_op']],
   // Inpakken › Opmerkingen: which change or remark is processed, by whom and when.
   packNotes: ['Inpak opmerkingen', ['item_id', 'order_id', 'verwerkt_door', 'verwerkt_op']],
-  // Inpakken › Bakkerij: every time the bake counts were shared, with what was passed on.
+  // Beheer › Bakkerij: every time the bake counts were shared, with what was passed on.
   bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op']]
 };
 
@@ -216,7 +216,7 @@ const PERMISSIONS = {
   createOrder: ['beheer'],
   setPopupSales: ['beheer'],
   setPackNoteDone: ['beheer', 'inpakker'],
-  logBakeShare: ['beheer', 'inpakker'],
+  logBakeShare: ['beheer'],
   saveConfirmation: ['beheer'],
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
@@ -2252,7 +2252,7 @@ Object.assign(HANDLERS, {
 });
 
 // ---------------------------------------------------------------------------
-// Inpakken › Bakkerij: de aantallen per leverdag delen (WhatsApp, e-mail of het deelmenu van de
+// Beheer › Bakkerij: de aantallen per leverdag delen (WhatsApp, e-mail of het deelmenu van de
 // telefoon). Elke keer delen komt als regel in "Bakkerij doorgegeven"; zo ziet het platform of de
 // aantallen sindsdien veranderd zijn.
 

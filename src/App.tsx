@@ -6,6 +6,7 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { CostsPage } from "./features/costs/CostsPage";
 import { OrdersAdminPage } from "./features/orders/OrdersAdminPage";
 import { PackingPage } from "./features/packing/PackingPage";
+import { BakeryPage } from "./features/bakery/BakeryPage";
 import { PackingSlipsPage } from "./features/packing/PackingSlipsPage";
 import { CourierPage } from "./features/routes/CourierPage";
 import { RoutesPage } from "./features/routes/RoutesPage";
@@ -42,6 +43,7 @@ const NAV: NavItem[] = [
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Wie kan wanneer: per vrijwilliger en per dag, met contactgegevens.", roles: ["beheer"] },
+  { path: "/bakkerij", label: "Bakkerij", description: "De bestellijst voor morgen: hoeveel oliebollen de bakker moet maken, en naar de bakker sturen.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
   {
     path: "/kosten",
@@ -175,6 +177,9 @@ function App() {
         break;
       case "/bezorger":
         page = <CourierPage state={state} session={session} run={run} name={route.params.get("naam")} date={route.params.get("datum")} />;
+        break;
+      case "/bakkerij":
+        page = <BakeryPage state={state} session={session} run={run} />;
         break;
       case "/tussenstand":
         page = <StatsPage state={state} />;

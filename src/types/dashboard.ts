@@ -245,7 +245,7 @@ export interface DashboardState {
   popupSales: Record<string, PopupSales>;
   /** Inpakken › Opmerkingen: processed items (see src/lib/packNotes.ts), by item id. */
   packNotes: Record<string, PackNoteDone>;
-  /** Inpakken › Bakkerij: every time the bake counts were shared, newest first. */
+  /** Beheer › Bakkerij: every time the bake counts were shared, newest first. */
   bakeShares: BakeShare[];
   /** Where the counts go (Instellingen: bakkerij_whatsapp, bakkerij_email); empty = choose when sharing. */
   bakery: { phone: string; email: string };

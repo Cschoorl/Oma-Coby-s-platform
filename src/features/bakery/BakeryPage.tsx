@@ -1,22 +1,17 @@
 import { useMemo, useState } from "react";
 import { backend, type Session } from "../../data/backend";
-import type { BakeShare, BakedCount, DashboardState } from "../../types/dashboard";
+import type { BakeShare, DashboardState } from "../../types/dashboard";
 import type { Patch } from "../../lib/useDashboard";
-import { Badge, Bollenteller, Card, Icon, Notice, SectionTitle, Segmented, formatDayLabel, formatNumber, ghostButton, primaryButton, secondaryButton, toast } from "../../components/ui";
+import { Badge, Bollenteller, Card, Icon, Notice, SectionTitle, Segmented, formatDayLabel, formatNumber, ghostButton, primaryButton, secondaryButton, toast, todayIso } from "../../components/ui";
+import { OrderFilters } from "../orders/OrderFilters";
 import { formatChangeTime } from "../../lib/orderChanges";
 import { patches } from "../../lib/patches";
-import { changedDays, channelLabel, diffSince, mailLink, shareText, sharesFor, signed, whatsappLink, type BakeCounts, type ShareChannel } from "../../lib/bakeShare";
+import { addDays, bakeCounts, changedDays, channelLabel, diffSince, mailLink, shareText, sharesFor, signed, whatsappLink, type ShareChannel } from "../../lib/bakeShare";
 
-interface BakeryPanelProps {
+interface BakeryPageProps {
   state: DashboardState;
   session: Session;
   run: (change: () => Promise<unknown>, patch?: Patch) => Promise<void>;
-  date: string;
-  /** What has to be baked for this day: all orders, pop-up stock included. */
-  counts: BakeCounts;
-  baked: BakedCount;
-  /** Switch to another delivery day (for "also changed: …"). */
-  onDateChange: (date: string) => void;
 }
 
 /** The phone's own share menu, where there is one (phones and tablets). */
@@ -25,17 +20,24 @@ function nativeShare(): boolean {
 }
 
 /**
- * Inpakken › Bakkerij: the counts of one delivery day, shared via WhatsApp, e-mail or the share
- * menu. Each share is saved; when the counts change afterwards, a warning shows the difference.
+ * Bakkerij (beheer): the order list for the bakers, one day ahead. Opens on tomorrow; the counts are
+ * shared via WhatsApp, e-mail or the share menu. Each share is saved; when the counts change
+ * afterwards, a warning shows the difference per product.
  */
-export function BakeryPanel({ state, session, run, date, counts, baked, onDateChange }: BakeryPanelProps) {
+export function BakeryPage({ state, session, run }: BakeryPageProps) {
+  const today = todayIso();
+  const tomorrow = addDays(today, 1);
+  const [date, onDateChange] = useState(tomorrow);
+  const dates = useMemo(() => Array.from(new Set([tomorrow, ...state.orders.map((o) => o.deliveryDate).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))])).sort(), [state.orders, tomorrow]);
+  const counts = useMemo(() => bakeCounts(state, date), [state, date]);
+  const orderCount = state.orders.filter((o) => o.deliveryDate === date).length;
   const [scope, setScope] = useState<"dag" | "alle">("dag");
   const [error, setError] = useState<string | null>(null);
   const shares = useMemo(() => sharesFor(state, date), [state, date]);
   const last = shares[0];
   const diff = last ? diffSince(last, counts) : null;
-  const text = shareText(date, counts, last);
-  const subject = `Bakken voor ${formatDayLabel(date)}: ${counts.withRaisins + counts.withoutRaisins} oliebollen`;
+  const text = shareText(date, counts, last, today);
+  const subject = `Bestellijst ${date === tomorrow ? "voor morgen, " : ""}${formatDayLabel(date)}: ${counts.withRaisins + counts.withoutRaisins} oliebollen`;
   const total = counts.withRaisins + counts.withoutRaisins;
   const phoneMenu = nativeShare();
   const history = scope === "dag" ? shares : state.bakeShares ?? [];
@@ -91,6 +93,15 @@ export function BakeryPanel({ state, session, run, date, counts, baked, onDateCh
 
   return (
     <div className="grid gap-4">
+      <OrderFilters selectedDate={date} availableDates={dates} onDateChange={onDateChange} />
+      {date !== tomorrow ? (
+        <p className="text-sm text-muted">
+          Je kijkt naar {formatDayLabel(date)}.{" "}
+          <button type="button" className="font-bold text-krent underline" onClick={() => onDateChange(tomorrow)}>
+            Terug naar morgen ({formatDayLabel(tomorrow)})
+          </button>
+        </p>
+      ) : null}
       {otherChanged.length ? (
         <Notice tone="warning">
           Ook veranderd sinds het doorgeven:{" "}
@@ -107,15 +118,15 @@ export function BakeryPanel({ state, session, run, date, counts, baked, onDateCh
       ) : null}
       <Card>
         <SectionTitle
-          title={`Bakken voor ${formatDayLabel(date)}`}
-          subtitle="Alle bestellingen van deze leverdag, pop-upvoorraad inbegrepen."
+          title={date === tomorrow ? `Morgen bakken: ${formatDayLabel(date)}` : `Bakken voor ${formatDayLabel(date)}`}
+          subtitle={`${orderCount} ${orderCount === 1 ? "bestelling" : "bestellingen"} op deze leverdag, pop-upvoorraad inbegrepen. Zet de lijst een dag van tevoren klaar en stuur hem naar de bakker.`}
           action={!last ? <Badge tone="zacht">Nog niet doorgegeven</Badge> : diff?.changed ? <Badge tone="probleem">Gewijzigd sinds doorgeven</Badge> : <Badge tone="klaar">Doorgegeven</Badge>}
         />
         <Bollenteller
           cells={[
-            { label: "Met", value: counts.withRaisins, sub: <span className="text-muted">{formatNumber(baked.withRaisins)} gebakken</span> },
-            { label: "Zonder", value: counts.withoutRaisins, sub: <span className="text-muted">{formatNumber(baked.withoutRaisins)} gebakken</span> },
-            { label: "Totaal", value: total, sub: <span className="text-muted">{formatNumber(baked.withRaisins + baked.withoutRaisins)} gebakken</span> }
+            { label: "Met", value: counts.withRaisins },
+            { label: "Zonder", value: counts.withoutRaisins },
+            { label: "Totaal", value: total }
           ]}
         />
 
@@ -130,7 +141,7 @@ export function BakeryPanel({ state, session, run, date, counts, baked, onDateCh
               met {formatNumber(last.withRaisins)} · zonder {formatNumber(last.withoutRaisins)} · totaal {formatNumber(last.total)}
             </p>
           ) : (
-            <p className="text-sm text-muted">Deze aantallen zijn nog niet aan de bakkerij doorgegeven.</p>
+            <p className="text-sm text-muted">Deze lijst is nog niet naar de bakker gestuurd.</p>
           )}
 
           {last && diff?.changed ? (
@@ -164,6 +175,8 @@ export function BakeryPanel({ state, session, run, date, counts, baked, onDateCh
               </table>
               {buttons(true)}
             </div>
+          ) : total === 0 ? (
+            <Notice tone="info">Geen bestellingen op deze leverdag, dus niets door te geven.</Notice>
           ) : (
             buttons(Boolean(last))
           )}

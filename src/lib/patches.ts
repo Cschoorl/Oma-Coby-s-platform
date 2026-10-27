@@ -23,6 +23,12 @@ export const patches = {
     packing(orderId, () => ({ [part]: done, ...(part !== "totaal" && !done ? { totaal: false } : {}) })),
   complete: (orderId: string, name: string) => packing(orderId, () => ({ packedBy: name, packedAt: stamp() })),
   reopen: (orderId: string, name: string) => packing(orderId, () => ({ packedBy: "", packedAt: "", claimedBy: name, claimedAt: stamp() })),
+  packNote: (itemId: string, name: string, done: boolean) => (s: DashboardState): DashboardState => {
+    const packNotes = { ...(s.packNotes ?? {}) };
+    if (done) packNotes[itemId] = { by: name, at: stamp() };
+    else delete packNotes[itemId];
+    return { ...s, packNotes };
+  },
   delivered: (orderId: string, name: string, delivered: boolean) => (s: DashboardState): DashboardState => {
     const delivery = { ...s.delivery };
     if (delivered) delivery[orderId] = { deliveredBy: name, deliveredAt: stamp() };

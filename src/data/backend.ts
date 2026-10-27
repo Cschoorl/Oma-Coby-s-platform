@@ -3,6 +3,7 @@ import type {
   BakedCount,
   ChangeEntry,
   CostEntry,
+  PackNoteDone,
   PopupSales,
   CostStatus,
   DeliveryState,
@@ -158,6 +159,8 @@ export interface Backend {
   createOrder(session: Session, input: NewOrderInput): Promise<{ id: string }>;
   /** Sold so far at a pop-up (totals). */
   setPopupSales(session: Session, orderId: string, sales: { withRaisins: number; withoutRaisins: number; amount: number | null }): Promise<SavedVersion | void>;
+  /** Inpakken › Opmerkingen: tick an item off as processed (or open it again). */
+  setPackNoteDone(session: Session, itemId: string, orderId: string, done: boolean): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
@@ -247,6 +250,7 @@ function createAppsScriptBackend(url: string): Backend {
         business: rest.business ?? [],
         changes: rest.changes ?? [],
         popupSales: rest.popupSales ?? {},
+        packNotes: rest.packNotes ?? {},
         meta: Object.fromEntries(Object.entries(rest.meta ?? {}).map(([k, m]) => [k, { ...emptyMeta, ...m }])),
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
@@ -296,6 +300,9 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async setPopupSales(session, orderId, sales) {
       return call<SavedVersion>("setPopupSales", withSession(session, { orderId, ...sales, amount: sales.amount ?? "" }));
+    },
+    async setPackNoteDone(session, itemId, orderId, done) {
+      return call<SavedVersion>("setPackNoteDone", withSession(session, { itemId, orderId, done }));
     },
     async geocode(session, addresses) {
       return call<GeocodeResult>("geocode", withSession(session, { addresses }));
@@ -390,6 +397,7 @@ interface DemoStore {
   orderEdits: Record<string, Partial<Record<OrderField, string>>>;
   changes: ChangeEntry[];
   popupSales: Record<string, PopupSales>;
+  packNotes: Record<string, PackNoteDone>;
   /** Orders and pop-up stock added on the platform (demo). */
   createdOrders: Order[];
 }
@@ -473,7 +481,7 @@ const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["plan
 ];
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, createdOrders: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, createdOrders: [] };
 }
 
 function readStore(): DemoStore {
@@ -647,8 +655,10 @@ function createDemoBackend(notice?: string): Backend {
         agenda: [],
         business: admin ? store.business : [],
         // Like the script: everyone sees what changed, contact details only beheer.
-        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "locationName", "confirmation"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
-        popupSales: store.popupSales
+        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "contactPerson", "phone", "email", "locationName", "confirmation"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
+        popupSales: store.popupSales,
+        // Older saved demo data has no packNotes yet.
+        packNotes: store.packNotes ?? {}
       };
     },
     async claim(session, orderId) {
@@ -841,6 +851,16 @@ function createDemoBackend(notice?: string): Backend {
         store.popupSales[orderId] = { withRaisins: sales.withRaisins, withoutRaisins: sales.withoutRaisins, amount: sales.amount, updatedBy: session.name, updatedAt: at };
         store.changes = [...log.reverse(), ...store.changes];
       });
+    },
+    async setPackNoteDone(session, itemId, orderId, done) {
+      await delay(150);
+      if (!/^(wijziging|opmerking)\|/.test(itemId)) throw new Error("Onbekend item.");
+      mutate((store) => {
+        store.packNotes ??= {};
+        if (done) store.packNotes[itemId] = { by: session.name, at: nowStamp() };
+        else delete store.packNotes[itemId];
+      });
+      void orderId;
     },
     async updateOrder(session, orderId, changes) {
       await delay(300);

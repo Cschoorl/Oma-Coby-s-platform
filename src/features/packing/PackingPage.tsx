@@ -23,14 +23,13 @@ import {
   oudjesLine,
   pickInitialDate,
   primaryButton,
-  quickButton,
   rollOliebol,
-  secondaryButton,
   textAction,
   toast
 } from "../../components/ui";
 import { appLink } from "../../lib/router";
 import { NameTag, firstName } from "../../components/Avatar";
+import { formatChangeTime } from "../../lib/orderChanges";
 import { effectiveCourier, effectiveNote } from "../../utils/orderUtils";
 import { minBoxes } from "../../utils/boxes";
 import { byRoute, labelsFor, loadAutoPrint, printLabels } from "./labels";
@@ -136,11 +135,8 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
     }
   }
 
-  function setBakedValue(field: "withRaisins" | "withoutRaisins", value: number) {
-    const next = { ...baked, [field]: Math.max(0, Math.round(value)) };
-    if (next[field] === baked[field]) return;
-    void act(`baked-${field}`, () => backend.setBaked(session, date, next));
-  }
+  // Baked counts are approved by beheer on the page Bakkerij; packers only see them.
+  const approval = (state.bakeApprovals ?? []).find((a) => a.date === date);
 
   const hasTypes = totals.byType.onbekend.met + totals.byType.onbekend.zonder < totals.met + totals.zonder || totals.met + totals.zonder === 0;
 
@@ -206,24 +202,24 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
         {allPacked ? <Sticker tone="kerst">Alles ingepakt!</Sticker> : null}
       </div>
 
-      {/* Baking is tracked here; "nog bakken" above only goes down once this is filled in. */}
-      <section className="grid gap-2.5 rounded-kaart bg-gouwe-50 p-3.5 sm:p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="font-serif text-base font-bold text-krent">Gebakken op deze leverdag</p>
-          <p className="text-xs text-oliebol">Bakkers: vul in wat klaar ligt, dan zakt "nog bakken" mee.</p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(["withRaisins", "withoutRaisins"] as const).map((field) => (
-            <BakedInput
-              key={`${date}-${field}`}
-              label={field === "withRaisins" ? "Met krenten" : "Zonder krenten"}
-              value={baked[field]}
-              ordered={field === "withRaisins" ? totals.met : totals.zonder}
-              disabled={busy !== null}
-              onChange={(v) => setBakedValue(field, v)}
-            />
-          ))}
-        </div>
+      {/* Approved on Bakkerij (beheer); read-only here. "Nog bakken" above counts down from it. */}
+      <section className="grid gap-1 rounded-kaart bg-gouwe-50 p-3.5 sm:p-4" aria-label="Gebakken op deze leverdag">
+        <p className="font-serif text-base font-bold text-krent">Gebakken op deze leverdag</p>
+        {approval ? (
+          <p className="text-sm text-krent">
+            <b>
+              Met {formatNumber(approval.withRaisins)} · zonder {formatNumber(approval.withoutRaisins)} · totaal {formatNumber(approval.total)}
+            </b>
+            <span className="text-muted">
+              {" "}
+              {approval.kind === "overgenomen"
+                ? "(ingevuld op het oude inpakscherm, nog niet op naam goedgekeurd)"
+                : `${approval.kind === "correctie" ? "gecorrigeerd" : "goedgekeurd"} door ${approval.by} om ${formatChangeTime(approval.at)}`}
+            </span>
+          </p>
+        ) : (
+          <p className="text-sm text-muted">Nog niet goedgekeurd. Beheer keurt de gebakken aantallen goed op de pagina Bakkerij; daarna telt "nog bakken" af.</p>
+        )}
       </section>
 
       <details className="group">
@@ -341,45 +337,6 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
 }
 
 /** Number field plus quick buttons; saves when you leave the field or press a button. */
-function BakedInput({ label, value, ordered, disabled, onChange }: { label: string; value: number; ordered: number; disabled: boolean; onChange: (v: number) => void }) {
-  const [text, setText] = useState(String(value));
-  useEffect(() => setText(String(value)), [value]);
-  const commit = () => {
-    const n = Number(text.replace(/\D/g, ""));
-    if (Number.isFinite(n)) onChange(n);
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="flex items-center gap-2 text-sm text-krent">
-        <span className="w-28">{label}</span>
-        <input
-          inputMode="numeric"
-          className="w-20 rounded-md border border-lijn-2 bg-papier px-2 py-1 text-right font-serif text-lg font-bold tabular-nums text-krent focus:border-krent focus:outline-none focus:ring-2 focus:ring-krent/20"
-          value={text}
-          disabled={disabled}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-          aria-label={`Gebakken ${label.toLowerCase()}`}
-        />
-      </label>
-      <span className="text-xs text-muted">van {formatNumber(ordered)}</span>
-      <div className="flex gap-1">
-        {[10, 50].map((delta) => (
-          <button key={delta} type="button" disabled={disabled} onClick={() => onChange(value + delta)} className={quickButton}>
-            +{delta}
-          </button>
-        ))}
-        <button type="button" disabled={disabled || value >= ordered} onClick={() => onChange(ordered)} className={`${secondaryButton} min-h-[32px] px-2.5 py-1 text-xs`}>
-          Alles
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** "60 nog bakken · 120 ingepakt"; counts down visibly when the bakers fill in more. */
 function BakeLine({ toBake, packed }: { toBake: number; packed: number }) {
   const [tick, setTick] = useState(0);

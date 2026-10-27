@@ -43,7 +43,7 @@ const NAV: NavItem[] = [
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Wie kan wanneer: per vrijwilliger en per dag, met contactgegevens.", roles: ["beheer"] },
-  { path: "/bakkerij", label: "Bakkerij", description: "De bestellijst voor morgen: hoeveel oliebollen de bakker moet maken, en naar de bakker sturen.", roles: ["beheer"] },
+  { path: "/bakkerij", label: "Bakkerij", description: "De bestellijst voor morgen naar de bakker sturen, en goedkeuren wat er echt gebakken is.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
   {
     path: "/kosten",

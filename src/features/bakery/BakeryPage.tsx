@@ -4,6 +4,7 @@ import type { BakeShare, DashboardState } from "../../types/dashboard";
 import type { Patch } from "../../lib/useDashboard";
 import { Badge, Bollenteller, Card, Icon, Notice, SectionTitle, Segmented, formatDayLabel, formatNumber, ghostButton, primaryButton, secondaryButton, toast, todayIso } from "../../components/ui";
 import { OrderFilters } from "../orders/OrderFilters";
+import { BakeApprovalCard } from "./BakeApprovalCard";
 import { formatChangeTime } from "../../lib/orderChanges";
 import { patches } from "../../lib/patches";
 import { addDays, bakeCounts, changedDays, channelLabel, diffSince, mailLink, shareText, sharesFor, signed, whatsappLink, type ShareChannel } from "../../lib/bakeShare";
@@ -186,6 +187,8 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
           ) : null}
         </div>
       </Card>
+
+      <BakeApprovalCard state={state} session={session} run={run} date={date} needed={counts} />
 
       <Card>
         <SectionTitle title="Bericht" subtitle="Zo komt het bij de bakkerij aan." />

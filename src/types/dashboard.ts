@@ -45,6 +45,26 @@ export interface BakedCount {
   withoutRaisins: number;
 }
 
+/**
+ * One approval of baked counts (Beheer › Bakkerij). A correction is a new approval; the latest one
+ * per delivery day counts. "overgenomen": filled in on the old Inpakken screen, without a name.
+ */
+export interface BakeApproval {
+  id: string;
+  date: string;
+  withRaisins: number;
+  withoutRaisins: number;
+  total: number;
+  /** What was needed at that moment (orders of the day); null for counts taken over from Inpakken. */
+  neededWithRaisins: number | null;
+  neededWithoutRaisins: number | null;
+  kind: "goedkeuring" | "correctie" | "overgenomen";
+  /** Why it was corrected. */
+  note: string;
+  by: string;
+  at: string;
+}
+
 /** The four roles from the volunteer form, in form order. */
 export type VolunteerRole = "inpakken" | "fietskoerier" | "autokoerier" | "oliebollenbar";
 
@@ -245,6 +265,8 @@ export interface DashboardState {
   popupSales: Record<string, PopupSales>;
   /** Inpakken › Opmerkingen: processed items (see src/lib/packNotes.ts), by item id. */
   packNotes: Record<string, PackNoteDone>;
+  /** Approvals of baked counts, newest first; state.baked holds the latest per day. */
+  bakeApprovals: BakeApproval[];
   /** Beheer › Bakkerij: every time the bake counts were shared, newest first. */
   bakeShares: BakeShare[];
   /** Where the counts go (Instellingen: bakkerij_whatsapp, bakkerij_email); empty = choose when sharing. */

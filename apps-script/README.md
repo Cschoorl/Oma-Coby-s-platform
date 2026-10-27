@@ -174,6 +174,15 @@ Optioneel in **Instellingen**: `bakkerij_whatsapp` (telefoonnummer, bijv. `06 12
 
 Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd.
 
+## Gebakken aantallen goedkeuren (Bakkerij)
+
+Op **Bakkerij** keurt beheer per leverdag goed hoeveel er echt gebakken is, per product (met en zonder), naast wat de bestellingen nodig hebben (`approveBaked`, alleen beheer). Elke goedkeuring is een nieuwe regel in **`Bakkerij goedkeuringen`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `benodigd_met`, `benodigd_zonder`, `soort` (`goedkeuring`, `correctie` of `overgenomen`), `toelichting`, `door`, `goedgekeurd_op`. De laatste regel per dag telt.
+
+- Na goedkeuring ligt een dag vast. Een correctie kan, maar vraagt een reden en komt als nieuwe regel met naam en tijdstip; eerdere regels blijven staan.
+- Keuren twee mensen tegelijk goed, dan wordt de tweede geweigerd ("Ververs en kijk of een correctie nodig is").
+- Inpakken toont de goedgekeurde aantallen alleen nog (met "goedgekeurd door … om …"); "nog bakken" telt daarvan af. Invullen op het inpakscherm kan niet meer (`setBaked` is weg).
+- **Oude aantallen** uit het tabblad `Gebakken` (van het inpakscherm, zonder naam) staan als *Overgenomen van Inpakken* op Bakkerij. Bij de eerste goedkeuring zet het script ze één keer als regels in `Bakkerij goedkeuringen`; daarna keur je ze op naam goed (zonder reden). Het tabblad `Gebakken` blijft bestaan en volgt de laatste goedkeuring.
+
 ## Inpakken › Opmerkingen
 
 Op de pagina Inpakken staat het tabblad **Opmerkingen**: per bestelling de wijzigingen uit het `Wijzigingslog` die voor het inpakken tellen (aantallen, datum, soort, naam, bezorgen/afhalen, adres, opnieuw inpakken, nieuwe bestelling) en de opmerking zoals inpakkers die zien. Inpakkers en beheer vinken een item af als verwerkt (`setPackNoteDone`). Dat staat in het tabblad **`Inpak opmerkingen`** (`item_id`, `order_id`, `verwerkt_door`, `verwerkt_op`).

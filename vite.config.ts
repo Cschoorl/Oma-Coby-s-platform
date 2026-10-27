@@ -11,4 +11,6 @@ function appBase(): string {
 export default defineConfig({
   base: appBase(),
   plugins: [react()],
+  // Shown small at the bottom of the page, so you can see whether the browser has the newest version.
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) }
 });

@@ -66,6 +66,17 @@ interface Pending {
   patch: Patch;
   /** When the Sheet confirmed it (performance.now()); undefined while saving. */
   savedAt?: number;
+  /** The data version that includes this change, as the script answered. */
+  version?: number;
+}
+
+/**
+ * Is this change in the state that just came in? Surely when its version is at least the one the
+ * script gave for the change. Without a version (demo): when the state was fetched after saving.
+ */
+function isIn(p: Pending, next: DashboardState, fetchedFrom: number): boolean {
+  if (p.version !== undefined) return next.version >= p.version;
+  return p.savedAt !== undefined && p.savedAt < fetchedFrom;
 }
 
 /**
@@ -86,7 +97,7 @@ export function useDashboard(session: Session | null): Dashboard {
   /** A state fetched after a change was saved contains that change: its patch can go. */
   const accept = useCallback(
     (next: DashboardState, fetchedFrom: number) => {
-      setPending((list) => list.filter((p) => p.savedAt === undefined || p.savedAt >= fetchedFrom));
+      setPending((list) => list.filter((p) => !isIn(p, next, fetchedFrom)));
       versionRef.current = next.version;
       setState(next);
       setError(null);
@@ -175,9 +186,10 @@ export function useDashboard(session: Session | null): Dashboard {
       const saved = queueRef.current.then(change);
       queueRef.current = saved.catch(() => undefined);
       try {
-        await saved;
+        const result = await saved;
         const savedAt = performance.now();
-        setPending((list) => list.map((p) => (p.id === id ? { ...p, savedAt } : p)));
+        const version = result && typeof result === "object" && typeof (result as { version?: unknown }).version === "number" ? (result as { version: number }).version : undefined;
+        setPending((list) => list.map((p) => (p.id === id ? { ...p, savedAt, version } : p)));
         // Reload in the background once the last change in line is saved.
         const tail = queueRef.current;
         void tail.then(() => {

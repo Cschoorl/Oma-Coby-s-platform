@@ -1127,6 +1127,7 @@ function receiptFolder_() {
 // Every call to a Google service costs time (often 50–100 ms). Within one request we look up the
 // spreadsheet, the tabs, the script properties and the time zone only once.
 let SS_ = null;
+let SP_ = null;
 let PROPS_ = null;
 let TZ_ = null;
 const TAB_SHEETS_ = {};
@@ -1135,6 +1136,7 @@ const TAB_CHECKED_ = {};
 /** Start of a request: forget lookups from an earlier one (the Sheet may have changed in between). */
 function resetMemo_() {
   SS_ = null;
+  SP_ = null;
   PROPS_ = null;
   Object.keys(TAB_SHEETS_).forEach(function (k) { delete TAB_SHEETS_[k]; });
   Object.keys(TAB_CHECKED_).forEach(function (k) { delete TAB_CHECKED_[k]; });
@@ -1146,13 +1148,18 @@ function ss_() {
 }
 
 /** All script properties in one call; setProp_ keeps this copy up to date. */
+function scriptProps_() {
+  if (!SP_) SP_ = PropertiesService.getScriptProperties();
+  return SP_;
+}
+
 function prop_(key) {
-  if (!PROPS_) PROPS_ = PropertiesService.getScriptProperties().getProperties();
+  if (!PROPS_) PROPS_ = scriptProps_().getProperties();
   return PROPS_[key] === undefined ? null : PROPS_[key];
 }
 
 function setProp_(key, value) {
-  PropertiesService.getScriptProperties().setProperty(key, value);
+  scriptProps_().setProperty(key, value);
   if (PROPS_) PROPS_[key] = value;
 }
 
@@ -1183,14 +1190,20 @@ function sheet_(tab) {
     if (tab === 'businessDays') defaultBusinessDays_().forEach(function (row) { sheet.appendRow(row); });
   } else {
     textKeys_(tab, sheet);
-    // Add columns introduced by a newer script version to an existing tab.
-    const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0].map(String);
-    def[1].forEach(function (h) {
-      if (headers.indexOf(h) === -1) {
-        headers.push(h);
-        sheet.getRange(1, headers.length).setValue(h);
-      }
-    });
+    // Add columns introduced by a newer script version to an existing tab. Checked once per set of
+    // columns (remembered in the script properties), not on every click.
+    const flag = 'HEADERS_' + tab;
+    const want = def[1].join(',');
+    if (prop_(flag) !== want) {
+      const headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0].map(String);
+      def[1].forEach(function (h) {
+        if (headers.indexOf(h) === -1) {
+          headers.push(h);
+          sheet.getRange(1, headers.length).setValue(h);
+        }
+      });
+      setProp_(flag, want);
+    }
   }
   TAB_SHEETS_[tab] = sheet;
   TAB_CHECKED_[tab] = sheet;
@@ -1235,11 +1248,24 @@ function findOrCreate_(tab, key) {
   headers.forEach(function (h, i) { current[h] = values[rowIndex][i]; });
   return {
     values: current,
+    // One write for all changed cells (each call to the Sheet costs time): the span from the first
+    // to the last changed column, with the cells in between as they are.
     set: function (update) {
+      const cols = Object.keys(update).map(function (field) { return headers.indexOf(field); }).filter(function (c) { return c !== -1; });
+      if (cols.length === 0) return;
+      const from = Math.min.apply(null, cols);
+      const to = Math.max.apply(null, cols);
+      const row = values[rowIndex].slice(from, to + 1);
+      while (row.length < to - from + 1) row.push('');
       Object.keys(update).forEach(function (field) {
         const col = headers.indexOf(field);
-        if (col !== -1) sheet.getRange(rowIndex + 1, col + 1).setValue(update[field]);
+        if (col !== -1) {
+          row[col - from] = update[field];
+          values[rowIndex][col] = update[field];
+          current[field] = update[field];
+        }
       });
+      sheet.getRange(rowIndex + 1, from + 1, 1, row.length).setValues([row]);
     }
   };
 }
@@ -1261,8 +1287,7 @@ function getVersion_() {
 
 function bump_() {
   // Read fresh: another request may have bumped in the meantime.
-  PROPS_ = null;
-  const next = getVersion_() + 1;
+  const next = (Number(scriptProps_().getProperty('DATA_VERSION')) || 1) + 1;
   setProp_('DATA_VERSION', String(next));
   return { version: next };
 }

@@ -3,6 +3,7 @@ import type {
   BakedCount,
   ChangeEntry,
   CostEntry,
+  BakeShare,
   PackNoteDone,
   PopupSales,
   CostStatus,
@@ -161,6 +162,8 @@ export interface Backend {
   setPopupSales(session: Session, orderId: string, sales: { withRaisins: number; withoutRaisins: number; amount: number | null }): Promise<SavedVersion | void>;
   /** Inpakken › Opmerkingen: tick an item off as processed (or open it again). */
   setPackNoteDone(session: Session, itemId: string, orderId: string, done: boolean): Promise<SavedVersion | void>;
+  /** Inpakken › Bakkerij: save that the counts of a day were shared, and how. */
+  logBakeShare(session: Session, share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
@@ -251,6 +254,8 @@ function createAppsScriptBackend(url: string): Backend {
         changes: rest.changes ?? [],
         popupSales: rest.popupSales ?? {},
         packNotes: rest.packNotes ?? {},
+        bakeShares: rest.bakeShares ?? [],
+        bakery: rest.bakery ?? { phone: "", email: "" },
         meta: Object.fromEntries(Object.entries(rest.meta ?? {}).map(([k, m]) => [k, { ...emptyMeta, ...m }])),
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
@@ -303,6 +308,9 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async setPackNoteDone(session, itemId, orderId, done) {
       return call<SavedVersion>("setPackNoteDone", withSession(session, { itemId, orderId, done }));
+    },
+    async logBakeShare(session, share) {
+      return call<SavedVersion>("logBakeShare", withSession(session, share));
     },
     async geocode(session, addresses) {
       return call<GeocodeResult>("geocode", withSession(session, { addresses }));
@@ -398,6 +406,7 @@ interface DemoStore {
   changes: ChangeEntry[];
   popupSales: Record<string, PopupSales>;
   packNotes: Record<string, PackNoteDone>;
+  bakeShares: BakeShare[];
   /** Orders and pop-up stock added on the platform (demo). */
   createdOrders: Order[];
 }
@@ -481,7 +490,7 @@ const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["plan
 ];
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, createdOrders: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], createdOrders: [] };
 }
 
 function readStore(): DemoStore {
@@ -658,7 +667,9 @@ function createDemoBackend(notice?: string): Backend {
         changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "contactPerson", "phone", "email", "locationName", "confirmation"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
         popupSales: store.popupSales,
         // Older saved demo data has no packNotes yet.
-        packNotes: store.packNotes ?? {}
+        packNotes: store.packNotes ?? {},
+        bakeShares: store.bakeShares ?? [],
+        bakery: { phone: "", email: "" }
       };
     },
     async claim(session, orderId) {
@@ -850,6 +861,15 @@ function createDemoBackend(notice?: string): Backend {
         note("soldAmount", before?.amount, sales.amount);
         store.popupSales[orderId] = { withRaisins: sales.withRaisins, withoutRaisins: sales.withoutRaisins, amount: sales.amount, updatedBy: session.name, updatedAt: at };
         store.changes = [...log.reverse(), ...store.changes];
+      });
+    },
+    async logBakeShare(session, share) {
+      await delay(150);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(share.date)) throw new Error("Kies een leverdag.");
+      if (!["whatsapp", "email", "deelmenu"].includes(share.channel)) throw new Error("Onbekend kanaal.");
+      mutate((store) => {
+        const entry: BakeShare = { id: `B${Date.now().toString(36)}`, ...share, total: share.withRaisins + share.withoutRaisins, by: session.name, at: nowStamp() };
+        store.bakeShares = [entry, ...(store.bakeShares ?? [])];
       });
     },
     async setPackNoteDone(session, itemId, orderId, done) {

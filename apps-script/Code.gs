@@ -196,7 +196,9 @@ const TABS = {
   // What was sold of the extra stock taken to a pop-up (one row per pop-up, totals so far).
   popupSales: ['Pop-up verkoop', ['order_id', 'met_verkocht', 'zonder_verkocht', 'bedrag', 'bijgewerkt_door', 'bijgewerkt_op']],
   // Inpakken › Opmerkingen: which change or remark is processed, by whom and when.
-  packNotes: ['Inpak opmerkingen', ['item_id', 'order_id', 'verwerkt_door', 'verwerkt_op']]
+  packNotes: ['Inpak opmerkingen', ['item_id', 'order_id', 'verwerkt_door', 'verwerkt_op']],
+  // Inpakken › Bakkerij: every time the bake counts were shared, with what was passed on.
+  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op']]
 };
 
 const PERMISSIONS = {
@@ -214,6 +216,7 @@ const PERMISSIONS = {
   createOrder: ['beheer'],
   setPopupSales: ['beheer'],
   setPackNoteDone: ['beheer', 'inpakker'],
+  logBakeShare: ['beheer', 'inpakker'],
   saveConfirmation: ['beheer'],
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
@@ -803,7 +806,9 @@ function buildFullState_() {
     business: readBusiness_(),
     changes: [],
     popupSales: {},
-    packNotes: {}
+    packNotes: {},
+    bakeShares: [],
+    bakery: { phone: '', email: '' }
   };
 
   readTab_('meta').forEach(function (r) {
@@ -859,6 +864,15 @@ function buildFullState_() {
   state.pricePerPiece = isFinite(price) && price > 0 ? price : null;
   const kmRate = num_(settings.km_vergoeding);
   state.kmRate = kmRate > 0 ? kmRate : null;
+  // Optional: who the bake counts go to (Instellingen: bakkerij_whatsapp, bakkerij_email).
+  state.bakery = { phone: String(settings.bakkerij_whatsapp || '').trim(), email: String(settings.bakkerij_email || '').trim() };
+  // Newest first.
+  state.bakeShares = readTab_('bakeShares').filter(function (r) { return r.id && r.leverdatum; }).map(function (r) {
+    return {
+      id: String(r.id), date: isoDate_(r.leverdatum) || String(r.leverdatum), withRaisins: num_(r.met), withoutRaisins: num_(r.zonder),
+      total: num_(r.totaal), channel: String(r.kanaal || ''), by: String(r.door || ''), at: String(r.verzonden_op || '')
+    };
+  }).reverse();
 
   state.costs = readTab_('costs').map(function (r) {
     return {
@@ -1489,6 +1503,7 @@ function anonymize_() {
   clearRows_(sheet_('changelog'));
   blank('popupSales', ['bijgewerkt_door']);
   blank('packNotes', ['verwerkt_door']);
+  blank('bakeShares', ['door']);
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
@@ -2231,6 +2246,32 @@ Object.assign(HANDLERS, {
       row.set(body.done
         ? { order_id: String(body.orderId || ''), verwerkt_door: name, verwerkt_op: now_() }
         : { order_id: String(body.orderId || ''), verwerkt_door: '', verwerkt_op: '' });
+      return bump_();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Inpakken › Bakkerij: de aantallen per leverdag delen (WhatsApp, e-mail of het deelmenu van de
+// telefoon). Elke keer delen komt als regel in "Bakkerij doorgegeven"; zo ziet het platform of de
+// aantallen sindsdien veranderd zijn.
+
+const BAKE_SHARE_CHANNELS = ['whatsapp', 'email', 'deelmenu'];
+
+Object.assign(HANDLERS, {
+  logBakeShare: function (body) {
+    const name = requireName_(body.name);
+    const date = String(body.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies een leverdag.');
+    const channel = String(body.channel || '').trim();
+    if (BAKE_SHARE_CHANNELS.indexOf(channel) === -1) throw new Error('Onbekend kanaal.');
+    const met = checkEditValue_('withRaisins', body.withRaisins);
+    const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
+    return withLock_(function () {
+      const sheet = sheet_('bakeShares');
+      const id = 'B' + Utilities.getUuid().slice(0, 8);
+      const values = { id: id, leverdatum: date, met: met, zonder: zonder, totaal: met + zonder, kanaal: channel, door: name, verzonden_op: now_() };
+      sheet.appendRow(TABS.bakeShares[1].map(function (h) { return values[h]; }));
       return bump_();
     });
   }

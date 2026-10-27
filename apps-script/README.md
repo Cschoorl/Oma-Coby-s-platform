@@ -166,6 +166,14 @@ Inpakkers en bezorgers zien welke velden zijn gewijzigd, maar niet de oude en ni
 
 Let op: "verzonden" betekent dat Gmail de mail heeft aangenomen. Een mail die later terugkomt (bounce) ziet het script niet; die komt binnen in de mailbox van het account dat het script draait.
 
+## Inpakken › Bakkerij
+
+Op **Inpakken → Bakkerij** deel je de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon. Elke keer delen legt het script vast (`logBakeShare`) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email` of `deelmenu`), `door`, `verzonden_op`. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
+
+Optioneel in **Instellingen**: `bakkerij_whatsapp` (telefoonnummer, bijv. `06 12345678`) en `bakkerij_email`. Dan gaat het bericht meteen naar de bakkerij; anders kies je bij het delen zelf de ontvanger.
+
+Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd.
+
 ## Inpakken › Opmerkingen
 
 Op de pagina Inpakken staat het tabblad **Opmerkingen**: per bestelling de wijzigingen uit het `Wijzigingslog` die voor het inpakken tellen (aantallen, datum, soort, naam, bezorgen/afhalen, adres, opnieuw inpakken, nieuwe bestelling) en de opmerking zoals inpakkers die zien. Inpakkers en beheer vinken een item af als verwerkt (`setPackNoteDone`). Dat staat in het tabblad **`Inpak opmerkingen`** (`item_id`, `order_id`, `verwerkt_door`, `verwerkt_op`).

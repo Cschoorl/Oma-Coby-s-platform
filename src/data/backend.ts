@@ -1,5 +1,6 @@
 import type {
   AgendaSlot,
+  BakeApproval,
   BakedCount,
   ChangeEntry,
   CostEntry,
@@ -33,6 +34,45 @@ import { categoryOf } from "../lib/categories";
 /** Same check as the script: something@domain.tld. */
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+
+/** Beheer › Bakkerij: what is approved as baked, and what was needed then. */
+export interface BakeApprovalInput {
+  date: string;
+  withRaisins: number;
+  withoutRaisins: number;
+  neededWithRaisins: number | null;
+  neededWithoutRaisins: number | null;
+  /** Why, for a correction of an earlier approval. */
+  note: string;
+  /** Id of the latest approval the person saw ("" for none): a second approval at the same time is refused. */
+  after: string;
+}
+
+const LEGACY_BAKED_BY = "Inpakken (vóór goedkeuring, zonder naam)";
+
+function legacyApproval(date: string, counts: BakedCount): BakeApproval {
+  return { id: `oud-${date}`, date, withRaisins: counts.withRaisins, withoutRaisins: counts.withoutRaisins, total: counts.withRaisins + counts.withoutRaisins, neededWithRaisins: null, neededWithoutRaisins: null, kind: "overgenomen", note: "Ingevuld op het inpakscherm", by: LEGACY_BAKED_BY, at: "" };
+}
+
+/** Demo, like the script: counts from the old Inpakken screen become approvals "van Inpakken" once. */
+function migrateDemoBaked(store: DemoStore) {
+  store.bakeApprovals ??= [];
+  if (store.bakedMigrated) return;
+  const have = new Set(store.bakeApprovals.map((a) => a.date));
+  for (const [date, counts] of Object.entries(store.baked)) if (!have.has(date)) store.bakeApprovals.push(legacyApproval(date, counts));
+  store.bakedMigrated = true;
+}
+
+/** Demo state: approvals newest first (old counts included) and the latest per day as "baked". */
+function bakedView(store: DemoStore): { baked: Record<string, BakedCount>; bakeApprovals: BakeApproval[] } {
+  const approvals = [...(store.bakeApprovals ?? [])];
+  const have = new Set(approvals.map((a) => a.date));
+  if (!store.bakedMigrated) for (const [date, counts] of Object.entries(store.baked)) if (!have.has(date)) approvals.push(legacyApproval(date, counts));
+  // Newest first in the order they were added; old counts not yet moved come last.
+  const baked: Record<string, BakedCount> = {};
+  for (const a of approvals) baked[a.date] ??= { withRaisins: a.withRaisins, withoutRaisins: a.withoutRaisins };
+  return { baked, bakeApprovals: approvals };
+}
 export interface Session {
   code: string;
   role: Role;
@@ -149,7 +189,8 @@ export interface Backend {
   complete(session: Session, orderId: string): Promise<SavedVersion | void>;
   reopen(session: Session, orderId: string): Promise<SavedVersion | void>;
   getSignupInfo(): Promise<SignupInfo>;
-  setBaked(session: Session, date: string, counts: BakedCount): Promise<void>;
+  /** Beheer › Bakkerij: approve (or correct) what was baked for a day. */
+  approveBaked(session: Session, input: BakeApprovalInput): Promise<SavedVersion | void>;
   updateNote(session: Session, orderId: string, note: string, reviewed: boolean): Promise<void>;
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
   sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
@@ -255,6 +296,7 @@ function createAppsScriptBackend(url: string): Backend {
         popupSales: rest.popupSales ?? {},
         packNotes: rest.packNotes ?? {},
         bakeShares: rest.bakeShares ?? [],
+        bakeApprovals: rest.bakeApprovals ?? [],
         bakery: rest.bakery ?? { phone: "", email: "" },
         meta: Object.fromEntries(Object.entries(rest.meta ?? {}).map(([k, m]) => [k, { ...emptyMeta, ...m }])),
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
@@ -279,8 +321,8 @@ function createAppsScriptBackend(url: string): Backend {
       const data = await call<{ counts: SignupCounts; agenda?: AgendaSlot[] }>("signupStats", {});
       return { counts: data.counts, agenda: data.agenda ?? [] };
     },
-    async setBaked(session, date, counts) {
-      await call("setBaked", withSession(session, { date, ...counts }));
+    async approveBaked(session, input) {
+      return call<SavedVersion>("approveBaked", withSession(session, { ...input }));
     },
     async updateNote(session, orderId, note, reviewed) {
       await call("updateNote", withSession(session, { orderId, note, reviewed }));
@@ -407,6 +449,9 @@ interface DemoStore {
   popupSales: Record<string, PopupSales>;
   packNotes: Record<string, PackNoteDone>;
   bakeShares: BakeShare[];
+  bakeApprovals: BakeApproval[];
+  /** When the old demo baked counts were moved into the approvals. */
+  bakedMigrated?: boolean;
   /** Orders and pop-up stock added on the platform (demo). */
   createdOrders: Order[];
 }
@@ -490,7 +535,7 @@ const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["plan
 ];
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], createdOrders: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [] };
 }
 
 function readStore(): DemoStore {
@@ -648,7 +693,7 @@ function createDemoBackend(notice?: string): Backend {
         orders,
         meta: store.meta,
         packing: store.packing,
-        baked: store.baked,
+        ...bakedView(store),
         routes: store.routes,
         volunteers: admin ? store.volunteers : store.volunteers.map((v) => ({ ...v, phone: "", email: "", remark: "", address: "" })),
         costs: admin
@@ -737,12 +782,35 @@ function createDemoBackend(notice?: string): Backend {
       }
       return { counts, agenda: [] };
     },
-    async setBaked(_session, date, counts) {
+    async approveBaked(session, input) {
+      await delay(200);
+      if (session.role !== "beheer") throw new Error("Alleen beheer kan gebakken aantallen goedkeuren.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error("Kies een leverdag.");
+      if (![input.withRaisins, input.withoutRaisins].every((n) => Number.isInteger(n) && n >= 0)) throw new Error("Aantal moet een heel getal van 0 of meer zijn.");
       mutate((store) => {
-        store.baked[date] = {
-          withRaisins: Math.max(0, Math.round(counts.withRaisins)),
-          withoutRaisins: Math.max(0, Math.round(counts.withoutRaisins))
-        };
+        migrateDemoBaked(store);
+        const latest = store.bakeApprovals.find((a) => a.date === input.date);
+        if ((latest?.id ?? "") !== input.after) throw new Error(latest ? `Deze dag is net goedgekeurd door ${latest.by}. Ververs en kijk of een correctie nodig is.` : "Ververs de pagina en probeer het opnieuw.");
+        const note = input.note.trim();
+        const correction = Boolean(latest) && latest?.kind !== "overgenomen";
+        if (correction && !note) throw new Error("Deze dag is al goedgekeurd. Schrijf kort waarom je corrigeert.");
+        store.bakeApprovals = [
+          {
+            id: `G${Date.now().toString(36)}`,
+            date: input.date,
+            withRaisins: input.withRaisins,
+            withoutRaisins: input.withoutRaisins,
+            total: input.withRaisins + input.withoutRaisins,
+            neededWithRaisins: input.neededWithRaisins,
+            neededWithoutRaisins: input.neededWithoutRaisins,
+            kind: correction ? "correctie" : "goedkeuring",
+            note,
+            by: session.name,
+            at: nowStamp()
+          },
+          ...store.bakeApprovals
+        ];
+        store.baked[input.date] = { withRaisins: input.withRaisins, withoutRaisins: input.withoutRaisins };
       });
     },
     async updateNote(session, orderId, note, reviewed) {

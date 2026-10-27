@@ -198,6 +198,8 @@ const TABS = {
   // Inpakken › Opmerkingen: which change or remark is processed, by whom and when.
   packNotes: ['Inpak opmerkingen', ['item_id', 'order_id', 'verwerkt_door', 'verwerkt_op']],
   // Beheer › Bakkerij: every time the bake counts were shared, with what was passed on.
+  // Beheer › Bakkerij: every approval of baked counts (a correction is a new row; nothing is overwritten).
+  bakeApprovals: ['Bakkerij goedkeuringen', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'benodigd_met', 'benodigd_zonder', 'soort', 'toelichting', 'door', 'goedgekeurd_op']],
   bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op']]
 };
 
@@ -210,7 +212,8 @@ const PERMISSIONS = {
   complete: ['beheer', 'inpakker'],
   reopen: ['beheer', 'inpakker'],
   signupStats: ['public'],
-  setBaked: ['beheer', 'inpakker'],
+  // Gebakken aantallen goedkeuren: alleen beheer (pagina Bakkerij). Inpakken toont ze alleen.
+  approveBaked: ['beheer'],
   updateNote: ['beheer'],
   updateOrder: ['beheer'],
   createOrder: ['beheer'],
@@ -426,17 +429,6 @@ const HANDLERS = {
       });
     });
     return { counts: counts, agenda: readAgenda_() };
-  },
-  setBaked: function (body) {
-    return withLock_(function () {
-      const row = findOrCreate_('baked', body.date);
-      row.set({
-        met_krenten: Math.max(0, Number(body.withRaisins) || 0),
-        zonder_krenten: Math.max(0, Number(body.withoutRaisins) || 0),
-        bijgewerkt_op: now_()
-      });
-      return bump_();
-    });
   },
   updateNote: function (body, role) {
     return withLock_(function () {
@@ -808,6 +800,7 @@ function buildFullState_() {
     popupSales: {},
     packNotes: {},
     bakeShares: [],
+    bakeApprovals: [],
     bakery: { phone: '', email: '' }
   };
 
@@ -837,8 +830,20 @@ function buildFullState_() {
       packedAt: String(r.ingepakt_op || '')
     };
   });
+  // Approvals, newest first. Counts from the old Inpakken screen (tab Gebakken) that were not moved
+  // yet show as an approval "van Inpakken" until the first approval moves them (migrateBaked_).
+  state.bakeApprovals = readBakeApprovals_();
+  const approvedDates = {};
+  state.bakeApprovals.forEach(function (a) { approvedDates[a.date] = true; });
   readTab_('baked').forEach(function (r) {
-    state.baked[isoDate_(r.leverdatum)] = { withRaisins: num_(r.met_krenten), withoutRaisins: num_(r.zonder_krenten) };
+    const date = isoDate_(r.leverdatum);
+    if (!date || approvedDates[date]) return;
+    state.bakeApprovals.push(legacyApproval_(r));
+  });
+  // Order = the order of the rows (newest first); old counts not yet moved come last, as the oldest.
+  // What counts as baked: the latest approval per day.
+  state.bakeApprovals.forEach(function (a) {
+    if (!state.baked[a.date]) state.baked[a.date] = { withRaisins: a.withRaisins, withoutRaisins: a.withoutRaisins };
   });
   readTab_('routes').forEach(function (r) {
     state.routes[r.sleutel] = {
@@ -1504,6 +1509,7 @@ function anonymize_() {
   blank('popupSales', ['bijgewerkt_door']);
   blank('packNotes', ['verwerkt_door']);
   blank('bakeShares', ['door']);
+  blank('bakeApprovals', ['door']);
 
   // Receipt photos in Drive.
   const folders = DriveApp.getFoldersByName(CONFIG.RECEIPT_FOLDER);
@@ -2272,6 +2278,96 @@ Object.assign(HANDLERS, {
       const id = 'B' + Utilities.getUuid().slice(0, 8);
       const values = { id: id, leverdatum: date, met: met, zonder: zonder, totaal: met + zonder, kanaal: channel, door: name, verzonden_op: now_() };
       sheet.appendRow(TABS.bakeShares[1].map(function (h) { return values[h]; }));
+      return bump_();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Beheer › Bakkerij: gebakken aantallen goedkeuren. Elke goedkeuring is een nieuwe regel in
+// "Bakkerij goedkeuringen" (wie, wanneer, aantallen, benodigd); een correctie ook, zodat de
+// geschiedenis blijft. De laatste regel per leverdag telt. Het oude tabblad Gebakken (van het
+// inpakscherm) wordt bij de eerste goedkeuring overgenomen en daarna bijgehouden met de laatste stand.
+
+const LEGACY_BAKED_BY = 'Inpakken (vóór goedkeuring, zonder naam)';
+
+function readBakeApprovals_() {
+  return readTab_('bakeApprovals').filter(function (r) { return r.id && r.leverdatum; }).map(function (r) {
+    return {
+      id: String(r.id), date: isoDate_(r.leverdatum) || String(r.leverdatum),
+      withRaisins: num_(r.met), withoutRaisins: num_(r.zonder), total: num_(r.totaal),
+      neededWithRaisins: r.benodigd_met === '' ? null : num_(r.benodigd_met),
+      neededWithoutRaisins: r.benodigd_zonder === '' ? null : num_(r.benodigd_zonder),
+      kind: String(r.soort || 'goedkeuring'), note: String(r.toelichting || ''),
+      by: String(r.door || ''), at: String(r.goedgekeurd_op || '')
+    };
+  }).reverse();
+}
+
+function legacyApproval_(r) {
+  const met = num_(r.met_krenten), zonder = num_(r.zonder_krenten);
+  return {
+    id: 'oud-' + isoDate_(r.leverdatum), date: isoDate_(r.leverdatum), withRaisins: met, withoutRaisins: zonder, total: met + zonder,
+    neededWithRaisins: null, neededWithoutRaisins: null, kind: 'overgenomen', note: 'Ingevuld op het inpakscherm',
+    by: LEGACY_BAKED_BY, at: String(r.bijgewerkt_op || '')
+  };
+}
+
+/** Moves the counts of the old tab Gebakken into the approvals, once. Call inside withLock_. */
+function migrateBaked_() {
+  if (prop_('BAKED_MIGRATED')) return;
+  const have = {};
+  readTab_('bakeApprovals').forEach(function (r) { have[isoDate_(r.leverdatum)] = true; });
+  const sheet = sheet_('bakeApprovals');
+  readTab_('baked').forEach(function (r) {
+    const date = isoDate_(r.leverdatum);
+    if (!date || have[date]) return;
+    const a = legacyApproval_(r);
+    const values = { id: a.id, leverdatum: date, met: a.withRaisins, zonder: a.withoutRaisins, totaal: a.total, benodigd_met: '', benodigd_zonder: '',
+      soort: a.kind, toelichting: a.note, door: a.by, goedgekeurd_op: a.at };
+    sheet.appendRow(TABS.bakeApprovals[1].map(function (h) { return values[h]; }));
+  });
+  setProp_('BAKED_MIGRATED', '1');
+}
+
+Object.assign(HANDLERS, {
+  /**
+   * body: date, withRaisins, withoutRaisins, neededWithRaisins, neededWithoutRaisins, note,
+   * after (id of the approval the person saw, '' for none). A day that is already approved only
+   * changes as a correction, with the latest approval as "after".
+   */
+  approveBaked: function (body) {
+    const name = requireName_(body.name);
+    const date = String(body.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies een leverdag.');
+    const met = checkEditValue_('withRaisins', body.withRaisins);
+    const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
+    const neededMet = body.neededWithRaisins === undefined || body.neededWithRaisins === '' ? '' : checkEditValue_('withRaisins', body.neededWithRaisins);
+    const neededZonder = body.neededWithoutRaisins === undefined || body.neededWithoutRaisins === '' ? '' : checkEditValue_('withoutRaisins', body.neededWithoutRaisins);
+    const note = String(body.note || '').trim().slice(0, 500);
+    return withLock_(function () {
+      migrateBaked_();
+      const latest = readBakeApprovals_().filter(function (a) { return a.date === date; })[0];
+      const seen = String(body.after || '');
+      if ((latest ? latest.id : '') !== seen) {
+        throw new Error(latest
+          ? 'Deze dag is net goedgekeurd door ' + latest.by + '. Ververs en kijk of een correctie nodig is.'
+          : 'Ververs de pagina en probeer het opnieuw.');
+      }
+      // A correction of a named approval needs a reason; approving counts taken over from Inpakken does not.
+      const correction = Boolean(latest) && latest.kind !== 'overgenomen';
+      if (correction && !note) throw new Error('Deze dag is al goedgekeurd. Schrijf kort waarom je corrigeert.');
+      const at = now_();
+      const values = {
+        id: 'G' + Utilities.getUuid().slice(0, 8), leverdatum: date, met: met, zonder: zonder, totaal: met + zonder,
+        benodigd_met: neededMet, benodigd_zonder: neededZonder, soort: correction ? 'correctie' : 'goedkeuring',
+        toelichting: note, door: name, goedgekeurd_op: at
+      };
+      sheet_('bakeApprovals').appendRow(TABS.bakeApprovals[1].map(function (h) { return values[h]; }));
+      // The old tab follows the latest approval, for anything that still reads it.
+      findOrCreate_('baked', date).set({ met_krenten: met, zonder_krenten: zonder, bijgewerkt_op: at });
+      logChanges_([{ soort: 'bakkerij', order_id: '', veld: 'baked', oud: latest ? latest.withRaisins + ' / ' + latest.withoutRaisins : '',
+        nieuw: met + ' / ' + zonder, door: name, rol: 'beheer', toelichting: date + (note ? ' – ' + note : '') }]);
       return bump_();
     });
   }

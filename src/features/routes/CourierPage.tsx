@@ -54,7 +54,7 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
   const trips = runs.map((r) => {
     const route = runRoute(state, date, name ?? "", r, runs.length === 1);
     const stops = orderedStops(r.orders, route);
-    return { ...r, route, stale: isRouteStale(r.orders, route), stops, url: route?.mapsUrl || mapsRouteUrlForOrders(stops) };
+    return { ...r, route, stale: isRouteStale(r.orders, route, state.changes), stops, url: route?.mapsUrl || mapsRouteUrlForOrders(stops) };
   });
   const orders = trips.flatMap((t) => t.orders);
   const stops = trips.flatMap((t) => t.stops);

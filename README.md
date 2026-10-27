@@ -7,7 +7,7 @@ via een Apps Script.
 | Pagina | Voor | Wat |
 |---|---|---|
 | Inpakken | inpakker, beheer | totalen MET/ZONDER, gebakken invullen en nog te bakken, filter particulier/zakelijk/barter; orders claimen, afvinken en afronden (live); per order de dozen (max. 50, MET en ZONDER apart) en doos-labels voor de DYMO; pakbonnen printen |
-| Bestellingen | beheer | opmerkingen beoordelen en aanpassen; bevestiging per order controleren en versturen |
+| Bestellingen | beheer | opmerkingen beoordelen en aanpassen; bevestiging per order controleren en versturen; **bewerken** (aantallen MET/ZONDER, leverdatum, bezorgen/afhalen, bezorgmoment, adres, bedrag) en de **wijzigingsgeschiedenis** per bestelling |
 | Zakelijk | beheer | aanvragen van het zakelijke bestelformulier nakijken, bevestigen (dan staan ze als order in Bestellingen, Inpakken en Routes) of afwijzen met reden; link naar het formulier kopiëren |
 | Routes | beheer | **Automatisch indelen**: voorstel wie welke bezorging doet (dagdeel en fiets/auto uit de aanmelding, 15 min per stop, tijdvak van de klant, max. bollen per fiets/auto, fiets binnen 12 km, elke rit vanaf de loods, laatste rit eindigt zo dicht mogelijk bij huis); daarna met de hand bijstellen. Per bezorger en dagdeel een rit met snelste volgorde, km en aankomsttijd per stop; melding bij verouderde routes; route via WhatsApp. Instellingen in `PLANNING` in `src/config.ts` |
 | Bezorgen (`#/bezorger`) | bezorger | mobiele pagina met stops, verwachte tijd, aantallen en Maps-route; stop afvinken als afgeleverd |
@@ -35,3 +35,16 @@ Zonder `VITE_APPS_SCRIPT_URL` draait het dashboard in **demo-modus**: voorbeeldd
 je eigen browser. Demo-codes: `beheer`, `inpak`, `bezorg`.
 
 Koppelen aan de Google Sheet: zie [apps-script/README.md](apps-script/README.md).
+
+## Wijzigingslog (voor nieuwe functies)
+
+Elke aanpassing van een bestelling (en van een opmerking) staat in het tabblad `Wijzigingslog` en in
+`state.changes` (nieuwste eerst): `{ at, kind, orderId, field, from, to, by, note }`. Hulpfuncties in
+`src/lib/orderChanges.ts`:
+
+- `changesFor(state, orderId)` – de geschiedenis van één bestelling;
+- `changesSince(state, "2026-12-16 10:00:00", ["withRaisins", "withoutRaisins"])` – bijv. "aantallen gewijzigd na het inpakken" of een waarschuwing in de bakkerij;
+- `routeChangedAfter(state, route)` – adres of datum gewijzigd nadat de route berekend is;
+- `fieldLabel`, `formatChangeValue`, `formatChangeTime` – om een regel te tonen.
+
+Nieuwe soorten wijzigingen schrijf je in het script met `logChanges_([{ soort, order_id, veld, oud, nieuw, door, rol, toelichting }])`.

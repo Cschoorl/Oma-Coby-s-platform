@@ -63,7 +63,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
   const dayRoutes = trips.map((t) => t.route).filter(Boolean);
   const totalKm = dayRoutes.reduce((sum, r) => sum + (r?.km ?? 0), 0);
-  const staleTrips = trips.filter((t) => isRouteStale(t.orders, t.route));
+  const staleTrips = trips.filter((t) => isRouteStale(t.orders, t.route, state.changes));
   const delivered = dayDeliveries.filter((o) => state.delivery[o.id]).length;
 
   const tripKey = (courier: string, part: string) => `${courier}|${part}`;
@@ -140,7 +140,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
 
       {staleTrips.length > 0 ? (
         <Notice tone="warning">
-          Na het berekenen zijn er bezorgingen bijgekomen, vervallen of verschoven bij {Array.from(new Set(staleTrips.map((t) => t.courier))).join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
+          Na het berekenen zijn er bezorgingen bijgekomen, vervallen, verschoven of aangepast bij {Array.from(new Set(staleTrips.map((t) => t.courier))).join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
           <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void computeMany(staleTrips.map(tripRequest))}>
             Deze routes opnieuw berekenen
           </button>
@@ -178,7 +178,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
           {trips.map((trip) => {
             const { courier, part, orders, route } = trip;
             const id = tripKey(courier, part);
-            const stale = isRouteStale(orders, route);
+            const stale = isRouteStale(orders, route, state.changes);
             const mode = modeFor(courier, part, orders);
             const stops = orderedStops(orders, route);
             const mapsUrl = route?.mapsUrl || mapsRouteUrlForOrders(stops);

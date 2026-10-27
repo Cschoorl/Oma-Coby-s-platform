@@ -174,7 +174,9 @@ function planningKey_(map, text) {
 
 const TABS = {
   meta: ['Dashboard_Orders', ['order_id', 'opmerking_status', 'opmerking_aangepast', 'bevestiging_tekst', 'bevestiging_status', 'bevestiging_verzonden_op', 'bezorger', 'bijgewerkt_door', 'bijgewerkt_op',
-    'bevestiging_verzonden_naar', 'bevestiging_fout', 'bevestiging_poging_op']],
+    'bevestiging_verzonden_naar', 'bevestiging_fout', 'bevestiging_poging_op',
+    // Contact on the delivery address, when it differs from the customer's contact (afl_contact_eigen = ja).
+    'afl_contact_naam', 'afl_contact_telefoon', 'afl_contact_opmerking', 'afl_contact_eigen']],
   packing: ['Inpakken', ['order_id', 'geclaimd_door', 'geclaimd_op', 'met_klaar', 'zonder_klaar', 'totaal_klaar', 'ingepakt_door', 'ingepakt_op']],
   baked: ['Gebakken', ['leverdatum', 'met_krenten', 'zonder_krenten', 'bijgewerkt_op']],
   routes: ['Routes', ['sleutel', 'leverdatum', 'bezorger', 'vervoer', 'km', 'minuten', 'volgorde', 'maps_url', 'berekend_op', 'starttijd', 'tijden', 'dagdeel', 'eindpunt', 'maps_url_zonder_eindpunt']],
@@ -224,6 +226,7 @@ const PERMISSIONS = {
   sendConfirmation: ['beheer'],
   computeRoute: ['beheer'],
   assignCourier: ['beheer'],
+  setDeliveryContact: ['beheer'],
   assignCouriers: ['beheer'],
   geocode: ['beheer'],
   extractReceipt: ['beheer', 'inpakker', 'bezorger'],
@@ -814,6 +817,9 @@ function buildFullState_() {
       confirmationSentTo: String(r.bevestiging_verzonden_naar || ''),
       confirmationError: String(r.bevestiging_fout || ''),
       confirmationAttemptAt: String(r.bevestiging_poging_op || ''),
+      deliveryContact: truthy_(r.afl_contact_eigen)
+        ? { name: String(r.afl_contact_naam || ''), phone: String(r.afl_contact_telefoon || ''), note: String(r.afl_contact_opmerking || '') }
+        : null,
       courier: String(r.bezorger || ''),
       updatedBy: String(r.bijgewerkt_door || ''),
       updatedAt: String(r.bijgewerkt_op || '')
@@ -1495,7 +1501,7 @@ function anonymize_() {
     });
     return sheet.getLastRow() - 1;
   };
-  blank('meta', ['opmerking_aangepast', 'bevestiging_tekst', 'bezorger', 'bijgewerkt_door', 'bevestiging_verzonden_naar', 'bevestiging_fout']);
+  blank('meta', ['opmerking_aangepast', 'bevestiging_tekst', 'bezorger', 'bijgewerkt_door', 'bevestiging_verzonden_naar', 'bevestiging_fout', 'afl_contact_naam', 'afl_contact_telefoon', 'afl_contact_opmerking']);
   blank('packing', ['geclaimd_door', 'ingepakt_door']);
   blank('packlog', ['klant', 'door']);
   blank('delivery', ['afgeleverd_door']);
@@ -1931,7 +1937,7 @@ function orderType_(value) {
 }
 
 /** Contact details in the log are only shown to beheer. */
-const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email', 'locationName', 'confirmation'];
+const PRIVATE_LOG_FIELDS = ['address', 'postalCode', 'city', 'contactPerson', 'phone', 'email', 'locationName', 'confirmation', 'deliveryContactName', 'deliveryContactPhone'];
 
 /** Adds rows to the Wijzigingslog in one write. entries: {soort, order_id, veld, oud, nieuw, door, rol, toelichting}. */
 function logChanges_(entries) {
@@ -2368,6 +2374,59 @@ Object.assign(HANDLERS, {
       findOrCreate_('baked', date).set({ met_krenten: met, zonder_krenten: zonder, bijgewerkt_op: at });
       logChanges_([{ soort: 'bakkerij', order_id: '', veld: 'baked', oud: latest ? latest.withRaisins + ' / ' + latest.withoutRaisins : '',
         nieuw: met + ' / ' + zonder, door: name, rol: 'beheer', toelichting: date + (note ? ' – ' + note : '') }]);
+      return bump_();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Contactpersoon op het afleveradres. Standaard de contactpersoon van de klant (kolommen
+// Contactpersoon en Contactpersoon telefoonnummer, of de zakelijke aanvraag); per bezorging aan te
+// passen met naam, telefoon en opmerking. Dat staat in Dashboard_Orders, de bron blijft ongemoeid.
+
+/** The customer's own contact for an order (the default for the delivery). */
+function customerContact_(orderId) {
+  const row = findOrder_(orderId);
+  if (row) return { name: String(row.contactpersoon || '').trim(), phone: String(row.telefoon || '').trim() };
+  const b = readBusiness_().filter(function (x) { return x.id === orderId && x.status === 'bevestigd'; })[0];
+  if (b) return { name: String(b.contact || '').trim(), phone: String(b.phone || '').trim() };
+  return null;
+}
+
+Object.assign(HANDLERS, {
+  /**
+   * body: orderId, name, phone, note; reset = true goes back to the customer's contact.
+   * from: { name, phone, note } as the person saw it; refused when it changed in the meantime.
+   */
+  setDeliveryContact: function (body, role) {
+    const by = requireName_(body.name);
+    const orderId = String(body.orderId || '').trim();
+    const customer = customerContact_(orderId);
+    if (!customer) throw new Error('Bestelling niet gevonden.');
+    const clean = function (v, max) { return String(v === undefined || v === null ? '' : v).trim().slice(0, max); };
+    const next = body.reset
+      ? { name: customer.name, phone: customer.phone, note: '' }
+      : { name: clean(body.contactName, 120), phone: clean(body.phone, 40), note: clean(body.note, 300) };
+    if (next.phone && next.phone.replace(/\D/g, '').length < 8) throw new Error('Dit telefoonnummer klopt niet.');
+    return withLock_(function () {
+      const row = findOrCreate_('meta', orderId);
+      const own = truthy_(row.values.afl_contact_eigen);
+      const before = own
+        ? { name: String(row.values.afl_contact_naam || ''), phone: String(row.values.afl_contact_telefoon || ''), note: String(row.values.afl_contact_opmerking || '') }
+        : { name: customer.name, phone: customer.phone, note: '' };
+      const seen = body.from || {};
+      if (['name', 'phone', 'note'].some(function (k) { return String(seen[k] === undefined ? before[k] : seen[k]) !== before[k]; })) {
+        throw new Error('Het contact is net door iemand anders aangepast. Ververs en probeer het opnieuw.');
+      }
+      const fields = { name: 'deliveryContactName', phone: 'deliveryContactPhone', note: 'deliveryContactNote' };
+      const log = Object.keys(fields).filter(function (k) { return before[k] !== next[k]; }).map(function (k) {
+        return { soort: 'bezorging', order_id: orderId, veld: fields[k], oud: before[k], nieuw: next[k], door: by, rol: role, toelichting: body.reset ? 'terug naar contact van de klant' : '' };
+      });
+      if (!log.length && own === !body.reset) throw new Error('Er is niets gewijzigd.');
+      row.set(body.reset
+        ? { afl_contact_naam: '', afl_contact_telefoon: '', afl_contact_opmerking: '', afl_contact_eigen: '', bijgewerkt_door: by, bijgewerkt_op: now_() }
+        : { afl_contact_naam: next.name, afl_contact_telefoon: next.phone, afl_contact_opmerking: next.note, afl_contact_eigen: 'ja', bijgewerkt_door: by, bijgewerkt_op: now_() });
+      logChanges_(log);
       return bump_();
     });
   }

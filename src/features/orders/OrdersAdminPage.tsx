@@ -11,6 +11,7 @@ import { changesFor, formatChangeTime } from "../../lib/orderChanges";
 import { NewOrderCard, PopupSalesCard } from "./OrderCategoryCards";
 import { categoryLabel } from "../../lib/categories";
 import type { OrderCategory } from "../../types/order";
+import { DeliveryContactCard } from "./DeliveryContactCard";
 
 interface OrdersAdminPageProps {
   state: DashboardState;
@@ -287,7 +288,7 @@ function OrderEditor({ order, meta, state, session, run }: OrderEditorProps) {
         </div>
       </Card>
 
-      {order.category === "popup" ? <PopupSalesCard order={order} state={state} session={session} run={run} /> : null}
+      {order.category === "popup" ? <PopupSalesCard order={order} state={state} session={session} run={run} /> : <DeliveryContactCard order={order} state={state} session={session} run={run} />}
 
       <OrderHistory state={state} orderId={order.id} />
 

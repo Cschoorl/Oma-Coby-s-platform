@@ -11,6 +11,8 @@ import { BIKE_MAX_PIECES, PLANNING, ROUTE_START_TIMES } from "../../config";
 import { AutoPlanCard } from "./AutoPlanCard";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
+import { DeliveryContactLine } from "../../components/DeliveryContactLine";
+import { deliveryContact } from "../../lib/deliveryContact";
 
 interface RoutesPageProps {
   state: DashboardState;
@@ -272,6 +274,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                         <span className={state.delivery[o.id] ? "text-muted line-through" : ""}>
                           {o.locationName || o.contactPerson} · {stopAddress(o)}
                           {o.deliveryMoment ? <span className="text-muted"> · {o.deliveryMoment}</span> : null}
+                          <DeliveryContactLine className="text-xs" contact={deliveryContact(o, state.meta[o.id])} />
                         </span>
                         {state.delivery[o.id] ? <Badge tone="klaar">✓ {state.delivery[o.id].deliveredAt.slice(11, 16)}</Badge> : null}
                       </li>
@@ -362,6 +365,7 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
                   <td className="py-2.5 pr-3">
                     <p className="font-bold text-krent">{order.locationName || order.contactPerson}</p>
                     {order.deliveryMoment || part ? <p className="text-xs text-muted">{order.deliveryMoment || part}</p> : null}
+                    <DeliveryContactLine className="text-xs" contact={deliveryContact(order, state.meta[order.id])} />
                   </td>
                   <td className="py-2.5 pr-3 text-oliebol">{stopAddress(order)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{order.withRaisins + order.withoutRaisins}</td>

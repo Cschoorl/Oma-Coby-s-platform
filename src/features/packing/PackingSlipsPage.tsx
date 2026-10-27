@@ -8,6 +8,7 @@ import { navigate } from "../../lib/router";
 import { effectiveCourier, effectiveNote, stopAddress } from "../../utils/orderUtils";
 import { PARTS } from "../routes/routeUtils";
 import { boxPlan } from "./LabelPanel";
+import { deliveryContact } from "../../lib/deliveryContact";
 
 const typeLabel: Record<Order["customerType"], string> = { particulier: "Particulier", zakelijk: "Zakelijk", barter: "Barter", popup: "Pop-upvoorraad", onbekend: "" };
 
@@ -53,12 +54,13 @@ export function PackingSlipsPage({ state, date: dateParam }: { state: DashboardS
         {slips.map(({ order, courier, stop, eta }) => {
           const note = effectiveNote(order, state.meta[order.id]);
           const flyers = /^ja/i.test(order.flyers ?? "");
+          const contact = deliveryContact(order, state.meta[order.id]);
           return (
             <article key={order.id} className="break-inside-avoid rounded-md border-2 border-dashed border-[#777] bg-white p-3 text-sm text-black">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-display text-2xl uppercase leading-none tracking-wide">{order.locationName || order.contactPerson}</p>
-                  {order.locationName && order.contactPerson ? <p className="text-xs">t.a.v. {order.contactPerson}</p> : null}
+                  {contact.name && contact.name !== order.locationName ? <p className="text-xs">t.a.v. {contact.name}</p> : null}
                 </div>
                 <p className="shrink-0 text-right text-xs">
                   {formatDayLabel(order.deliveryDate)}
@@ -67,7 +69,8 @@ export function PackingSlipsPage({ state, date: dateParam }: { state: DashboardS
               </div>
               <p className="mt-1 text-xs">
                 {order.fulfilment === "afhalen" ? `AFHALEN${order.pickupLocation ? ` · ${order.pickupLocation}` : ""}` : stopAddress(order)}
-                {order.phone ? ` · ${order.phone}` : ""}
+                {contact.phone ? ` · ${contact.phone}` : ""}
+                {contact.note ? ` · ${contact.note}` : ""}
               </p>
               <div className="mt-2 grid grid-cols-3 border border-black text-center">
                 {[

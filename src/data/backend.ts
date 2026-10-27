@@ -35,6 +35,16 @@ import { categoryOf } from "../lib/categories";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 
+/** Contact on the delivery address: what to save, and what the person saw (to catch a change in between). */
+export interface DeliveryContactInput {
+  contactName: string;
+  phone: string;
+  note: string;
+  /** Back to the customer's own contact. */
+  reset?: boolean;
+  from: { name: string; phone: string; note: string };
+}
+
 /** Beheer › Bakkerij: what is approved as baked, and what was needed then. */
 export interface BakeApprovalInput {
   date: string;
@@ -195,6 +205,8 @@ export interface Backend {
   saveConfirmation(session: Session, orderId: string, text: string): Promise<void>;
   sendConfirmation(session: Session, orderId: string, subject: string, text: string): Promise<void>;
   assignCourier(session: Session, orderId: string, courier: string): Promise<void>;
+  /** Contact on the delivery address for one delivery; reset goes back to the customer's contact. */
+  setDeliveryContact(session: Session, orderId: string, input: DeliveryContactInput): Promise<SavedVersion | void>;
   /** Beheer edits an order: written in the Sheet and in the change log. */
   updateOrder(session: Session, orderId: string, changes: OrderFieldChange[]): Promise<SavedVersion | void>;
   /** Beheer adds an order or extra pop-up stock (new row in the Sheet). */
@@ -323,6 +335,9 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async approveBaked(session, input) {
       return call<SavedVersion>("approveBaked", withSession(session, { ...input }));
+    },
+    async setDeliveryContact(session, orderId, input) {
+      return call<SavedVersion>("setDeliveryContact", withSession(session, { orderId, ...input }));
     },
     async updateNote(session, orderId, note, reviewed) {
       await call("updateNote", withSession(session, { orderId, note, reviewed }));
@@ -709,7 +724,7 @@ function createDemoBackend(notice?: string): Backend {
         agenda: [],
         business: admin ? store.business : [],
         // Like the script: everyone sees what changed, contact details only beheer.
-        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "contactPerson", "phone", "email", "locationName", "confirmation"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
+        changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "contactPerson", "phone", "email", "locationName", "confirmation", "deliveryContactName", "deliveryContactPhone"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
         popupSales: store.popupSales,
         // Older saved demo data has no packNotes yet.
         packNotes: store.packNotes ?? {},
@@ -781,6 +796,29 @@ function createDemoBackend(notice?: string): Backend {
         }
       }
       return { counts, agenda: [] };
+    },
+    async setDeliveryContact(session, orderId, input) {
+      await delay(200);
+      const order = (await allOrders(readStore())).find((o) => o.id === orderId);
+      if (!order) throw new Error("Bestelling niet gevonden.");
+      const next = input.reset ? { name: order.contactPerson.trim(), phone: order.phone.trim(), note: "" } : { name: input.contactName.trim(), phone: input.phone.trim(), note: input.note.trim() };
+      if (next.phone && next.phone.replace(/\D/g, "").length < 8) throw new Error("Dit telefoonnummer klopt niet.");
+      mutate((store) => {
+        const m = metaFor(store, orderId);
+        const before = m.deliveryContact ?? { name: order.contactPerson.trim(), phone: order.phone.trim(), note: "" };
+        const seen = input.from;
+        if (seen.name !== before.name || seen.phone !== before.phone || seen.note !== before.note) throw new Error("Het contact is net door iemand anders aangepast. Ververs en probeer het opnieuw.");
+        const at = nowStamp();
+        const fields = { name: "deliveryContactName", phone: "deliveryContactPhone", note: "deliveryContactNote" } as const;
+        const log: ChangeEntry[] = (Object.keys(fields) as Array<keyof typeof fields>)
+          .filter((k) => before[k] !== next[k])
+          .map((k) => ({ at, kind: "bezorging", orderId, field: fields[k], from: before[k], to: next[k], by: session.name, note: input.reset ? "terug naar contact van de klant" : "" }));
+        if (!log.length && Boolean(m.deliveryContact) === !input.reset) throw new Error("Er is niets gewijzigd.");
+        m.deliveryContact = input.reset ? null : next;
+        m.updatedBy = session.name;
+        m.updatedAt = at;
+        store.changes = [...log.reverse(), ...store.changes];
+      });
     },
     async approveBaked(session, input) {
       await delay(200);

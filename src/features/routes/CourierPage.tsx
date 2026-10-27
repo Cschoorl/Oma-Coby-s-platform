@@ -10,6 +10,8 @@ import { navigate } from "../../lib/router";
 import { patches } from "../../lib/patches";
 import type { Patch } from "../../lib/useDashboard";
 import { courierRuns, couriersOn, isRouteStale, orderedStops, runRoute } from "./routeUtils";
+import { DeliveryContactLine } from "../../components/DeliveryContactLine";
+import { deliveryContact, telHref } from "../../lib/deliveryContact";
 
 interface CourierPageProps {
   state: DashboardState;
@@ -116,6 +118,7 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
           <div className="grid gap-3">
             {stops.map((order, i) => {
               const note = effectiveNote(order, state.meta[order.id]);
+              const contact = deliveryContact(order, state.meta[order.id]);
               const packing = state.packing[order.id] ?? emptyPacking;
               const delivered = state.delivery[order.id];
               const trip = tripOf(order.id);
@@ -158,6 +161,7 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                         {packing.packedBy ? <Badge tone="klaar">Ingepakt</Badge> : <Badge tone="aandacht">Nog inpakken</Badge>}
                       </div>
                       <p className="text-sm text-oliebol">{stopAddress(order)}</p>
+                      <DeliveryContactLine className="mt-0.5" contact={contact} />
                       <p className="mt-0.5 text-xs text-muted">
                         {[eta ? `Verwacht ${eta}` : order.plannedTime && `Gepland ${order.plannedTime}`, order.deliveryMoment, order.packaging, /^ja/i.test(order.flyers ?? "") ? "met flyers" : "", order.status !== "open" ? order.status : ""]
                           .filter(Boolean)
@@ -175,8 +179,8 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                   />
                   {note ? <Note>{note}</Note> : null}
                   <div className="grid grid-cols-2 gap-2">
-                    {order.phone ? (
-                      <a className={secondaryButton} href={`tel:${order.phone}`}>
+                    {contact.phone ? (
+                      <a className={secondaryButton} href={telHref(contact.phone)}>
                         <Icon name="phone" />
                         Bellen
                       </a>

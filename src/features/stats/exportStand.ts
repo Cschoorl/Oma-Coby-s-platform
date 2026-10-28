@@ -74,7 +74,7 @@ export async function drawStandCard(data: StandData, format: CardFormat): Promis
 
 async function render(data: StandData, format: CardFormat, withDrawings: boolean): Promise<Blob> {
   // Arvo for the numbers: canvas cannot switch on lining figures, and Vollkorn draws old-style ones.
-  await Promise.all([document.fonts.load("400 120px Bangers"), document.fonts.load("700 80px Arvo"), document.fonts.load("400 30px Arvo")]);
+  await Promise.all([document.fonts.load('400 120px "VTC SuperMarket"'), document.fonts.load("700 80px Arvo"), document.fonts.load("400 30px Arvo")]);
   const [W, H] = SIZE[format];
   const story = format === "story";
   const canvas = document.createElement("canvas");
@@ -99,7 +99,7 @@ async function render(data: StandData, format: CardFormat, withDrawings: boolean
   ctx.fillText(`TUSSENSTAND · ${day.toUpperCase()}`, left, pad + 30);
   ctx.letterSpacing = "0px";
   ctx.fillStyle = C.krent;
-  ctx.font = "400 110px Bangers";
+  ctx.font = '400 110px "VTC SuperMarket", Impact, sans-serif';
   ctx.fillText("DE DISCOZAAL", left, pad + 150);
 
   // The number of oudjes, big.
@@ -109,7 +109,7 @@ async function render(data: StandData, format: CardFormat, withDrawings: boolean
   ctx.fillText(formatNumber(oudjes), left - 8, y);
   y += 84;
   ctx.fillStyle = C.krent;
-  ctx.font = "400 72px Bangers";
+  ctx.font = '400 72px "VTC SuperMarket", Impact, sans-serif';
   ctx.fillText(oudjes === 1 ? "OUDJE OP DE DANSVLOER" : "OUDJES OP DE DANSVLOER", left, y);
   y += 70;
   ctx.fillStyle = C.oliebol;

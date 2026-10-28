@@ -21,7 +21,7 @@ export default {
       fontFamily: {
         sans: ["Arvo", "Rockwell", "Georgia", "serif"],
         serif: ["Vollkorn", "Georgia", "serif"],
-        display: ["Bangers", "Impact", "Arial Narrow", "sans-serif"]
+        display: ["VTC SuperMarket", "Impact", "Arial Narrow", "sans-serif"]
       },
       borderRadius: {
         kaart: "10px"

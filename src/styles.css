@@ -6,7 +6,7 @@
 @font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Bangers"; src: url("./assets/fonts/Bangers-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "VTC SuperMarket"; src: url("./assets/fonts/VTCSuperMarketSale-Italic.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "Vollkorn"; src: url("./assets/fonts/Vollkorn-Variable.woff2") format("woff2"); font-weight: 400 900; font-style: normal; font-display: swap; }
 
 :root {

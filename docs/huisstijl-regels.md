@@ -18,14 +18,14 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 | Gouwe ouwe | `gouwe` | `#dcc05d` | selectie, aandacht, snelknoppen |
 
 1. Achtergrond meel, kaarten papier, tekst krent.
-2. Hoofdknoppen krent met meel-tekst. Feest of kerstbomen met lichte tekst alleen vanaf 24px (de grote Bangers-knop), anders is het contrast te laag.
+2. Hoofdknoppen krent met meel-tekst. Feest of kerstbomen met lichte tekst alleen vanaf 24px (de grote knop in VTC SuperMarket), anders is het contrast te laag.
 3. Status: klaar = kerstbomen, aandacht = gouwe ouwe, probleem = feest. Altijd als lichte tint met donkere tekst (`bg-kerst-50 text-kerst-ink`), en altijd met een teken (✓, ~, !) of woord erbij, nooit alleen kleur.
 4. Taken hebben overal dezelfde kleur (`taskClass`): inpakken gouwe ouwe, fiets kerstbomen, auto feest, bar oliebol.
 5. Alleen een licht thema, met het donkere logo.
 
 ## Letters
 
-1. Bangers (`font-display`) alleen voor paginatitels, stickers en de grote knop op telefoon. Altijd kapitalen.
+1. VTC SuperMarket Sale (`font-display`, schuin, zonder é/ë/€: die vallen terug op Impact) alleen voor paginatitels, stickers en de grote knop op telefoon. Altijd kapitalen.
 2. Vollkorn (`font-serif`) voor kaarttitels en grote getallen, met rechte cijfers van gelijke breedte (`tabular-nums`; `lnum` staat globaal aan).
 3. Arvo (`font-sans`, de standaard) voor alle tekst. Labels in Arvo vet kapitalen met ruime spatiëring (`fieldLabel`).
 4. Eén woord voor één ding: MET, ZONDER, TOTAAL (nooit "geheel"); Bezorger; Opmerking.
@@ -75,7 +75,7 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
    Bij écht wachten rolt een klein oliebolletje over een kort baantje met één regel tekst (`OliebolLoader`): het eerste laden van het dashboard (onder de skeletblokken), een bon uitlezen en routes berekenen. Pas na 1 seconde (0,6 s bij bon en routes), zodat snel laden niets laat flitsen. Niet bij snelle acties zoals afvinken, claimen of een bezorger kiezen: die gaan direct.
 4. Oudjes rekenen we eerlijk: oliebollen gedeeld door 10, naar beneden afgerond (`oudjesLine`, `OLIEBOLLEN_PER_OUDJE`).
 5. De discozaal (`src/features/stats/Discozaal.tsx`) is een optie in de grafiekkeuze op de Tussenstand (Oliebollen, Bestellingen, Omzet, Aantal oudjes), met het aantal oudjes als tellertje. Elk figuurtje is één oudje en iedereen staat op de vloer: hoe voller de zaal, hoe kleiner de oudjes, en bij een flinke drukte wordt de zaal hoger. Niemand wacht buiten. Het aantal volgt de bestellingen live: komt er een bestelling bij, dan lopen de nieuwe oudjes links binnen; valt er een weg, dan lopen ze rechts naar buiten. Onder de zaal staat de telling ("✓ Geteld: alle 73 oudjes dansen op de vloer"); klopt die niet met het getal, dan staat er een melding. Eén op de tien oudjes heeft een donkere huid (oudje 7, 17, 27, …). Achter de dansvloer het café van Oma Coby: staande lamp met franjekap, letterbord met het aantal, platenspeler, boekenkast en een tafel met oliebollen. Schiet het oudje met de rollator vooruit, dan krijgt ze een raketvlammetje.
-6. *Deel stand* staat onderaan de kaart (feest, Bangers 24px) en maakt een kaartje als Post 4:5 of Story 9:16: het aantal oudjes groot, de verkochte oliebollen, en het verschil met dezelfde periode vorig jaar met een groen pijltje rechtsomhoog of een rood pijltje linksomlaag. Onderaan een rijtje oudjes en het logo.
+6. *Deel stand* staat onderaan de kaart (feest, VTC SuperMarket 24px) en maakt een kaartje als Post 4:5 of Story 9:16: het aantal oudjes groot, de verkochte oliebollen, en het verschil met dezelfde periode vorig jaar met een groen pijltje rechtsomhoog of een rood pijltje linksomlaag. Onderaan een rijtje oudjes en het logo.
 7. Alles staat uit bij "minder beweging" (`prefers-reduced-motion`).
 
 ## Vaste teksten

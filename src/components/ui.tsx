@@ -28,7 +28,7 @@ export const quickButton = `${buttonBase} min-h-[32px] bg-gouwe px-2.5 py-1 text
 /** Onomkeerbare actie (persoonsgegevens wissen). */
 export const dangerButton = `${buttonBase} bg-feest-50 text-feest-ink hover:bg-[#f8d6ca]`;
 
-/** De grote knop op telefoon (Afgeleverd). Bangers vanaf 24px: dan is meel op feest leesbaar. */
+/** De grote knop op telefoon (Afgeleverd). VTC SuperMarket vanaf 24px: dan is meel op feest leesbaar. */
 export const bigButton =
   "inline-flex min-h-[58px] w-full items-center justify-center gap-2 rounded-md bg-feest px-4 font-display text-[26px] uppercase leading-none tracking-wide text-meel transition hover:bg-feest-hover active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
 
@@ -109,7 +109,7 @@ export const taskClass: Record<string, string> = {
   oliebollenbar: "bg-oliebol-50 text-oliebol"
 };
 
-/** Het schuine ovaal van de naamsticker. Tekst op feest/kerstbomen alleen in deze grootte (Bangers 24px). */
+/** Het schuine ovaal van de naamsticker. Tekst op feest/kerstbomen alleen in deze grootte (VTC SuperMarket 24px). */
 export function Sticker({ children, tone = "feest", slap = false, className = "" }: { children: ReactNode; tone?: "feest" | "kerst" | "gouwe"; slap?: boolean; className?: string }) {
   const tones = { feest: "bg-feest text-meel", kerst: "bg-kerst text-meel", gouwe: "bg-gouwe text-krent" };
   return (

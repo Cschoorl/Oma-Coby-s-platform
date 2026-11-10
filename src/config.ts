@@ -165,7 +165,8 @@ export const LABEL_SIZE = { name: "DYMO 99014", widthMm: 101, heightMm: 54 };
  * in het tabblad Zakelijke dagen. Zie apps-script/README.md.
  */
 export const BUSINESS_DEFAULTS: BusinessInfo = {
-  price: 1.83,
+  // Uit het bouwplan van november: €2,50 per bol excl. btw, op elk niveau dezelfde prijs.
+  price: 2.5,
   vatRate: 0.09,
   minimum: 50,
   fees: { regio: 10, buiten: 25 },
@@ -180,8 +181,17 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
     { date: `${SEASON_YEAR}-12-30`, time: "14:00–16:00" },
     { date: `${SEASON_YEAR}-12-31`, time: "14:00–16:00" }
   ],
-  email: "info@omacobysoliebollenbar.nl"
+  email: "info@omacobysoliebollenbar.nl",
+  // De ladder uit het bouwplan (50, 150 en 500 oliebollen); in de Sheet te wijzigen via Instellingen.
+  packages: [
+    { key: "brons", name: "Brons", oliebollen: 50 },
+    { key: "zilver", name: "Zilver", oliebollen: 150 },
+    { key: "goud", name: "Goud", oliebollen: 500 }
+  ]
 };
+
+/** Oliebollen per collega als richtlijn bij de pakketten (3 als ze er een mee naar huis nemen). */
+export const BUSINESS_PER_COLLEAGUE = 2;
 
 /** Bezorgen gebeurt tussen deze tijden; de toeslagen zijn voor eerder. */
 export const BUSINESS_DELIVERY_WINDOW = "9:00–12:30";

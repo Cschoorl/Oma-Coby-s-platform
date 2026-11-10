@@ -10,6 +10,18 @@ export type BusinessMoment = "regulier" | "voor10" | "voor9";
 
 export type BusinessStatus = "nieuw" | "bevestigd" | "afgewezen";
 
+/** De drie zakelijke pakketten; "zelf" = zelf samengesteld, "" = nog niets gekozen. */
+export type BusinessPackageKey = "brons" | "zilver" | "goud";
+export type BusinessPackageChoice = BusinessPackageKey | "zelf" | "";
+
+export interface BusinessPackage {
+  key: BusinessPackageKey;
+  /** "Brons" */
+  name: string;
+  /** Aantal oliebollen in het pakket (MET + ZONDER). */
+  oliebollen: number;
+}
+
 export interface PickupDay {
   /** YYYY-MM-DD */
   date: string;
@@ -35,10 +47,14 @@ export interface BusinessInfo {
   deliveryDays: string[];
   pickupDays: PickupDay[];
   email: string;
+  /** Brons, Zilver en Goud, van klein naar groot. */
+  packages: BusinessPackage[];
 }
 
 /** Wat de klant invult. */
 export interface BusinessOrderInput {
+  /** Gekozen pakket; de aantallen hieronder tellen er samen precies op uit. */
+  pakket: BusinessPackageChoice;
   withRaisins: number;
   withoutRaisins: number;
   /** Extra oliebollen die de klant doneert aan ouderen en organisaties voor minderbedeelden. */
@@ -75,7 +91,7 @@ export interface BusinessTotals {
   donation: number;
   /** Totaal incl. btw plus de donatie: wat er op de factuur komt. */
   invoice: number;
-  /** Per 10 bestelde oliebollen één oudere gratis naar een Gouwe Ouwe-avond. */
+  /** Per 10 bestelde oliebollen één oudere een middag op de dansvloer. */
   ouderen: number;
 }
 

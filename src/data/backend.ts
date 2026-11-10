@@ -25,7 +25,7 @@ import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus } from "../types/business";
 import { BUSINESS_DEFAULTS } from "../config";
-import { businessToOrder, businessTotals, momentLabel, validateBusiness } from "../features/business/business";
+import { businessToOrder, businessTotals, chosenPackage, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
@@ -573,13 +573,13 @@ function writeStore(store: DemoStore) {
 /** Fictitious requests from the order form, so the Zakelijk page has something to show. */
 function demoBusiness(): BusinessOrder[] {
   const base: BusinessOrderInput = {
-    withRaisins: 0, withoutRaisins: 0, donation: 0, flyers: false, fulfilment: "bezorgen", area: "regio", moment: "regulier", date: "",
+    pakket: "zelf", withRaisins: 0, withoutRaisins: 0, donation: 0, flyers: false, fulfilment: "bezorgen", area: "regio", moment: "regulier", date: "",
     pickupAgreed: false, street: "", postalCode: "", city: "", company: "", contact: "", phone: "", email: "", invoiceEmail: "",
     invoiceAddress: "", reference: "", remark: ""
   };
   const rows: Array<[string, string, BusinessOrder["status"], Partial<BusinessOrderInput>]> = [
     ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412" }],
-    ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", withRaisins: 40, withoutRaisins: 30, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
+    ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", pakket: "zilver", withRaisins: 110, withoutRaisins: 40, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
     ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", fulfilment: "afhalen", area: "", pickupAgreed: true, invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
     ["Z26-0004", "2026-10-25 16:30:00", "afgewezen", { company: "Sportschool Fit", contact: "Rick Bos", withRaisins: 0, withoutRaisins: 60, date: "2026-12-24", street: "Stationsweg 4", postalCode: "3811 MP", city: "Amersfoort", area: "buiten" }]
   ];
@@ -1190,13 +1190,15 @@ function createDemoBackend(notice?: string): Backend {
     },
     async submitBusinessOrder(input) {
       await delay(500);
-      if (input.website) throw new Error("Je aanvraag kon niet worden verstuurd.");
+      if (input.website) throw new Error("Je bestelling kon niet worden verstuurd.");
       const errors = Object.values(validateBusiness(input, BUSINESS_DEFAULTS));
       if (errors.length) throw new Error(errors[0]);
       let id = "";
       mutate((store) => {
         id = `Z${String(new Date().getFullYear()).slice(2)}-${String(store.business.length + 1).padStart(4, "0")}`;
-        const { website: _, ...clean } = input;
+        const { website: _, ...rest } = input;
+        // Same as the Apps Script: the package only while the counts still add up to it.
+        const clean = { ...rest, pakket: chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? ("zelf" as const) };
         store.business.push({ ...clean, id, createdAt: nowStamp(), status: "nieuw", reason: "", handledBy: "", handledAt: "", totals: businessTotals(clean, BUSINESS_DEFAULTS) });
       });
       return { id };

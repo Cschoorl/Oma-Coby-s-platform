@@ -127,9 +127,15 @@ in de plaats ervan delen.
 - **Instellingen** (`sleutel`, `waarde`):
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
-  - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_prijs` (1,83), `zakelijk_btw` (9),
+  - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_prijs` (2,50), `zakelijk_btw` (9),
     `zakelijk_minimum` (50), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_toeslag_voor_10` (10),
-    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_uren_vooraf` (24), `zakelijk_email` en `zakelijk_melding_naar`.
+    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_uren_vooraf` (24), `zakelijk_pakket_brons` (50),
+    `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500), `zakelijk_email` en `zakelijk_melding_naar`.
+    Let op: staat `zakelijk_prijs` nog op 1,83, dan geldt die prijs en niet de 2,50 uit het bouwplan.
+  - De bevestigingsmail van een zakelijke bestelling is opgemaakt (HTML, met een tekstversie erbij). De plaatjes komen uit
+    `public/mail` op de GitHub Pages-site (`CONFIG.BUSINESS.mailImages`) en gaan als bijlage in de mail mee, zodat ze ook
+    zonder "afbeeldingen laden" te zien zijn. Lukt het ophalen niet, dan gaat de mail zonder plaatjes. Voorbeeld bekijken:
+    `node apps-script/mail-preview.mjs`, dan `docs/mail-zakelijke-bevestiging.html` openen.
 - **Zakelijke dagen** (`datum`, `soort`, `tijd`, `open`): de dagen op het zakelijke bestelformulier. `soort` is `bezorgen` of
   `afhalen`; `open` = `nee` sluit een dag zonder hem te wissen. Het script vult het tabblad de eerste keer met de dagen uit
   Marks formulier (14–31 december en 4–8 januari, afhalen 30 en 31 december).

@@ -25,7 +25,7 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 
 ## Letters
 
-1. VTC SuperMarket Sale (`font-display`, schuin, zonder é/ë/€: die vallen terug op Impact) alleen voor paginatitels, stickers en de grote knop op telefoon. Altijd kapitalen.
+1. VTC SuperMarket Sale (`font-display`, schuin, zonder é/ë/€: die vallen terug op Impact) alleen voor paginatitels, stickers, de pakketnamen (Brons, Zilver, Goud) en de grote knop op telefoon. Altijd kapitalen.
 2. Vollkorn (`font-serif`) voor kaarttitels en grote getallen, met rechte cijfers van gelijke breedte (`tabular-nums`; `lnum` staat globaal aan).
 3. Arvo (`font-sans`, de standaard) voor alle tekst. Labels in Arvo vet kapitalen met ruime spatiëring (`fieldLabel`).
 4. Eén woord voor één ding: MET, ZONDER, TOTAAL (nooit "geheel"); Bezorger; Opmerking.
@@ -71,12 +71,14 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 
 1. Alleen na een gelukte actie, bij voortgang, in lege staten en bij laden dat langer dan een seconde duurt.
 2. Eén per actie, korter dan 400 ms, nooit blokkerend (`toast`, `Sticker slap`).
-3. Bij iets bijzonders rolt er een getekende oliebol onderin voorbij (`rollOliebol`), over een baan van hooguit 480px in het midden, niet over de hele breedte: alles ingepakt, laatste stop afgeleverd, mijlpaal gehaald, aanmelding of zakelijke aanvraag binnen. Nooit vaker dan één keer per moment.
+3. Bij iets bijzonders rolt er een getekende oliebol onderin voorbij (`rollOliebol`), over een baan van hooguit 480px in het midden, niet over de hele breedte: alles ingepakt, laatste stop afgeleverd, mijlpaal gehaald, aanmelding of zakelijke bestelling binnen. Nooit vaker dan één keer per moment.
+   Kies je een pakket op `#/bestellen`, dan gaat alleen in die kaart iets bewegen: de medaille tikt aan (`oc-medal`), de oudjes springen kort na elkaar op (`oc-hop`, 0,36 s, 55 ms na elkaar) en een kleine oliebol rolt één keer over hun dansvloer (`oc-floor-bol`). Opnieuw kiezen speelt het opnieuw af.
    Bij écht wachten rolt een klein oliebolletje over een kort baantje met één regel tekst (`OliebolLoader`): het eerste laden van het dashboard (onder de skeletblokken), een bon uitlezen en routes berekenen. Pas na 1 seconde (0,6 s bij bon en routes), zodat snel laden niets laat flitsen. Niet bij snelle acties zoals afvinken, claimen of een bezorger kiezen: die gaan direct.
 4. Oudjes rekenen we eerlijk: oliebollen gedeeld door 10, naar beneden afgerond (`oudjesLine`, `OLIEBOLLEN_PER_OUDJE`).
 5. De discozaal (`src/features/stats/Discozaal.tsx`) is een optie in de grafiekkeuze op de Tussenstand (Oliebollen, Bestellingen, Omzet, Aantal oudjes), met het aantal oudjes als tellertje. Elk figuurtje is één oudje en iedereen staat op de vloer: hoe voller de zaal, hoe kleiner de oudjes, en bij een flinke drukte wordt de zaal hoger. Niemand wacht buiten. Het aantal volgt de bestellingen live: komt er een bestelling bij, dan lopen de nieuwe oudjes links binnen; valt er een weg, dan lopen ze rechts naar buiten. Onder de zaal staat de telling ("✓ Geteld: alle 73 oudjes dansen op de vloer"); klopt die niet met het getal, dan staat er een melding. Eén op de tien oudjes heeft een donkere huid (oudje 7, 17, 27, …). Achter de dansvloer het café van Oma Coby: staande lamp met franjekap, letterbord met het aantal, platenspeler, boekenkast en een tafel met oliebollen. Schiet het oudje met de rollator vooruit, dan krijgt ze een raketvlammetje.
 6. *Deel stand* staat onderaan de kaart (feest, VTC SuperMarket 24px) en maakt een kaartje als Post 4:5 of Story 9:16: het aantal oudjes groot, de verkochte oliebollen, en het verschil met dezelfde periode vorig jaar met een groen pijltje rechtsomhoog of een rood pijltje linksomlaag. Onderaan een rijtje oudjes en het logo.
 7. Alles staat uit bij "minder beweging" (`prefers-reduced-motion`).
+8. De pakketten tekenen we als medaille aan een feest-rood lint (`Medal`). De metaalkleuren brons, zilver en goud zijn alleen voor die medaille, net als de kleuren van de poppetjes.
 
 ## Vaste teksten
 
@@ -90,4 +92,15 @@ en de kleuren in [`tailwind.config.js`](../tailwind.config.js).
 | Lege lijst inpakken | "Niks meer te doen. Oma Coby is trots op je." |
 | Inloggen | "Wie staat er achter de pan?" |
 | Aanmelding binnen | "Je bent nu officieel Oma's hulpje." |
-| Zakelijke aanvraag binnen | "Bedankt! Je aanvraag is binnen." |
+| Zakelijke bestelling binnen | "Bedankt!" en "Jullie laten 15 ouderen rock 'n rollen" |
+
+## Mail
+
+De bevestigingsmail van een zakelijke bestelling (`businessMailHtml_` in `apps-script/Code.gs`) volgt dezelfde huisstijl,
+binnen wat mailprogramma's kunnen:
+
+1. Meel als achtergrond, één papieren kaart van 600px breed met 10px hoek, ruim opgezet (44px binnenmarge, 32px tussen blokken). Blokken scheiden met één haarlijn (`lijn`); alleen het blok met de ouderen heeft een zacht vlak (gouwe ouwe 50).
+2. Tabellen en inline stijlen, geen CSS-variabelen of flexbox: zo ziet hij er in Gmail, Outlook en Apple Mail hetzelfde uit. Op telefoon staan label en waarde onder elkaar.
+3. Letters: Arvo en Vollkorn zijn in mail niet te laden, dus de tekst valt terug op Rockwell en Georgia. Getallen in Rockwell, want Georgia heeft alleen cijfers die onder de regel zakken.
+4. Logo, sticker, medailles, oudjes en Oma's foto zijn PNG's in `public/mail` (SVG werkt niet in Gmail en Outlook). Ze gaan als bijlage in de mail mee. Opnieuw maken: de tekening uit het platform op 2× (medailles 3×) als PNG met doorzichtige achtergrond.
+5. Alles wat de klant intypte wordt ge-escaped. Er gaat altijd een tekstversie mee.

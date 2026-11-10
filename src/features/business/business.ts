@@ -1,6 +1,6 @@
-import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrder, BusinessOrderInput, BusinessTotals } from "../../types/business";
+import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrder, BusinessOrderInput, BusinessPackage, BusinessPackageChoice, BusinessPackageKey, BusinessTotals } from "../../types/business";
 import type { Order } from "../../types/order";
-import { BUSINESS_DELIVERY_WINDOW } from "../../config";
+import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE } from "../../config";
 
 /*
  * Rekenen en controleren voor de zakelijke bestelling. Het Apps Script rekent bij het versturen
@@ -17,8 +17,56 @@ export const momentLabel: Record<BusinessMoment, string> = {
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 
+/** Per pakket: voor wie het is en wat het doet. De aantallen komen uit BusinessInfo.packages. */
+export const packageCopy: Record<BusinessPackageKey, { kicker: string; text: string; andMore: boolean }> = {
+  brons: {
+    kicker: "Voor het team",
+    text: "Een warme traktatie bij de borrel. En een groepje ouderen dat weer even de dansvloer op gaat.",
+    andMore: false
+  },
+  zilver: {
+    kicker: "Voor het hele kantoor",
+    text: "Iedereen aan de oliebol. Samen laten jullie een volle tafel ouderen swingen op livemuziek.",
+    andMore: false
+  },
+  goud: {
+    kicker: "Voor grote teams, events en relaties",
+    text: "Jullie vullen een complete dansvloer. Een middag lang rock 'n rollen, namens jullie bedrijf.",
+    andMore: true
+  }
+};
+
+/** Richtlijn: zo veel collega's trakteer je met dit aantal oliebollen. */
+export function colleaguesFor(oliebollen: number): number {
+  return Math.floor(oliebollen / BUSINESS_PER_COLLEAGUE);
+}
+
+/** Verdeling voor een pakket: 70% MET en 30% ZONDER (zoals in 2025), in tientallen. */
+export function packageSplit(oliebollen: number): Pick<BusinessOrderInput, "withRaisins" | "withoutRaisins"> {
+  const withRaisins = Math.round((oliebollen * 0.7) / 10) * 10;
+  return { withRaisins, withoutRaisins: oliebollen - withRaisins };
+}
+
+/** Het gekozen pakket, als de aantallen er nog precies op uitkomen. */
+export function chosenPackage(input: BusinessOrderInput, info: BusinessInfo): BusinessPackage | undefined {
+  const p = info.packages.find((x) => x.key === input.pakket);
+  return p && input.withRaisins + input.withoutRaisins === p.oliebollen ? p : undefined;
+}
+
+/** "Brons", "Zilver", "Goud" of "Zelf samengesteld"; zo staat het ook in de Sheet. */
+export function packageLabel(input: BusinessOrderInput, info: BusinessInfo): string {
+  return chosenPackage(input, info)?.name ?? "Zelf samengesteld";
+}
+
+/** Voor beheer: de pakketnaam zoals de Sheet hem bewaart; leeg bij oudere bestellingen zonder pakket. */
+export function pakketName(choice: BusinessPackageChoice): string {
+  if (choice === "zelf") return "Zelf samengesteld";
+  return BUSINESS_DEFAULTS.packages.find((p) => p.key === choice)?.name ?? "";
+}
+
 export function emptyBusinessInput(): BusinessOrderInput {
   return {
+    pakket: "",
     withRaisins: 0,
     withoutRaisins: 0,
     donation: 0,
@@ -77,6 +125,7 @@ export type BusinessField = keyof BusinessOrderInput;
 export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, now = new Date()): Partial<Record<BusinessField, string>> {
   const e: Partial<Record<BusinessField, string>> = {};
   const total = input.withRaisins + input.withoutRaisins;
+  if (!input.pakket && total === 0) e.pakket = "Kies een pakket, of stel zelf je aantal samen.";
   for (const key of ["withRaisins", "withoutRaisins", "donation"] as const) {
     if (input[key] % 10 !== 0) e[key] = "Kies een aantal in tientallen.";
   }

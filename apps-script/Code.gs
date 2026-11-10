@@ -82,7 +82,10 @@ const CONFIG = {
    * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
    */
   BUSINESS: {
-    price: 1.83,
+    /** Per oliebol, excl. btw (bouwplan 2026). */
+    price: 2.5,
+    /** Pakketten in stap 1: [sleutel, naam, oliebollen]. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud. */
+    packages: [['brons', 'Brons', 50], ['zilver', 'Zilver', 150], ['goud', 'Goud', 500]],
     vatPercent: 9,
     minimum: 50,
     fees: { regio: 10, buiten: 25 },
@@ -94,7 +97,9 @@ const CONFIG = {
     pickupDays: [['2026-12-30', '14:00–16:00'], ['2026-12-31', '14:00–16:00']],
     email: 'info@omacobysoliebollenbar.nl',
     /** Wie een mail krijgt bij een nieuwe aanvraag (leeg = niemand). Instelling: zakelijk_melding_naar. */
-    notify: 'info@omacobysoliebollenbar.nl'
+    notify: 'info@omacobysoliebollenbar.nl',
+    /** Plaatjes voor de bevestigingsmail (public/mail op de GitHub Pages-site). Leeg = een mail zonder plaatjes. */
+    mailImages: 'https://cschoorl.github.io/Oma-Coby-s-platform/mail/'
   },
   /** Map in Google Drive voor foto's van bonnen. */
   RECEIPT_FOLDER: 'Oliebollen bonnen',
@@ -189,7 +194,8 @@ const TABS = {
   business: ['Zakelijke aanvragen', ['ordernummer', 'ingediend_op', 'status', 'onderneming', 'contactpersoon', 'telefoon', 'email',
     'factuur_email', 'factuuradres', 'referentie', 'met_krenten', 'zonder_krenten', 'donatie_oliebollen', 'flyers', 'afhalen_bezorgen',
     'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
-    'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op']],
+    'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op',
+    'pakket']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
@@ -1621,7 +1627,7 @@ Object.assign(HANDLERS, {
   },
   submitBusinessOrder: function (body) {
     // Honeypot: people never see this field, bots fill it in.
-    if (String(body.website || '').trim()) throw new Error('Je aanvraag kon niet worden verstuurd.');
+    if (String(body.website || '').trim()) throw new Error('Je bestelling kon niet worden verstuurd.');
     const info = businessInfo_();
     const input = businessInput_(body);
     const problem = validateBusiness_(input, info);
@@ -1641,7 +1647,8 @@ Object.assign(HANDLERS, {
         adres: input.street, postcode: input.postalCode, plaats: input.city,
         afhalen_afgestemd: input.fulfilment === 'afhalen' ? (input.pickupAgreed ? 'Ja' : 'Nee') : '',
         opmerking: input.remark, oliebollen: totals.oliebollen, bedrag_excl_btw: totals.subtotal, btw: totals.vat,
-        bedrag_incl_btw: totals.total, donatie_bedrag: totals.donation, factuurbedrag: totals.invoice, ouderen: totals.ouderen
+        bedrag_incl_btw: totals.total, donatie_bedrag: totals.donation, factuurbedrag: totals.invoice, ouderen: totals.ouderen,
+        pakket: businessPackage_(input, info).name
       });
       bump_();
       return id;
@@ -1652,7 +1659,7 @@ Object.assign(HANDLERS, {
     try {
       sendBusinessMails_(saved, input, totals, info);
     } catch (err) {
-      warning = 'Je aanvraag is opgeslagen, maar de kopie per mail lukte niet.';
+      warning = 'Je bestelling is opgeslagen, maar de kopie per mail lukte niet.';
     }
     return { id: saved, warning: warning };
   },
@@ -1699,6 +1706,7 @@ function businessInfo_() {
     // An emptied tab means: no days yet, use the defaults.
     deliveryDays: days.length ? delivery : b.deliveryDays,
     pickupDays: days.length ? pickup : b.pickupDays.map(function (p) { return { date: p[0], time: p[1] }; }),
+    packages: b.packages.map(function (p) { return { key: p[0], name: p[1], oliebollen: number('zakelijk_pakket_' + p[0], p[2]) }; }),
     email: String(settings.zakelijk_email || b.email)
   };
 }
@@ -1714,6 +1722,7 @@ function businessInput_(body) {
   const count = function (v) { const n = Math.round(Number(v)); return isFinite(n) && n > 0 ? n : 0; };
   const fulfilment = body.fulfilment === 'afhalen' ? 'afhalen' : 'bezorgen';
   return {
+    pakket: ['brons', 'zilver', 'goud'].indexOf(body.pakket) !== -1 ? body.pakket : 'zelf',
     withRaisins: count(body.withRaisins), withoutRaisins: count(body.withoutRaisins), donation: count(body.donation),
     flyers: !!body.flyers, fulfilment: fulfilment,
     area: fulfilment === 'bezorgen' && BUSINESS_AREAS[body.area] ? body.area : '',
@@ -1766,6 +1775,15 @@ function businessTotals_(i, info) {
     donation: donation, invoice: cents(total + donation), ouderen: Math.floor(oliebollen / 10) };
 }
 
+/**
+ * The chosen package while the counts still add up to it, else "Zelf samengesteld" (key "zelf").
+ * Same as chosenPackage / packageLabel in src/features/business/business.ts.
+ */
+function businessPackage_(i, info) {
+  const p = info.packages.filter(function (x) { return x.key === i.pakket; })[0];
+  return p && i.withRaisins + i.withoutRaisins === p.oliebollen ? p : { key: 'zelf', name: 'Zelf samengesteld', oliebollen: 0 };
+}
+
 /** "Z26-0001", "Z26-0002", … per seizoen. Call inside withLock_. */
 function nextBusinessId_() {
   const prefix = 'Z' + String(CONFIG.SEASON_YEAR).slice(2) + '-';
@@ -1801,6 +1819,8 @@ function readBusiness_() {
     const subtotal = num_(r.bedrag_excl_btw);
     return {
       id: String(r.ordernummer), createdAt: String(r.ingediend_op || ''), status: String(r.status || 'nieuw').toLowerCase(),
+      // Older rows have no package: "".
+      pakket: ({ brons: 'brons', zilver: 'zilver', goud: 'goud', 'zelf samengesteld': 'zelf' })[String(r.pakket || '').trim().toLowerCase()] || '',
       company: String(r.onderneming || ''), contact: String(r.contactpersoon || ''), phone: String(r.telefoon || ''),
       email: String(r.email || ''), invoiceEmail: String(r.factuur_email || ''), invoiceAddress: String(r.factuuradres || ''),
       reference: String(r.referentie || ''), withRaisins: num_(r.met_krenten), withoutRaisins: num_(r.zonder_krenten),
@@ -1843,54 +1863,279 @@ function businessOrderRows_(orders) {
   });
 }
 
-function sendBusinessMails_(id, i, t, info) {
-  const euro = function (n) { return '€ ' + n.toFixed(2).replace('.', ','); };
+/** Labels for the customer, the same as areaLabel in src/features/business/business.ts. */
+const BUSINESS_AREA_LABELS = { regio: 'Amsterdam of Aalsmeer', buiten: 'Buiten Amsterdam' };
+/** The images in public/mail, sent along inside the mail (cid:) so they show without "load images". */
+const BUSINESS_MAIL_IMAGES = ['logo', 'bedankt', 'oudjes', 'oma', 'oliebol', 'medaille-brons', 'medaille-zilver', 'medaille-goud'];
+
+/** "1.250" */
+function numberNl_(n) {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+/** "€ 1.250,00", like formatEuro on the platform. */
+function euroNl_(n) {
+  const parts = Math.abs(n).toFixed(2).split('.');
+  return (n < 0 ? '- ' : '') + '€ ' + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + parts[1];
+}
+
+function escapeHtml_(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** Everything the confirmation shows, worked out once for the HTML and the plain text. */
+function businessMailData_(id, i, t, info) {
   const day = function (iso) {
     const d = new Date(iso + 'T12:00:00');
     return ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][d.getDay()] + ' ' + d.getDate() + ' ' + DUTCH_MONTHS[d.getMonth()];
   };
+  const bezorgen = i.fulfilment === 'bezorgen';
   const pickup = info.pickupDays.filter(function (d) { return d.date === i.date; })[0];
+  const moment = BUSINESS_MOMENTS[i.moment].charAt(0).toLowerCase() + BUSINESS_MOMENTS[i.moment].slice(1);
+  const pkg = businessPackage_(i, info);
+  const costs = [[numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']];
+  if (bezorgen) costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], euroNl_(t.delivery), '']);
+  if (t.surcharge) costs.push([BUSINESS_MOMENTS[i.moment], euroNl_(t.surcharge), '']);
+  costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted'], ['Btw ' + Math.round(info.vatRate * 100) + '%', euroNl_(t.vat), 'muted']);
+  costs.push(['Totaal incl. btw', euroNl_(t.total), 'total']);
+  if (t.donation) costs.push(['Extra donatie, ' + numberNl_(i.donation) + ' oliebollen', euroNl_(t.donation), ''], ['Op je factuur', euroNl_(t.invoice), 'total']);
+  const when = day(i.date);
+  return {
+    id: id, company: i.company, firstName: i.contact.split(' ')[0], email: i.email, contactEmail: info.email,
+    ouderen: t.ouderen, oliebollen: t.oliebollen, donation: i.donation, pkg: pkg, bezorgen: bezorgen,
+    order: [
+      ['MET krenten', numberNl_(i.withRaisins)],
+      ['ZONDER krenten', numberNl_(i.withoutRaisins)]
+    ].concat(i.donation ? [['Extra gedoneerd', numberNl_(i.donation) + ' oliebollen']] : []).concat([['Flyers', i.flyers ? 'Ja, doe er flyers bij' : 'Nee']]),
+    when: when.charAt(0).toUpperCase() + when.slice(1) + ', ' + (bezorgen ? moment : (pickup ? pickup.time : '')),
+    where: bezorgen ? i.street + ', ' + i.postalCode + ' ' + i.city : 'Op de plek die we met je afspraken',
+    whereLines: bezorgen ? [i.street, i.postalCode + ' ' + i.city] : ['Op de plek die we met je afspraken'],
+    contact: i.contact + ', ' + i.phone,
+    contactLines: [i.contact, i.phone],
+    costs: costs,
+    invoice: i.invoiceEmail + (i.reference ? ' (referentie ' + i.reference + ')' : ''),
+    invoiceAddress: i.invoiceAddress,
+    remark: i.remark,
+    steps: [
+      ['We kijken je bestelling na', 'en bevestigen hem per mail.'],
+      bezorgen
+        ? ['Op ' + when + ' bakken we vers', 'en bezorgen we ' + moment + ' op ' + i.street + '.']
+        : ['Op ' + when + ' bakken we vers', 'en kun je ze ophalen' + (pickup && pickup.time ? ', ' + pickup.time : '') + '.'],
+      ['De factuur volgt per mail', 'naar ' + i.invoiceEmail + '. Je betaalt achteraf.']
+    ]
+  };
+}
+
+/**
+ * The confirmation as HTML: tables and inline styles, so it looks the same in Gmail, Outlook and
+ * Apple Mail. Colours from tailwind.config.js; fonts fall back from Arvo/Vollkorn to Rockwell/Georgia.
+ * src(name) gives the address of an image from public/mail, or '' to leave it out.
+ */
+function businessMailHtml_(d, src) {
+  const e = escapeHtml_;
+  const C = { meel: '#f9f3d9', papier: '#fffdf6', krent: '#261f1f', oliebol: '#5c4238', muted: '#6d5a4f', lijn: '#ebe1bf', gouwe50: '#fbf3cf', gouweInk: '#5b480b' };
+  const TEXT = "Arvo,Rockwell,'Roboto Slab',Georgia,serif";
+  const HEAD = "Vollkorn,Georgia,'Times New Roman',serif";
+  // Numbers: Georgia only has old-style figures, Rockwell has straight ones (as tabular-nums on the platform).
+  const NUM = "Vollkorn,Rockwell,'Roboto Slab',Georgia,serif";
+  const img = function (name, w, h, alt, style) {
+    return src(name) ? '<img src="' + src(name) + '" width="' + w + '" height="' + h + '" alt="' + e(alt) + '" style="display:block;border:0;outline:none;' + (style || '') + '">' : '';
+  };
+  const label = function (text) {
+    return '<p style="margin:0 0 12px;font-family:' + TEXT + ';font-size:11px;line-height:16px;font-weight:bold;letter-spacing:0.12em;text-transform:uppercase;color:' + C.muted + ';">' + text + '</p>';
+  };
+  const rule = '<tr><td style="padding:32px 0 0;"><div style="height:1px;line-height:1px;font-size:1px;background:' + C.lijn + ';">&nbsp;</div></td></tr>';
+  const section = function (title, inner) {
+    return rule + '<tr><td style="padding:32px 0 0;">' + label(title) + inner + '</td></tr>';
+  };
+  const rows = function (list) {
+    return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + list.map(function (r) {
+      return '<tr><td class="oc-label" valign="top" style="padding:5px 16px 5px 0;width:150px;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.muted + ';">' + r[0] + '</td>' +
+        '<td class="oc-value" valign="top" style="padding:5px 0;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.krent + ';">' + r[1] + '</td></tr>';
+    }).join('') + '</table>';
+  };
+  const medal = d.pkg.key !== 'zelf' ? img('medaille-' + d.pkg.key, 18, 22, '', 'display:inline-block;vertical-align:-5px;margin-right:6px;') : '';
+  const order = [['Pakket', medal + '<b>' + e(d.pkg.name) + '</b>']].concat(d.order.map(function (r) { return [r[0], e(r[1])]; }));
+  const lines = function (list) { return list.map(e).join('<br>'); };
+  const delivery = [['Wanneer', e(d.when)], [d.bezorgen ? 'Adres' : 'Waar', lines(d.whereLines)], ['Contactpersoon', lines(d.contactLines)]];
+  const costs = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + d.costs.map(function (c) {
+    const total = c[2] === 'total';
+    const color = c[2] === 'muted' ? C.muted : C.krent;
+    return '<tr><td valign="baseline" style="padding:' + (total ? '10px' : '5px') + ' 16px 5px 0;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + color + ';' + (total ? 'font-weight:bold;' : '') + '">' + e(c[0]) + '</td>' +
+      '<td align="right" valign="baseline" style="padding:' + (total ? '10px' : '5px') + ' 0 5px;white-space:nowrap;font-family:' + (total ? NUM : TEXT) + ';font-size:' + (total ? '22px' : '15px') + ';line-height:' + (total ? '26px' : '22px') + ';color:' + color + ';' + (total ? 'font-weight:bold;' : '') + '">' + e(c[1]) + '</td></tr>';
+  }).join('') + '</table>' +
+    '<p style="margin:16px 0 0;font-family:' + TEXT + ';font-size:14px;line-height:22px;color:' + C.oliebol + ';">Je betaalt achteraf op factuur. Die gaat naar ' + e(d.invoice) + '.' +
+    (d.invoiceAddress ? '<br>Factuuradres: ' + e(d.invoiceAddress).replace(/\n/g, ', ') : '') + '</p>';
+  const steps = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + d.steps.map(function (s, n) {
+    return '<tr><td valign="top" style="padding:0 14px 16px 0;width:28px;"><div style="width:28px;height:28px;border-radius:14px;background:' + C.krent + ';color:' + C.meel + ';font-family:' + NUM + ';font-size:15px;line-height:28px;font-weight:bold;text-align:center;">' + (n + 1) + '</div></td>' +
+      '<td valign="top" style="padding:3px 0 16px;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.oliebol + ';"><b style="color:' + C.krent + ';">' + e(s[0]) + '</b> ' + e(s[1]) + '</td></tr>';
+  }).join('') + '</table>';
+  const ouderen = numberNl_(d.ouderen);
+  const headline = d.ouderen > 0 ? 'Jullie laten ' + ouderen + ' ouderen rock \'n rollen' : 'Je bestelling is binnen';
+  const preheader = 'Bestelling ' + d.id + ' voor ' + d.company + ': ' + numberNl_(d.oliebollen) + ' oliebollen. ' + d.when + '.';
+
+  return '<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>' + e(headline) + '</title>' +
+    '<style>body{margin:0;padding:0;}img{-ms-interpolation-mode:bicubic;}a{color:' + C.krent + ';}' +
+    '@media (max-width:620px){.oc-card{padding:28px 20px !important;}.oc-h1{font-size:26px !important;line-height:32px !important;}.oc-big{font-size:40px !important;}.oc-outer{padding:20px 12px !important;}.oc-label{display:block !important;width:auto !important;padding:8px 0 0 !important;font-size:13px !important;line-height:18px !important;}.oc-value{display:block !important;padding:0 0 6px !important;}}</style></head>' +
+    '<body style="margin:0;padding:0;background:' + C.meel + ';">' +
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:' + C.meel + ';">' + e(preheader) + new Array(60).join('&#847;&zwnj;&nbsp;') + '</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + C.meel + '" style="background:' + C.meel + ';">' +
+    '<tr><td class="oc-outer" align="center" style="padding:32px 16px 40px;">' +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">' +
+
+    // Logo
+    '<tr><td align="center" style="padding:0 0 24px;">' +
+    (src('logo') ? img('logo', 200, 64, 'Oma Coby\'s Oliebollenbar', 'margin:0 auto;') : '<p style="margin:0;font-family:' + HEAD + ';font-size:22px;font-weight:bold;color:' + C.oliebol + ';">Oma Coby\'s Oliebollenbar</p>') +
+    '</td></tr>' +
+
+    // Card
+    '<tr><td class="oc-card" bgcolor="' + C.papier + '" style="background:' + C.papier + ';border-radius:10px;padding:44px 44px 40px;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+
+    // Thanks
+    '<tr><td style="padding:0 0 20px;">' + img('bedankt', 150, 63, 'Bedankt!', 'margin-left:-6px;') + '</td></tr>' +
+    '<tr><td><h1 class="oc-h1" style="margin:0;font-family:' + HEAD + ';font-size:32px;line-height:38px;font-weight:bold;color:' + C.krent + ';">' + e(headline) + '</h1>' +
+    '<p style="margin:16px 0 0;font-family:' + TEXT + ';font-size:16px;line-height:26px;color:' + C.oliebol + ';">Dankjewel, ' + e(d.firstName) + '! Je bestelling voor ' + e(d.company) + ' is binnen. ' +
+    'We kijken alles na en bevestigen hem per mail. Hieronder staat alles nog even op een rij.</p></td></tr>' +
+
+    // Impact
+    (d.ouderen > 0
+      ? '<tr><td style="padding:32px 0 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + C.gouwe50 + '" style="background:' + C.gouwe50 + ';border-radius:10px;">' +
+        '<tr><td style="padding:28px 28px 26px;">' +
+        img('oudjes', 284, 52, '', 'max-width:100%;height:auto;margin:0 0 18px -2px;') +
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+        '<td valign="middle" class="oc-big" style="padding:0 14px 0 0;font-family:' + NUM + ';font-size:48px;line-height:48px;font-weight:bold;color:' + C.krent + ';">' + ouderen + '</td>' +
+        '<td valign="middle" style="font-family:' + TEXT + ';font-size:16px;line-height:21px;font-weight:bold;color:' + C.krent + ';">ouderen een middag<br>op de dansvloer</td></tr></table>' +
+        '<p style="margin:16px 0 0;font-family:' + TEXT + ';font-size:15px;line-height:24px;color:' + C.gouweInk + ';">Van elke oliebol gaat de helft naar een speciaal georganiseerde muziekmiddag: livemuziek, dansen en herinneringen voor ouderen die vaak alleen zijn. ' +
+        'Elke 10 oliebollen geven een oudere zo\'n middag.' +
+        (d.donation ? ' Met je extra ' + numberNl_(d.donation) + ' oliebollen trakteer je ook ouderen aan de bar en organisaties voor minderbedeelden.' : '') + '</p>' +
+        '</td></tr></table></td></tr>'
+      : '') +
+
+    // Number
+    '<tr><td style="padding:32px 0 0;">' + label('Bestelnummer') +
+    '<p style="margin:-4px 0 0;font-family:' + NUM + ';font-size:30px;line-height:34px;font-weight:bold;letter-spacing:0.01em;color:' + C.krent + ';">' + e(d.id) + '</p>' +
+    '<p style="margin:6px 0 0;font-family:' + TEXT + ';font-size:13px;line-height:20px;color:' + C.muted + ';">Noem dit nummer als je ons mailt.</p></td></tr>' +
+
+    section('Je bestelling', rows(order)) +
+    section(d.bezorgen ? 'Bezorgen' : 'Afhalen', rows(delivery)) +
+    section('Kosten', costs) +
+    (d.remark
+      ? section('Je opmerking', '<p style="margin:0;padding:2px 0 2px 14px;border-left:3px solid ' + C.lijn + ';font-family:' + TEXT + ';font-size:15px;line-height:24px;font-style:italic;color:' + C.oliebol + ';">' + e(d.remark).replace(/\n/g, '<br>') + '</p>')
+      : '') +
+    section('Wat gebeurt er nu?', steps) +
+
+    // Questions
+    rule +
+    '<tr><td style="padding:32px 0 0;"><p style="margin:0 0 18px;font-family:' + TEXT + ';font-size:15px;line-height:24px;color:' + C.oliebol + ';">' +
+    '<b style="color:' + C.krent + ';">Iets aanpassen of een vraag?</b> Beantwoord deze mail of mail naar ' +
+    '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.krent + ';font-weight:bold;">' + e(d.contactEmail) + '</a> en noem je bestelnummer.</p>' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="' + C.krent + '" style="border-radius:6px;">' +
+    '<a href="mailto:' + e(d.contactEmail) + '?subject=' + encodeURIComponent('Bestelling ' + d.id) + '" style="display:inline-block;padding:13px 22px;font-family:' + TEXT + ';font-size:15px;line-height:20px;font-weight:bold;color:' + C.meel + ';text-decoration:none;border-radius:6px;">Mail ons over ' + e(d.id) + '</a>' +
+    '</td></tr></table></td></tr>' +
+
+    // Sign-off
+    rule +
+    '<tr><td style="padding:28px 0 0;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    (src('oma') ? '<td valign="middle" style="padding:0 16px 0 0;">' + img('oma', 56, 56, 'Oma Coby', 'border-radius:28px;') + '</td>' : '') +
+    '<td valign="middle" style="font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.oliebol + ';">Warme groet,<br><b style="color:' + C.krent + ';">Oma Coby (100) en het hele team</b></td>' +
+    '</tr></table></td></tr>' +
+
+    '</table></td></tr>' +
+
+    // Footer
+    '<tr><td align="center" style="padding:28px 12px 0;">' + img('oliebol', 24, 24, '', 'margin:0 auto 12px;') +
+    '<p style="margin:0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol · KvK 95662391<br>' +
+    '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.muted + ';">' + e(d.contactEmail) + '</a> · ' +
+    '<a href="https://www.omacobysoliebollenbar.nl" style="color:' + C.muted + ';">omacobysoliebollenbar.nl</a></p>' +
+    '<p style="margin:10px 0 0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Je krijgt deze mail omdat je zakelijk bij ons bestelde.</p>' +
+    '</td></tr>' +
+
+    '</table></td></tr></table></body></html>';
+}
+
+/** The same confirmation as plain text, for mail programs without HTML. */
+function businessMailText_(d) {
   const lines = [
-    'Beste ' + i.contact.split(' ')[0] + ',',
+    'Dankjewel, ' + d.firstName + '!',
     '',
-    'Dank je wel voor je aanvraag bij Oma Coby\'s Oliebollenbar. We kijken hem na en mailen je een bevestiging.',
-    'Hieronder staat een kopie.',
+    'Je bestelling voor ' + d.company + ' is binnen. We kijken alles na en bevestigen hem per mail.',
+    d.ouderen > 0 ? 'Jullie laten ' + numberNl_(d.ouderen) + ' ouderen dansen op een speciaal georganiseerde muziekmiddag.' : '',
     '',
-    'Aanvraagnummer: ' + id,
-    'Onderneming: ' + i.company,
-    'MET krenten: ' + i.withRaisins,
-    'ZONDER krenten: ' + i.withoutRaisins,
-    i.donation ? 'Extra gedoneerd: ' + i.donation + ' oliebollen' : '',
-    'Flyers: ' + (i.flyers ? 'ja' : 'nee'),
-    i.fulfilment === 'bezorgen'
-      ? 'Bezorgen: ' + day(i.date) + ', ' + BUSINESS_MOMENTS[i.moment].toLowerCase() + '\nAdres: ' + i.street + ', ' + i.postalCode + ' ' + i.city
-      : 'Afhalen: ' + day(i.date) + (pickup ? ', ' + pickup.time : ''),
+    'Bestelnummer: ' + d.id,
     '',
-    'Subtotaal excl. btw: ' + euro(t.subtotal),
-    'Btw ' + Math.round(info.vatRate * 100) + '%: ' + euro(t.vat),
-    'Totaal incl. btw: ' + euro(t.total),
-    t.donation ? 'Extra donatie: ' + euro(t.donation) + '\nOp je factuur: ' + euro(t.invoice) : '',
+    'JE BESTELLING',
+    'Pakket: ' + d.pkg.name
+  ].concat(d.order.map(function (r) { return r[0] + ': ' + r[1]; })).concat([
     '',
-    'Factuur naar: ' + i.invoiceEmail + (i.reference ? ' (referentie ' + i.reference + ')' : ''),
-    i.remark ? 'Je opmerking: ' + i.remark : '',
+    d.bezorgen ? 'BEZORGEN' : 'AFHALEN',
+    d.when,
+    d.where,
+    'Contactpersoon: ' + d.contact,
     '',
-    'Met je bestelling gaan ' + t.ouderen + ' ouderen gratis naar een Gouwe Ouwe-avond tegen eenzaamheid. Samen maken we een verschil!',
+    'KOSTEN'
+  ]).concat(d.costs.map(function (c) { return c[0] + ': ' + c[1]; })).concat([
+    'Je betaalt achteraf op factuur. Die gaat naar ' + d.invoice + '.',
+    d.invoiceAddress ? 'Factuuradres: ' + d.invoiceAddress.replace(/\n/g, ', ') : '',
+    d.remark ? '\nJe opmerking: ' + d.remark : '',
     '',
-    'Hartelijke groet,',
-    'Oma Coby\'s Oliebollenbar',
-    info.email
-  ].filter(function (l, n, all) { return l !== '' || all[n - 1] !== ''; });
+    'WAT GEBEURT ER NU?'
+  ]).concat(d.steps.map(function (s, n) { return (n + 1) + '. ' + s[0] + ' ' + s[1]; })).concat([
+    '',
+    'Iets aanpassen of een vraag? Beantwoord deze mail of mail naar ' + d.contactEmail + ' en noem je bestelnummer.',
+    '',
+    'Warme groet,',
+    'Oma Coby (100) en het hele team',
+    '',
+    'Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol, KvK 95662391.'
+  ]);
+  // No empty line twice in a row.
+  return lines.filter(function (l, n, all) { return l !== '' || all[n - 1] !== ''; }).join('\n');
+}
+
+/** The images from public/mail as blobs by name; whatever can't be fetched is left out. */
+function businessMailImages_() {
+  const base = String(CONFIG.BUSINESS.mailImages || '');
+  if (!base) return {};
+  const images = {};
+  try {
+    const responses = UrlFetchApp.fetchAll(BUSINESS_MAIL_IMAGES.map(function (name) { return { url: base + name + '.png', muteHttpExceptions: true }; }));
+    responses.forEach(function (r, n) {
+      if (r.getResponseCode() === 200) images[BUSINESS_MAIL_IMAGES[n]] = r.getBlob().setName(BUSINESS_MAIL_IMAGES[n] + '.png');
+    });
+  } catch (err) {
+    // No images: the mail still works, with text in place of the logo.
+  }
+  return images;
+}
+
+function sendBusinessMails_(id, i, t, info) {
+  const d = businessMailData_(id, i, t, info);
+  const images = businessMailImages_();
+  const text = businessMailText_(d);
   MailApp.sendEmail({
     to: i.email, replyTo: info.email, name: CONFIG.MAIL_SENDER_NAME,
-    subject: 'Je aanvraag ' + id + ' bij Oma Coby\'s Oliebollenbar', body: lines.join('\n')
+    subject: (d.ouderen > 0 ? 'Gelukt: jullie laten ' + numberNl_(d.ouderen) + ' ouderen dansen' : 'Je bestelling is binnen') + ' (bestelling ' + id + ')',
+    body: text,
+    htmlBody: businessMailHtml_(d, function (name) { return images[name] ? 'cid:' + name : ''; }),
+    inlineImages: images
   });
-  const notify = String(getSetting_('zakelijk_melding_naar') || CONFIG.BUSINESS.notify).trim();
-  if (notify) {
-    MailApp.sendEmail({
-      to: notify, replyTo: i.email, name: CONFIG.MAIL_SENDER_NAME,
-      subject: 'Nieuwe zakelijke aanvraag ' + id + ': ' + i.company + ', ' + t.oliebollen + ' oliebollen op ' + day(i.date),
-      body: 'Nakijken en bevestigen op de pagina Zakelijk in het platform.\n\n' + lines.slice(5).join('\n')
-    });
+  // Internal notice for the team; its own try, so a problem here never reads as a failed copy for the customer.
+  try {
+    const settings = {};
+    readTab_('settings').forEach(function (r) { settings[String(r.sleutel).trim()] = r.waarde; });
+    const notify = String(settings.zakelijk_melding_naar || CONFIG.BUSINESS.notify).trim();
+    if (notify) {
+      MailApp.sendEmail({
+        to: notify, replyTo: i.email, name: CONFIG.MAIL_SENDER_NAME,
+        subject: 'Nieuwe zakelijke bestelling ' + id + ': ' + i.company + ', ' + d.pkg.name + ', ' + numberNl_(t.oliebollen) + ' oliebollen op ' + d.when.split(',')[0].toLowerCase(),
+        body: 'Nakijken en bevestigen op de pagina Zakelijk in het platform.\n\nOnderneming: ' + i.company + '\nE-mail: ' + i.email + '\n' +
+          text.slice(text.indexOf('Bestelnummer'))
+      });
+    }
+  } catch (err) {
+    console.error('Melding zakelijke bestelling ' + id + ' niet verstuurd: ' + err);
   }
 }
 

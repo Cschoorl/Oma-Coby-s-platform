@@ -6,7 +6,7 @@ import { Badge, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Note, Notice, 
 import { Drawer } from "../../components/Drawer";
 import { BUSINESS_DEFAULTS, BUSINESS_LARGE } from "../../config";
 import { appLink } from "../../lib/router";
-import { areaLabel, longDay, momentLabel } from "./business";
+import { areaLabel, longDay, momentLabel, pakketName } from "./business";
 
 /*
  * Beheer: de zakelijke aanvragen van het bestelformulier. Elke aanvraag nakijken en bevestigen
@@ -106,6 +106,7 @@ export function BusinessAdminPage({ state, session, run }: { state: DashboardSta
                     <span className="min-w-0 text-sm">
                       <span className="block font-bold text-krent">{longDay(b.date)}</span>
                       <span className="block tabular-nums text-oliebol">
+                        {b.pakket ? `${pakketName(b.pakket)} · ` : ""}
                         {formatNumber(b.withRaisins)} MET · {formatNumber(b.withoutRaisins)} ZONDER
                       </span>
                     </span>
@@ -177,8 +178,8 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
     }
   }
 
-  const declineMail = `mailto:${b.email}?subject=${encodeURIComponent(`Je aanvraag ${b.id} bij Oma Coby's Oliebollenbar`)}&body=${encodeURIComponent(
-    `Beste ${b.contact.split(" ")[0]},\n\nDank je wel voor je aanvraag ${b.id}. Helaas kunnen we deze zo niet leveren: ${b.reason || reason}\n\nHartelijke groet,\nOma Coby's Oliebollenbar`
+  const declineMail = `mailto:${b.email}?subject=${encodeURIComponent(`Je bestelling ${b.id} bij Oma Coby's Oliebollenbar`)}&body=${encodeURIComponent(
+    `Beste ${b.contact.split(" ")[0]},\n\nDankjewel voor je bestelling ${b.id}. Helaas kunnen we deze zo niet leveren: ${b.reason || reason}\n\nHartelijke groet,\nOma Coby's Oliebollenbar`
   )}`;
 
   return (
@@ -209,6 +210,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
       <Block title="Bestelling">
         <Rows
           rows={[
+            ["Pakket", pakketName(b.pakket)],
             ["MET krenten", formatNumber(b.withRaisins)],
             ["ZONDER krenten", formatNumber(b.withoutRaisins)],
             ["TOTAAL", <b>{formatNumber(t.oliebollen)} oliebollen</b>],

@@ -1,14 +1,31 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { backend } from "../../data/backend";
-import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessTotals } from "../../types/business";
-import { Card, Notice, Sticker, fieldLabel, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, quickButton, rollOliebol } from "../../components/ui";
+import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessTotals } from "../../types/business";
+import { Card, Notice, OLIEBOL_SVG, Sticker, fieldLabel, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, quickButton, rollOliebol, secondaryButton, textAction } from "../../components/ui";
 import { Avatar } from "../../components/Avatar";
-import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW } from "../../config";
-import { areaLabel, businessTotals, dayOpen, emptyBusinessInput, formatPostcode, guessArea, longDay, momentLabel, validateBusiness, type BusinessField } from "./business";
+import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE } from "../../config";
+import {
+  areaLabel,
+  businessTotals,
+  chosenPackage,
+  colleaguesFor,
+  dayOpen,
+  emptyBusinessInput,
+  formatPostcode,
+  guessArea,
+  longDay,
+  momentLabel,
+  packageCopy,
+  packageLabel,
+  packageSplit,
+  validateBusiness,
+  type BusinessField
+} from "./business";
 
 /*
  * Zakelijk bestellen: het Google Formulier van Mark als één overzichtelijke pagina.
- * Links drie stappen, rechts (op telefoon onderaan) het overzicht dat meerekent, met de oudjes als knipoog.
+ * Stap 1 begint met de pakketten Brons, Zilver en Goud (of zelf samenstellen), daarna bezorgen en gegevens.
+ * Rechts (op telefoon onderaan) het overzicht dat meerekent, met de oudjes als knipoog.
  * Na het versturen kan de klant met één klik een volgend adres toevoegen; gegevens en aantallen blijven staan.
  */
 
@@ -16,28 +33,34 @@ const field = `${inputClass} min-h-[44px]`;
 
 /** Volgorde van de velden op de pagina: daar springen we heen bij versturen met fouten. */
 const FIELD_ORDER: BusinessField[] = [
-  "withRaisins", "withoutRaisins", "donation", "street", "postalCode", "city", "area", "date", "pickupAgreed",
+  "pakket", "withRaisins", "withoutRaisins", "donation", "street", "postalCode", "city", "area", "date", "pickupAgreed",
   "company", "contact", "phone", "email", "invoiceEmail"
 ];
+
+function StepHead({ n, title, sub, done }: { n: number; title: string; sub: ReactNode; done: boolean }) {
+  return (
+    <header className="flex items-start gap-3">
+      <span
+        aria-hidden="true"
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-full font-serif text-base font-bold tabular-nums ${done ? "bg-kerst-50 text-kerst-ink" : "bg-krent text-meel"}`}
+      >
+        {done ? "✓" : n}
+      </span>
+      <div>
+        <h2 className="font-serif text-xl font-bold leading-tight text-krent">
+          <span className="sr-only">Stap {n}: </span>
+          {title}
+        </h2>
+        <p className="mt-0.5 text-sm text-muted">{sub}</p>
+      </div>
+    </header>
+  );
+}
 
 function Step({ n, title, sub, done, children }: { n: number; title: string; sub: ReactNode; done: boolean; children: ReactNode }) {
   return (
     <Card className="grid gap-5">
-      <header className="flex items-start gap-3">
-        <span
-          aria-hidden="true"
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full font-serif text-base font-bold tabular-nums ${done ? "bg-kerst-50 text-kerst-ink" : "bg-krent text-meel"}`}
-        >
-          {done ? "✓" : n}
-        </span>
-        <div>
-          <h2 className="font-serif text-xl font-bold leading-tight text-krent">
-            <span className="sr-only">Stap {n}: </span>
-            {title}
-          </h2>
-          <p className="mt-0.5 text-sm text-muted">{sub}</p>
-        </div>
-      </header>
+      <StepHead n={n} title={title} sub={sub} done={done} />
       {children}
     </Card>
   );
@@ -62,10 +85,28 @@ function Field({ id, label, optional, hint, error, children }: { id: string; lab
   );
 }
 
-function Counter({ id, label, sub, value, onChange, quick, error }: { id: string; label: ReactNode; sub: ReactNode; value: number; onChange: (n: number) => void; quick: number[]; error?: string }) {
+function Counter({
+  id,
+  label,
+  sub,
+  value,
+  onChange,
+  quick,
+  max = 9990,
+  error
+}: {
+  id: string;
+  label: ReactNode;
+  sub: ReactNode;
+  value: number;
+  onChange: (n: number) => void;
+  quick: number[];
+  max?: number;
+  error?: string;
+}) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
-  const set = (n: number) => onChange(Math.max(0, Math.min(9990, n)));
+  const set = (n: number) => onChange(Math.max(0, Math.min(max, n)));
   const step = "grid h-11 w-11 place-items-center rounded-md bg-vul text-xl font-bold text-krent transition hover:bg-vul-2 active:translate-y-px disabled:opacity-40";
   return (
     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6">
@@ -93,16 +134,18 @@ function Counter({ id, label, sub, value, onChange, quick, error }: { id: string
           onBlur={() => setDraft(String(value))}
           className={`h-11 w-16 rounded-md border bg-papier text-center font-serif text-xl font-bold tabular-nums text-krent focus:border-krent focus:outline-none focus:ring-2 focus:ring-krent/20 ${error ? "border-feest" : "border-lijn-2"}`}
         />
-        <button type="button" className={step} onClick={() => set(value + 10)} aria-label="10 meer">
+        <button type="button" className={step} onClick={() => set(value + 10)} disabled={value >= max} aria-label="10 meer">
           +
         </button>
-        <span className="flex gap-1.5 sm:ml-1">
-          {quick.map((q) => (
-            <button key={q} type="button" className={`${quickButton} min-h-[44px] min-w-[48px] px-2`} onClick={() => set(value + q)}>
-              +{q}
-            </button>
-          ))}
-        </span>
+        {quick.length ? (
+          <span className="flex gap-1.5 sm:ml-1">
+            {quick.map((q) => (
+              <button key={q} type="button" className={`${quickButton} min-h-[44px] min-w-[48px] px-2`} onClick={() => set(value + q)}>
+                +{q}
+              </button>
+            ))}
+          </span>
+        ) : null}
       </div>
       {error ? (
         <p id={`${id}-fout`} className="text-xs font-bold text-feest-ink sm:col-span-2">
@@ -208,18 +251,124 @@ function DayPicker({ days, value, onChange, info, error }: { days: string[]; val
 /** Zeven gouwe ouwen met elk een andere kleur en ander haar naast elkaar. */
 const OUDJES = ["Riet", "Henk", "Ans", "Kees", "Dini", "Wim", "Corrie"];
 
-/** Rijtje oudjes: één per tien oliebollen, de rest als getal. */
-function Oudjes({ count }: { count: number }) {
+/** Rijtje oudjes: één per tien oliebollen, de rest als getal. Met `hop` springen ze een voor een de vloer op. */
+function Oudjes({ count, hop = false }: { count: number; hop?: boolean }) {
   const shown = Math.min(count, 7);
   return (
-    <div className="flex items-center">
+    <span className="flex items-center">
       {Array.from({ length: shown }, (_, i) => (
-        <span key={i} className={i ? "-ml-2" : ""}>
+        <span key={i} className={`${i ? "-ml-2" : ""} ${hop ? "oc-hop" : ""}`} style={hop ? { animationDelay: `${i * 55}ms` } : undefined}>
           <Avatar name={OUDJES[i]} size={30} />
         </span>
       ))}
-      {count > shown ? <span className="-ml-1 rounded-full bg-gouwe-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-gouwe-ink">+{formatNumber(count - shown)}</span> : null}
-    </div>
+      {count > shown ? (
+        <span className={`-ml-1 rounded-full bg-gouwe-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-gouwe-ink ${hop ? "oc-hop" : ""}`} style={hop ? { animationDelay: `${shown * 55}ms` } : undefined}>
+          +{formatNumber(count - shown)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Metaalkleuren van de medailles; net als bij de poppetjes alleen voor deze tekening. */
+const MEDAL: Record<BusinessPackageKey, [string, string, string]> = {
+  brons: ["#e7b184", "#b8743f", "#83491f"],
+  zilver: ["#f4f2ec", "#c9c4b8", "#868072"],
+  goud: ["#f7e6a0", "#dcc05d", "#a3842a"]
+};
+
+/** Medaille aan een lint in feest-rood: Brons, Zilver of Goud. */
+function Medal({ tier, className = "" }: { tier: BusinessPackageKey; className?: string }) {
+  const id = useId().replace(/:/g, "");
+  const [light, base, dark] = MEDAL[tier];
+  return (
+    <svg viewBox="0 0 44 54" width="44" height="54" aria-hidden="true" className={`shrink-0 ${className}`}>
+      <defs>
+        <linearGradient id={`m${id}`} x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor={light} />
+          <stop offset="0.55" stopColor={base} />
+          <stop offset="1" stopColor={dark} />
+        </linearGradient>
+      </defs>
+      <path d="M9 0h10l6 16h-10z" fill="#bf4a30" />
+      <path d="M35 0H25l-6 16h10z" fill="#d05438" />
+      <circle cx="22" cy="35" r="17" fill={`url(#m${id})`} />
+      <circle cx="22" cy="35" r="12.5" fill="none" stroke={light} strokeOpacity="0.75" strokeWidth="1.5" />
+      <path d="M22 26.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" fill={dark} fillOpacity="0.55" />
+    </svg>
+  );
+}
+
+/** Een pakketkaart: eerst de ouderen, dan wat erin zit en voor wie het past. */
+function PackageCard({ pkg, info, active, tip, onPick }: { pkg: BusinessPackage; info: BusinessInfo; active: boolean; tip: boolean; onPick: () => void }) {
+  // Counts the picks, so the little party plays again each time this card is chosen.
+  const [play, setPlay] = useState(0);
+  const copy = packageCopy[pkg.key];
+  const ouderen = Math.floor(pkg.oliebollen / 10);
+  const rows: Array<[string, string]> = [
+    ["Oliebollen", formatNumber(pkg.oliebollen)],
+    ["Past bij", copy.andMore ? `${formatNumber(colleaguesFor(pkg.oliebollen))}+ collega's` : `zo'n ${formatNumber(colleaguesFor(pkg.oliebollen))} collega's`],
+    ["Prijs", `${formatEuro(pkg.oliebollen * info.price)} excl. btw`]
+  ];
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={`${pkg.name}: ${ouderen} ouderen op de dansvloer, ${pkg.oliebollen} oliebollen, ${formatEuro(pkg.oliebollen * info.price)} excl. btw`}
+      onClick={() => {
+        if (!active) setPlay((n) => n + 1);
+        onPick();
+      }}
+      className={`relative flex flex-col gap-4 rounded-kaart bg-papier p-4 text-left transition duration-200 sm:p-5 ${
+        active ? "shadow-zwevend ring-2 ring-krent" : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
+      }`}
+    >
+      {tip ? (
+        <span className="absolute -top-2.5 right-4 -rotate-3 rounded bg-gouwe px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-krent shadow-zacht">Tip van Oma</span>
+      ) : null}
+      <span className="flex items-center gap-3">
+        <Medal key={play} tier={pkg.key} className={play ? "oc-medal" : ""} />
+        <span className="grid gap-0.5">
+          <span className="text-[11px] font-bold uppercase leading-snug tracking-[0.14em] text-muted">{copy.kicker}</span>
+          <span className="font-display text-[34px] uppercase leading-none tracking-wide text-krent">{pkg.name}</span>
+        </span>
+      </span>
+
+      <span className="grid gap-2">
+        <span className="flex items-end gap-2.5">
+          <span className="font-serif text-[46px] font-bold leading-[0.85] tabular-nums text-krent">{ouderen}</span>
+          <span className="text-sm font-bold leading-tight text-krent">
+            ouderen een middag
+            <br />
+            op de dansvloer
+          </span>
+        </span>
+        <span className="oc-floor flex h-11 items-end pb-1.5">
+          <Oudjes key={play} count={ouderen} hop={play > 0} />
+          {play ? <span key={`bol${play}`} className="oc-floor-bol" dangerouslySetInnerHTML={{ __html: OLIEBOL_SVG }} /> : null}
+        </span>
+      </span>
+
+      <span className="text-sm leading-relaxed text-oliebol">{copy.text}</span>
+
+      <span className="grid gap-1 border-t border-lijn pt-3 text-sm">
+        {rows.map(([label, value]) => (
+          <span key={label} className="flex items-baseline justify-between gap-3">
+            <span className="text-muted">{label}</span>
+            <span className="text-right font-bold tabular-nums text-krent">{value}</span>
+          </span>
+        ))}
+      </span>
+
+      <span
+        className={`mt-auto inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold transition ${
+          active ? "bg-krent text-meel" : "bg-vul text-krent"
+        }`}
+      >
+        {active ? "✓ Gekozen" : `Kies ${pkg.name}`}
+      </span>
+    </button>
   );
 }
 
@@ -234,8 +383,18 @@ function Line({ label, value, strong = false, muted = false }: { label: ReactNod
 
 function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: BusinessTotals; info: BusinessInfo }) {
   const short = Math.max(0, info.minimum - totals.oliebollen);
+  const pkg = chosenPackage(input, info);
   return (
     <dl className="grid gap-1.5 text-sm">
+      {input.pakket ? (
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <dt className="text-oliebol">Pakket</dt>
+          <dd className="flex items-center gap-1.5 font-bold text-krent">
+            {pkg ? <Medal tier={pkg.key} className="h-6 w-5" /> : null}
+            {packageLabel(input, info)}
+          </dd>
+        </div>
+      ) : null}
       <Line label="MET krenten" value={formatNumber(input.withRaisins)} />
       <Line label="ZONDER krenten" value={formatNumber(input.withoutRaisins)} />
       <div className="my-1.5 border-t border-lijn" />
@@ -329,7 +488,22 @@ export function BusinessOrderPage() {
     });
   }
 
-  const step1 = !errors.withRaisins && !errors.withoutRaisins && !errors.donation;
+  /** Pakket kiezen: de aantallen worden het pakket, verdeeld 70% MET en 30% ZONDER. */
+  function pickPackage(p: BusinessPackage) {
+    if (chosenPackage(input, info)?.key === p.key) return;
+    setInput((prev) => ({ ...prev, pakket: p.key, ...packageSplit(p.oliebollen) }));
+  }
+
+  /** Zelf samenstellen: de aantallen van het pakket blijven staan als begin. */
+  function composeYourself() {
+    setInput((prev) => ({ ...prev, pakket: "zelf" }));
+    window.setTimeout(() => document.getElementById("f-withRaisins")?.focus({ preventScroll: true }), 30);
+    window.setTimeout(() => document.getElementById("samenstellen")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 30);
+  }
+
+  const pkg = chosenPackage(order, info);
+  const packageTotal = pkg?.oliebollen ?? 0;
+  const step1 = !errors.pakket && !errors.withRaisins && !errors.withoutRaisins && !errors.donation;
   const step2 = !(["street", "postalCode", "city", "area", "date", "pickupAgreed"] as BusinessField[]).some((f) => errors[f]);
   const step3 = !(["company", "contact", "phone", "email", "invoiceEmail"] as BusinessField[]).some((f) => errors[f]);
 
@@ -384,10 +558,13 @@ export function BusinessOrderPage() {
       <section className="grid gap-4 pt-2">
         <div className="grid gap-2">
           <p className={fieldLabel}>Zakelijk bestellen{seasonYear ? ` · seizoen ${seasonYear}` : ""}</p>
-          <h1 className="font-display text-[44px] uppercase leading-[0.95] tracking-wide text-krent sm:text-[56px]">Oliebollen voor de zaak</h1>
+          <h1 className="max-w-3xl font-display text-[40px] uppercase leading-[0.95] tracking-wide text-krent sm:text-[56px]">
+            Trakteer je team, laat ouderen rock 'n rollen
+          </h1>
           <p className="max-w-2xl text-[15px] leading-relaxed text-oliebol">
-            Voor je team, je klanten of de nieuwjaarsborrel. Vers gebakken, bij je bezorgd en achteraf op factuur. En met elke tien oliebollen gaat er
-            een oudere gratis naar een Gouwe Ouwe-avond tegen eenzaamheid.
+            Verse oliebollen op kantoor of bij je borrel, naar het recept van Oma Coby (100). Van elke oliebol gaat de helft naar een speciaal
+            georganiseerde muziekmiddag: livemuziek, dansen en herinneringen voor ouderen die vaak alleen zijn. Elke 10 oliebollen geven een oudere zo'n
+            middag op de dansvloer.
           </p>
         </div>
         <dl className="grid grid-cols-3 gap-3 border-y border-lijn py-3 sm:max-w-2xl">
@@ -414,42 +591,117 @@ export function BusinessOrderPage() {
             void submit();
           }}
         >
-          <Step n={1} title="Hoeveel oliebollen?" sub={`MET of ZONDER krenten, of allebei. Samen minimaal ${info.minimum}, in tientallen.`} done={step1 && totals.oliebollen > 0}>
-            <div className="grid gap-5">
-              <Counter
-                id="f-withRaisins"
-                label="MET krenten"
-                sub="De klassieker."
-                value={input.withRaisins}
-                onChange={(n) => update("withRaisins", n)}
-                quick={[50, 100]}
-                error={shown.withRaisins}
-              />
-              <Counter
-                id="f-withoutRaisins"
-                label="ZONDER krenten"
-                sub="Voor wie liever puur gaat."
-                value={input.withoutRaisins}
-                onChange={(n) => update("withoutRaisins", n)}
-                quick={[50, 100]}
-                error={shown.withoutRaisins}
+          <section className="grid gap-4" aria-labelledby="stap-1-titel">
+            <div id="stap-1-titel">
+              <StepHead
+                n={1}
+                title="Hoeveel ouderen laat je dansen?"
+                sub={`Kies een pakket. Elke 10 oliebollen geven een oudere een middag op de dansvloer. Reken ${BUSINESS_PER_COLLEAGUE} oliebollen per collega.`}
+                done={step1 && totals.oliebollen > 0}
               />
             </div>
-            <div className="grid gap-4 border-t border-lijn pt-5">
-              <Counter
-                id="f-donation"
-                label="Extra doneren"
-                sub={`${formatEuro(info.donationPrice * 10).replace(",00", ",-")} per 10 oliebollen. Die gaan naar ouderen aan de bar en naar organisaties voor minderbedeelden.`}
-                value={input.donation}
-                onChange={(n) => update("donation", n)}
-                quick={[10, 50]}
-                error={shown.donation}
-              />
-              <Check id="f-flyers" checked={input.flyers} onChange={(v) => update("flyers", v)}>
-                <b>Doe er flyers bij</b> <span className="text-muted">· standaard niet, dat scheelt papier</span>
-              </Check>
+            <div id="f-pakket" tabIndex={-1} role="radiogroup" aria-label="Pakket" className="grid gap-4 pt-1 focus:outline-none md:grid-cols-3 md:gap-3 xl:gap-4">
+              {info.packages.map((p, i) => (
+                <PackageCard key={p.key} pkg={p} info={info} active={pkg?.key === p.key} tip={i === 1} onPick={() => pickPackage(p)} />
+              ))}
             </div>
-          </Step>
+            {shown.pakket ? <p className="text-xs font-bold text-feest-ink">! {shown.pakket}</p> : null}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <p className="text-xs leading-relaxed text-muted">
+                Zelfde prijs per oliebol in elk pakket: {formatEuro(info.price)} excl. {Math.round(info.vatRate * 100)}% btw.
+              </p>
+              <button type="button" className={`${secondaryButton} min-h-[44px]`} aria-pressed={input.pakket === "zelf"} onClick={composeYourself}>
+                Zelf samenstellen
+              </button>
+            </div>
+
+            {input.pakket ? (
+              <Card className="grid gap-5">
+                <div id="samenstellen" className="grid scroll-mt-6 gap-5">
+                  {pkg ? (
+                    <>
+                      <div>
+                        <h3 className="font-serif text-lg font-bold leading-tight text-krent">Met of zonder krenten?</h3>
+                        <p className="mt-0.5 text-sm text-muted">
+                          We hebben {pkg.name} alvast verdeeld zoals de meeste bedrijven kiezen. Schuif in tientallen; samen blijft het {formatNumber(packageTotal)}.
+                        </p>
+                      </div>
+                      <Counter
+                        id="f-withRaisins"
+                        label="MET krenten"
+                        sub="De klassieker."
+                        value={input.withRaisins}
+                        onChange={(n) => setInput((prev) => ({ ...prev, withRaisins: n, withoutRaisins: packageTotal - n }))}
+                        quick={[]}
+                        max={packageTotal}
+                        error={shown.withRaisins}
+                      />
+                      <Counter
+                        id="f-withoutRaisins"
+                        label="ZONDER krenten"
+                        sub="Voor wie liever puur gaat."
+                        value={input.withoutRaisins}
+                        onChange={(n) => setInput((prev) => ({ ...prev, withoutRaisins: n, withRaisins: packageTotal - n }))}
+                        quick={[]}
+                        max={packageTotal}
+                        error={shown.withoutRaisins}
+                      />
+                      <p className="text-xs text-muted">
+                        Meer of minder dan {formatNumber(packageTotal)}?{" "}
+                        <button type="button" className={textAction} onClick={composeYourself}>
+                          Stel zelf je aantal samen
+                        </button>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <h3 className="font-serif text-lg font-bold leading-tight text-krent">Zelf samenstellen</h3>
+                        <p className="mt-0.5 text-sm text-muted">MET of ZONDER krenten, of allebei. Samen minimaal {info.minimum}, in tientallen.</p>
+                      </div>
+                      <Counter
+                        id="f-withRaisins"
+                        label="MET krenten"
+                        sub="De klassieker."
+                        value={input.withRaisins}
+                        onChange={(n) => update("withRaisins", n)}
+                        quick={[50, 100]}
+                        error={shown.withRaisins}
+                      />
+                      <Counter
+                        id="f-withoutRaisins"
+                        label="ZONDER krenten"
+                        sub="Voor wie liever puur gaat."
+                        value={input.withoutRaisins}
+                        onChange={(n) => update("withoutRaisins", n)}
+                        quick={[50, 100]}
+                        error={shown.withoutRaisins}
+                      />
+                      {totals.ouderen > 0 ? (
+                        <p className="text-sm text-krent">
+                          Goed voor <b>{formatNumber(totals.ouderen)}</b> {totals.ouderen === 1 ? "oudere" : "ouderen"} op de dansvloer.
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                <div className="grid gap-4 border-t border-lijn pt-5">
+                  <Counter
+                    id="f-donation"
+                    label="Extra doneren"
+                    sub={`${formatEuro(info.donationPrice * 10).replace(",00", ",-")} per 10 oliebollen. Die gaan naar ouderen aan de bar en naar organisaties voor minderbedeelden.`}
+                    value={input.donation}
+                    onChange={(n) => update("donation", n)}
+                    quick={[10, 50]}
+                    error={shown.donation}
+                  />
+                  <Check id="f-flyers" checked={input.flyers} onChange={(v) => update("flyers", v)}>
+                    <b>Doe er flyers bij</b> <span className="text-muted">· standaard niet, dat scheelt papier</span>
+                  </Check>
+                </div>
+              </Card>
+            ) : null}
+          </section>
 
           <div id="stap-2" className="scroll-mt-6">
             <Step n={2} title="Bezorgen of afhalen" sub="Wij bakken, jij zet de koffie klaar." done={step2 && !!input.date}>
@@ -530,7 +782,7 @@ export function BusinessOrderPage() {
                   </div>
 
                   <p className="rounded-md bg-vul px-3.5 py-2.5 text-sm text-oliebol">
-                    <b className="text-krent">Meerdere adressen?</b> Vul per adres een aanvraag in. Na het versturen voeg je met één klik het volgende adres toe; je gegevens
+                    <b className="text-krent">Meerdere adressen?</b> Plaats per adres een bestelling. Na het versturen voeg je met één klik het volgende adres toe; je gegevens
                     blijven staan.
                   </p>
                 </>
@@ -571,7 +823,7 @@ export function BusinessOrderPage() {
               <Field id="f-phone" label="Telefoonnummer" hint="Voor als de bezorger je even nodig heeft." error={shown.phone}>
                 <input id="f-phone" type="tel" className={field} autoComplete="tel" value={input.phone} onChange={(e) => update("phone", e.target.value)} />
               </Field>
-              <Field id="f-email" label="E-mailadres" hint="Hier sturen we de kopie van je aanvraag heen." error={shown.email}>
+              <Field id="f-email" label="E-mailadres" hint="Hier sturen we de bevestiging heen." error={shown.email}>
                 <input id="f-email" type="email" className={field} autoComplete="email" value={input.email} onChange={(e) => update("email", e.target.value)} />
               </Field>
             </div>
@@ -625,7 +877,7 @@ export function BusinessOrderPage() {
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-muted">Elke 10 oliebollen = één oudere gratis naar een Gouwe Ouwe-avond tegen eenzaamheid.</p>
+                <p className="text-sm text-muted">Kies een pakket. Elke 10 oliebollen geven een oudere een middag op de dansvloer.</p>
               )}
             </div>
             {error ? <Notice tone="error">{error}</Notice> : null}
@@ -652,7 +904,7 @@ export function BusinessOrderPage() {
               </Notice>
             ) : null}
             <button type="button" className={`${primaryButton} min-h-[48px] w-full text-[15px]`} disabled={busy} onClick={() => void submit()}>
-              {busy ? "Versturen…" : "Aanvraag versturen"}
+              {busy ? "Versturen…" : totals.oliebollen >= info.minimum ? `Bestel ${formatNumber(totals.oliebollen)} oliebollen` : "Bestelling plaatsen"}
             </button>
             <p className="text-center text-xs leading-relaxed text-muted">
               Je betaalt achteraf op factuur. Je krijgt direct een kopie per mail en wij bevestigen je bestelling.
@@ -675,11 +927,13 @@ export function BusinessOrderPage() {
         }`}
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <div className="leading-tight">
-            <p className="text-xs text-muted">{formatNumber(totals.oliebollen)} oliebollen</p>
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-xs text-muted">
+              {pkg ? pkg.name : `${formatNumber(totals.oliebollen)} oliebollen`} · {formatNumber(totals.ouderen)} ouderen
+            </p>
             <p className="font-serif text-lg font-bold tabular-nums text-krent">{formatEuro(totals.invoice)}</p>
           </div>
-          <button type="button" className={primaryButton} onClick={() => summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+          <button type="button" className={`${primaryButton} shrink-0 whitespace-nowrap`} onClick={() => summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
             Naar overzicht
           </button>
         </div>
@@ -689,6 +943,7 @@ export function BusinessOrderPage() {
 }
 
 const FIELD_NAMES: Record<BusinessField, string> = {
+  pakket: "pakket",
   withRaisins: "aantal oliebollen",
   withoutRaisins: "aantal ZONDER",
   donation: "donatie",
@@ -713,8 +968,10 @@ const FIELD_NAMES: Record<BusinessField, string> = {
 
 function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: BusinessInfo; onAnother: () => void; onRestart: () => void }) {
   const { input, totals } = done;
+  const pkg = chosenPackage(input, info);
   const rows: Array<[string, ReactNode]> = [
-    ["Oliebollen", `${formatNumber(input.withRaisins)} MET · ${formatNumber(input.withoutRaisins)} ZONDER`],
+    ["Pakket", pkg ? <span className="inline-flex items-center gap-1.5 font-bold text-krent"><Medal tier={pkg.key} className="h-6 w-5" />{pkg.name}</span> : packageLabel(input, info)],
+    ["Oliebollen", `${formatNumber(totals.oliebollen)} (${formatNumber(input.withRaisins)} MET · ${formatNumber(input.withoutRaisins)} ZONDER)`],
     ...(input.donation ? ([["Extra gedoneerd", `${formatNumber(input.donation)} oliebollen`]] as Array<[string, ReactNode]>) : []),
     input.fulfilment === "bezorgen"
       ? ["Bezorgen", <>{longDay(input.date)}, {momentLabel[input.moment].toLowerCase()}<br />{input.street}, {input.postalCode} {input.city}</>]
@@ -729,19 +986,22 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
             Bedankt!
           </Sticker>
           <div>
-            <h1 className="font-serif text-[28px] font-bold leading-tight text-krent">Je aanvraag is binnen</h1>
+            <h1 className="font-serif text-[28px] font-bold leading-tight text-krent">
+              {totals.ouderen > 0 ? `Jullie laten ${formatNumber(totals.ouderen)} ouderen rock 'n rollen` : "Je bestelling is binnen"}
+            </h1>
             <p className="mt-1 text-[15px] leading-relaxed text-oliebol">
-              We kijken hem na en mailen je een bevestiging. Een kopie van je aanvraag gaat naar <b className="text-krent">{input.email}</b>.
+              Je bestelling voor {input.company} is binnen. We kijken alles na en bevestigen hem per mail. Een kopie staat al klaar in{" "}
+              <b className="text-krent">{input.email}</b>.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-end justify-between gap-3 border-y border-lijn py-4">
           <div>
-            <p className={fieldLabel}>Aanvraagnummer</p>
+            <p className={fieldLabel}>Bestelnummer</p>
             <p className="font-serif text-3xl font-bold tabular-nums text-krent">{done.id}</p>
           </div>
           {totals.ouderen > 0 ? (
-            <div className="grid justify-items-end gap-1">
+            <div className="grid gap-1 sm:justify-items-end">
               <Oudjes count={totals.ouderen} />
               <p className="text-xs text-muted">
                 Goed voor {formatNumber(totals.ouderen)} {totals.ouderen === 1 ? "oudere" : "ouderen"} op de dansvloer.
@@ -757,8 +1017,8 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
             </div>
           ))}
         </dl>
-        {done.warning ? <Notice tone="warning">{done.warning} Bewaar je aanvraagnummer; we nemen contact met je op.</Notice> : null}
-        {backend.kind === "demo" ? <Notice tone="info">Demo: er is geen mail verstuurd. De aanvraag staat bij beheer onder Zakelijk.</Notice> : null}
+        {done.warning ? <Notice tone="warning">{done.warning} Bewaar je bestelnummer; we nemen contact met je op.</Notice> : null}
+        {backend.kind === "demo" ? <Notice tone="info">Demo: er is geen mail verstuurd. De bestelling staat bij beheer onder Zakelijk.</Notice> : null}
         <div className="flex flex-wrap gap-2">
           {input.fulfilment === "bezorgen" ? (
             <button type="button" className={primaryButton} onClick={onAnother}>
@@ -766,7 +1026,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
             </button>
           ) : null}
           <button type="button" className={ghostButton} onClick={onRestart}>
-            Nieuwe aanvraag
+            Nieuwe bestelling
           </button>
         </div>
       </Card>
@@ -775,7 +1035,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
         <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4" href={`mailto:${info.email}`}>
           {info.email}
         </a>{" "}
-        en noem je aanvraagnummer.
+        en noem je bestelnummer.
       </p>
     </div>
   );

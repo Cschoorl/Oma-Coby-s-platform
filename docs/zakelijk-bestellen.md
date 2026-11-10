@@ -7,7 +7,12 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 
 Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon onderaan, met het totaal in een balk).
 
-1. **Hoeveel oliebollen?** MET en ZONDER in tientallen, samen minimaal 50; extra doneren (€ 20 per 10); flyers (standaard uit).
+1. **Hoeveel ouderen laat je dansen?** Drie pakketkaarten: **Brons** (50 oliebollen, 5 ouderen, zo'n 25 collega's),
+   **Zilver** (150, 15 ouderen, zo'n 75 collega's, "Tip van Oma") en **Goud** (500, 50 ouderen, 250+ collega's). De
+   richtlijn is 2 oliebollen per collega. Per kaart: het aantal ouderen groot, de oliebollen, het aantal collega's en de prijs
+   excl. btw. Een pakket kiezen verdeelt het aantal alvast 70% MET en 30% ZONDER (in tientallen); die verdeling schuif je zelf
+   aan, het totaal blijft. **Zelf samenstellen** (onder de kaarten, of "Stel zelf je aantal samen") geeft de vrije aantallen:
+   MET en ZONDER in tientallen, samen minimaal 50. Daarna extra doneren (€ 20 per 10) en flyers (standaard uit).
 2. **Bezorgen of afhalen.**
    - Bezorgen: adres, bezorgkosten (Amsterdam/Aalsmeer € 10, daarbuiten € 25; alvast gekozen op basis van de plaats),
      bezorgdag met dagknoppen (te snel = doorgestreept, minimaal 24 uur vóór 9:00) en bezorgmoment
@@ -16,12 +21,27 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
 3. **Je gegevens.** Onderneming, contactpersoon, telefoon, e-mail; factuur naar hetzelfde of een ander adres;
    factuuradres, referentie/grootboeknummer en opmerking zijn optioneel.
 
-Het overzicht toont oliebollen × € 1,83, bezorgkosten en toeslag, subtotaal excl. btw, 9% btw en het totaal; een donatie
-staat er los onder ("Op je factuur"). De knipoog: per 10 oliebollen één oudere gratis naar een Gouwe Ouwe-avond, met een
-rijtje oudjes. Bij versturen met fouten springt de pagina naar het eerste veld en noemt het overzicht wat er nog mist.
+Het overzicht toont het pakket, oliebollen × € 2,50, bezorgkosten en toeslag, subtotaal excl. btw, 9% btw en het totaal;
+een donatie staat er los onder ("Op je factuur"). Het verhaal: van elke oliebol gaat de helft naar een speciaal
+georganiseerde muziekmiddag, en elke 10 oliebollen geven een oudere zo'n middag op de dansvloer (naar beneden afgerond).
+Bij versturen met fouten springt de pagina naar het eerste veld en noemt het overzicht wat er nog mist.
 
-Na versturen: bedankt-sticker, rollende oliebol, aanvraagnummer (`Z26-0001`) en een samenvatting. **Nog een adres
-toevoegen** houdt gegevens en aantallen vast en maakt alleen adres en dag leeg (één aanvraag per adres, zoals in het formulier).
+Na versturen: bedankt-sticker, "Jullie laten 15 ouderen rock 'n rollen", rollende oliebol, bestelnummer (`Z26-0001`) en een
+samenvatting. **Nog een adres toevoegen** houdt gegevens en aantallen vast en maakt alleen adres en dag leeg (één bestelling
+per adres, zoals in het formulier).
+
+## De bevestigingsmail
+
+Direct na versturen krijgt de klant een opgemaakte mail (`sendBusinessMails_` in `apps-script/Code.gs`), onderwerp
+"Gelukt: jullie laten 15 ouderen dansen (bestelling Z26-0002)". Van boven naar beneden: logo, bedankt-sticker en
+"Jullie laten 15 ouderen rock 'n rollen", het blok met de oudjes en het verhaal van de muziekmiddag, het bestelnummer,
+de bestelling (met pakket), bezorgen of afhalen, de kosten, de opmerking, "Wat gebeurt er nu?" in drie stappen, een knop
+om te mailen over dit bestelnummer, een groet van Oma Coby en het team, en onderaan de stichting met KvK-nummer. Antwoorden
+gaat naar info@. Info@ (of `zakelijk_melding_naar`) krijgt een korte melding in platte tekst.
+
+Voorbeelden: [`docs/mail-zakelijke-bevestiging.html`](mail-zakelijke-bevestiging.html) (Zilver, bezorgen, met donatie
+en opmerking) en [`docs/mail-zakelijke-bevestiging-afhalen.html`](mail-zakelijke-bevestiging-afhalen.html). Opnieuw maken
+na een wijziging in de mail: `node apps-script/mail-preview.mjs`.
 
 ## Beheer: pagina Zakelijk
 
@@ -36,7 +56,7 @@ toevoegen** houdt gegevens en aantallen vast en maakt alleen adres en dag leeg (
 
 | Tabblad | Wat |
 |---|---|
-| `Zakelijke aanvragen` | één rij per aanvraag, gevuld door het script; status via de pagina Zakelijk |
+| `Zakelijke aanvragen` | één rij per bestelling, gevuld door het script; status via de pagina Zakelijk. Kolom `pakket`: Brons, Zilver, Goud of Zelf samengesteld (leeg bij bestellingen van vóór de pakketten) |
 | `Zakelijke dagen` | de dagen op het formulier (`datum`, `soort` bezorgen/afhalen, `tijd`, `open` ja/nee) |
 | `Instellingen` | prijzen en mailadressen, sleutels `zakelijk_*` (zie `apps-script/README.md`) |
 
@@ -50,12 +70,18 @@ en in Max' Google Drive in de map *Oma Coby – Zakelijk bestellen*.
 
 `businessTotals` in `src/features/business/business.ts` en `businessTotals_` in `apps-script/Code.gs` rekenen hetzelfde;
 het script rekent bij versturen alles opnieuw na en controleert dezelfde regels (`validateBusiness` / `validateBusiness_`).
-Prijzen en dagen staan standaard in `BUSINESS_DEFAULTS` (`src/config.ts`) en `CONFIG.BUSINESS` (`Code.gs`).
+Prijzen, pakketten en dagen staan standaard in `BUSINESS_DEFAULTS` (`src/config.ts`) en `CONFIG.BUSINESS` (`Code.gs`).
+Een pakket blijft alleen staan zolang MET + ZONDER precies het pakketaantal is (`chosenPackage` / `businessPackage_`);
+anders is het "Zelf samengesteld".
 
 Rekenvoorbeeld: 120 MET + 80 ZONDER, bezorgen in Amsterdam vóór 10:00, 20 gedoneerd →
-200 × € 1,83 = € 366,00 + € 10 + € 10 = € 386,00 excl. btw, + € 34,74 btw = € 420,74, + € 40 donatie = € 460,74 op de factuur.
+200 × € 2,50 = € 500,00 + € 10 + € 10 = € 520,00 excl. btw, + € 46,80 btw = € 566,80, + € 40 donatie = € 606,80 op de factuur.
 
 ## Nog afstemmen met Mark
+
+- Besteltermijn: in het bouwplan "tot 12:00 drie dagen vóór de bezorgdag"; het formulier rekent nu nog met minimaal 24 uur
+  vóór 9:00 (`zakelijk_uren_vooraf`).
+- Extra's per pakket (zoals een vermelding of een bedankkaart bij Goud) staan er nog niet in; eerst bevestigen.
 
 - In het formulier staan de afhaaldagen als "Dinsdag 30" en "Woensdag 31 december"; in 2026 zijn dat woensdag en donderdag.
 - Of de donatie zonder btw op de factuur komt (nu: aparte regel, buiten de btw).

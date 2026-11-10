@@ -29,7 +29,7 @@ export const packageCopy: Record<BusinessPackageKey, { perks: string[] }> = {
     perks: ["LinkedIn-badge met een kant-en-klare post", "Jullie logo op de wall of fame", "Oma Coby's Oliebal (limited edition) voor in de kerstboom"]
   },
   goud: {
-    perks: ["Uitnodiging voor de muziekmiddag zelf", "Foto of filmpje van jullie middag", "Podiumplek op de wall of fame"]
+    perks: ["Uitnodiging voor een muziekmiddag", "Foto of kort filmpje van de middag die jullie mede mogelijk hebben gemaakt", "Ereplek op de wall of fame", "Bezorging door heel Nederland"]
   },
   // Een muziekmiddag adopteren: alles van Feestpartner, plus de middag zelf.
   middag60: {

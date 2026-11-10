@@ -161,8 +161,8 @@ export const LABEL_SIZE = { name: "DYMO 99014", widthMm: 101, heightMm: 54 };
 
 /*
  * Zakelijk bestellen (#/bestellen), zoals in het Google Formulier van Mark voor 2026.
- * De Sheet kan alles overschrijven: prijzen in het tabblad Instellingen (zakelijk_prijs, …) en de dagen
- * in het tabblad Zakelijke dagen. Zie apps-script/README.md.
+ * De Sheet kan bijna alles overschrijven: bedragen en aantallen in het tabblad Instellingen (zakelijk_minimum, …)
+ * en de dagen in het tabblad Zakelijke dagen. De prijs per oliebol niet: die volgt het bouwplan. Zie apps-script/README.md.
  */
 export const BUSINESS_DEFAULTS: BusinessInfo = {
   // Uit het bouwplan van november: €2,50 per bol excl. btw, op elk niveau dezelfde prijs.
@@ -172,7 +172,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   fees: { regio: 10, buiten: 25 },
   surcharges: { regulier: 0, voor10: 10, voor9: 15 },
   donationPrice: 2,
-  leadHours: 24,
+  // Bestellen kan tot en met de dag vóór de bezorgdag.
+  leadDays: 1,
   deliveryDays: [
     ...[14, 15, 16, 17, 18, 21, 22, 28, 29, 30, 31].map((d) => `${SEASON_YEAR}-12-${String(d).padStart(2, "0")}`),
     ...[4, 5, 6, 7, 8].map((d) => `${SEASON_YEAR + 1}-01-0${d}`)
@@ -182,6 +183,7 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
     { date: `${SEASON_YEAR}-12-31`, time: "14:00–16:00" }
   ],
   email: "info@omacobysoliebollenbar.nl",
+  phone: "06 45 44 35 09",
   // De ladder uit het bouwplan (50, 150 en 500 oliebollen); in de Sheet te wijzigen via Instellingen.
   packages: [
     { key: "brons", name: "Brons", oliebollen: 50 },

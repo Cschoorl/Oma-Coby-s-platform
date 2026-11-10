@@ -127,11 +127,13 @@ in de plaats ervan delen.
 - **Instellingen** (`sleutel`, `waarde`):
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
-  - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_prijs` (2,50), `zakelijk_btw` (9),
+  - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_btw` (9),
     `zakelijk_minimum` (50), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_toeslag_voor_10` (10),
-    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_uren_vooraf` (24), `zakelijk_pakket_brons` (50),
-    `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500), `zakelijk_email` en `zakelijk_melding_naar`.
-    Let op: staat `zakelijk_prijs` nog op 1,83, dan geldt die prijs en niet de 2,50 uit het bouwplan.
+    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_dagen_vooraf` (1 = bestellen tot en met de dag ervoor),
+    `zakelijk_pakket_brons` (50), `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500), `zakelijk_email`,
+    `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar`.
+    De prijs per oliebol (€ 2,50, uit het bouwplan) staat vast in `CONFIG.BUSINESS.price`; een regel `zakelijk_prijs` in
+    Instellingen telt niet meer mee. De oude `zakelijk_uren_vooraf` ook niet.
   - De bevestigingsmail van een zakelijke bestelling is opgemaakt (HTML, met een tekstversie erbij). De plaatjes komen uit
     `public/mail` op de GitHub Pages-site (`CONFIG.BUSINESS.mailImages`) en gaan als bijlage in de mail mee, zodat ze ook
     zonder "afbeeldingen laden" te zien zijn. Lukt het ophalen niet, dan gaat de mail zonder plaatjes. Voorbeeld bekijken:

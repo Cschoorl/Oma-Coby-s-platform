@@ -15,7 +15,7 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
    MET en ZONDER in tientallen, samen minimaal 50. Daarna extra doneren (€ 20 per 10) en flyers (standaard uit).
 2. **Bezorgen of afhalen.**
    - Bezorgen: adres, bezorgkosten (Amsterdam/Aalsmeer € 10, daarbuiten € 25; alvast gekozen op basis van de plaats),
-     bezorgdag met dagknoppen (te snel = doorgestreept, minimaal 24 uur vóór 9:00) en bezorgmoment
+     bezorgdag met dagknoppen (te snel = doorgestreept; bestellen kan tot en met de dag ervoor) en bezorgmoment
      (9:00–12:30, vóór 10:00 + € 10, vóór 9:00 + € 15).
    - Afhalen: alleen na overleg met info@, dus met een vinkje "afgestemd"; woensdag 30 of donderdag 31 december, 14:00–16:00.
 3. **Je gegevens.** Onderneming, contactpersoon, telefoon, e-mail; factuur naar hetzelfde of een ander adres;
@@ -37,7 +37,8 @@ Direct na versturen krijgt de klant een opgemaakte mail (`sendBusinessMails_` in
 "Jullie laten 15 ouderen rock 'n rollen", het blok met de oudjes en het verhaal van de muziekmiddag, het bestelnummer,
 de bestelling (met pakket), bezorgen of afhalen, de kosten, de opmerking, "Wat gebeurt er nu?" in drie stappen, een knop
 om te mailen over dit bestelnummer, een groet van Oma Coby en het team, en onderaan de stichting met KvK-nummer. Antwoorden
-gaat naar info@. Info@ (of `zakelijk_melding_naar`) krijgt een korte melding in platte tekst.
+gaat naar info@; voor vragen staat ook het telefoonnummer van de stichting erin (06 45 44 35 09, `zakelijk_telefoon`).
+Info@ (of `zakelijk_melding_naar`) krijgt een korte melding in platte tekst.
 
 Voorbeelden: [`docs/mail-zakelijke-bevestiging.html`](mail-zakelijke-bevestiging.html) (Zilver, bezorgen, met donatie
 en opmerking) en [`docs/mail-zakelijke-bevestiging-afhalen.html`](mail-zakelijke-bevestiging-afhalen.html). Opnieuw maken
@@ -70,6 +71,8 @@ en in Max' Google Drive in de map *Oma Coby – Zakelijk bestellen*.
 
 `businessTotals` in `src/features/business/business.ts` en `businessTotals_` in `apps-script/Code.gs` rekenen hetzelfde;
 het script rekent bij versturen alles opnieuw na en controleert dezelfde regels (`validateBusiness` / `validateBusiness_`).
+De prijs per oliebol (€ 2,50) volgt het bouwplan en staat vast in het script; Instellingen kan hem niet overschrijven.
+Bestellen kan tot en met de dag vóór de bezorg- of afhaaldag (`zakelijk_dagen_vooraf`, standaard 1; afgestemd met Mark).
 Prijzen, pakketten en dagen staan standaard in `BUSINESS_DEFAULTS` (`src/config.ts`) en `CONFIG.BUSINESS` (`Code.gs`).
 Een pakket blijft alleen staan zolang MET + ZONDER precies het pakketaantal is (`chosenPackage` / `businessPackage_`);
 anders is het "Zelf samengesteld".
@@ -79,8 +82,6 @@ Rekenvoorbeeld: 120 MET + 80 ZONDER, bezorgen in Amsterdam vóór 10:00, 20 gedo
 
 ## Nog afstemmen met Mark
 
-- Besteltermijn: in het bouwplan "tot 12:00 drie dagen vóór de bezorgdag"; het formulier rekent nu nog met minimaal 24 uur
-  vóór 9:00 (`zakelijk_uren_vooraf`).
 - Extra's per pakket (zoals een vermelding of een bedankkaart bij Goud) staan er nog niet in; eerst bevestigen.
 
 - In het formulier staan de afhaaldagen als "Dinsdag 30" en "Woensdag 31 december"; in 2026 zijn dat woensdag en donderdag.

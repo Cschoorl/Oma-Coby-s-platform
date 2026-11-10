@@ -13,6 +13,7 @@ import {
   emptyBusinessInput,
   formatPostcode,
   guessArea,
+  leadText,
   longDay,
   momentLabel,
   packageCopy,
@@ -224,7 +225,7 @@ function DayPicker({ days, value, onChange, info, error }: { days: string[]; val
                     role="radio"
                     aria-checked={active}
                     aria-label={`${longDay(d)}${open ? "" : " (te snel)"}`}
-                    title={open ? longDay(d) : `Te snel: bestel minimaal ${info.leadHours} uur van tevoren`}
+                    title={open ? longDay(d) : `Te snel: bestel uiterlijk ${leadText(info)}`}
                     disabled={!open}
                     onClick={() => onChange(d)}
                     className={`grid min-h-[52px] min-w-[52px] place-items-center rounded-md px-2 py-1.5 leading-none transition active:translate-y-px disabled:cursor-not-allowed disabled:line-through disabled:opacity-40 ${
@@ -242,7 +243,7 @@ function DayPicker({ days, value, onChange, info, error }: { days: string[]; val
           </div>
         );
       })}
-      {anyClosed ? <p className="text-xs text-muted">Doorgestreept: te snel, we hebben minimaal {info.leadHours} uur nodig.</p> : null}
+      {anyClosed ? <p className="text-xs text-muted">Doorgestreept: te snel. Bestellen kan tot en met {leadText(info)}.</p> : null}
       {error ? <p className="text-xs font-bold text-feest-ink">! {error}</p> : null}
     </div>
   );
@@ -1034,6 +1035,10 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
         Vragen? Mail{" "}
         <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4" href={`mailto:${info.email}`}>
           {info.email}
+        </a>{" "}
+        of bel{" "}
+        <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4" href={`tel:${info.phone.replace(/\s/g, "")}`}>
+          {info.phone}
         </a>{" "}
         en noem je bestelnummer.
       </p>

@@ -78,11 +78,11 @@ const CONFIG = {
   MAIL_SENDER_NAME: "Oma Coby's Oliebollenbar",
   /**
    * Zakelijk bestellen (#/bestellen). Standaardprijzen en -dagen; overschrijf ze in het tabblad
-   * Instellingen (zakelijk_prijs, zakelijk_minimum, …) en in het tabblad Zakelijke dagen.
+   * Instellingen (zakelijk_minimum, zakelijk_dagen_vooraf, …; de prijs niet) en in het tabblad Zakelijke dagen.
    * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
    */
   BUSINESS: {
-    /** Per oliebol, excl. btw (bouwplan 2026). */
+    /** Per oliebol, excl. btw: de prijs uit het bouwplan 2026 is leidend, Instellingen kan hem niet overschrijven. */
     price: 2.5,
     /** Pakketten in stap 1: [sleutel, naam, oliebollen]. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud. */
     packages: [['brons', 'Brons', 50], ['zilver', 'Zilver', 150], ['goud', 'Goud', 500]],
@@ -91,11 +91,14 @@ const CONFIG = {
     fees: { regio: 10, buiten: 25 },
     surcharges: { regulier: 0, voor10: 10, voor9: 15 },
     donationPrice: 2,
-    leadHours: 24,
+    /** Bestellen kan tot en met zo veel dagen vóór de leverdag (1 = tot en met de dag ervoor). */
+    leadDays: 1,
     deliveryDays: ['2026-12-14', '2026-12-15', '2026-12-16', '2026-12-17', '2026-12-18', '2026-12-21', '2026-12-22', '2026-12-28',
       '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-04', '2027-01-05', '2027-01-06', '2027-01-07', '2027-01-08'],
     pickupDays: [['2026-12-30', '14:00–16:00'], ['2026-12-31', '14:00–16:00']],
     email: 'info@omacobysoliebollenbar.nl',
+    /** Telefoonnummer van de stichting, voor vragen. Instelling: zakelijk_telefoon. */
+    phone: '06 45 44 35 09',
     /** Wie een mail krijgt bij een nieuwe aanvraag (leeg = niemand). Instelling: zakelijk_melding_naar. */
     notify: 'info@omacobysoliebollenbar.nl',
     /** Plaatjes voor de bevestigingsmail (public/mail op de GitHub Pages-site). Leeg = een mail zonder plaatjes. */
@@ -1696,18 +1699,19 @@ function businessInfo_() {
   const pickup = days.filter(function (r) { return String(r.soort).trim().toLowerCase() === 'afhalen'; })
     .map(function (r) { return { date: iso(r), time: String(r.tijd || '') }; }).filter(function (d) { return d.date; });
   return {
-    price: number('zakelijk_prijs', b.price),
+    price: b.price,
     vatRate: number('zakelijk_btw', b.vatPercent) / 100,
     minimum: number('zakelijk_minimum', b.minimum),
     fees: { regio: number('zakelijk_bezorgen_regio', b.fees.regio), buiten: number('zakelijk_bezorgen_buiten', b.fees.buiten) },
     surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_9', b.surcharges.voor9) },
     donationPrice: number('zakelijk_donatie', b.donationPrice),
-    leadHours: number('zakelijk_uren_vooraf', b.leadHours),
+    leadDays: number('zakelijk_dagen_vooraf', b.leadDays),
     // An emptied tab means: no days yet, use the defaults.
     deliveryDays: days.length ? delivery : b.deliveryDays,
     pickupDays: days.length ? pickup : b.pickupDays.map(function (p) { return { date: p[0], time: p[1] }; }),
     packages: b.packages.map(function (p) { return { key: p[0], name: p[1], oliebollen: number('zakelijk_pakket_' + p[0], p[2]) }; }),
-    email: String(settings.zakelijk_email || b.email)
+    email: String(settings.zakelijk_email || b.email),
+    phone: String(settings.zakelijk_telefoon || b.phone)
   };
 }
 
@@ -1741,7 +1745,10 @@ function validateBusiness_(i, info) {
   const email = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (i.withRaisins % 10 || i.withoutRaisins % 10 || i.donation % 10) return 'Kies de aantallen in tientallen.';
   if (i.withRaisins + i.withoutRaisins < info.minimum) return 'Bestel samen minimaal ' + info.minimum + ' oliebollen.';
-  const open = new Date(i.date + 'T09:00:00').getTime() - Date.now() >= info.leadHours * 3600000;
+  // Same as dayOpen in business.ts: open until midnight, leadDays - 1 days before the day itself.
+  const deadline = new Date(i.date + 'T00:00:00');
+  deadline.setDate(deadline.getDate() - (info.leadDays - 1));
+  const open = Date.now() < deadline.getTime();
   if (i.fulfilment === 'bezorgen') {
     if (!i.street || !i.city || !/^\d{4}\s?[A-Z]{2}$/.test(i.postalCode)) return 'Vul het bezorgadres helemaal in.';
     if (!i.area) return 'Kies waar we bezorgen.';
@@ -1750,7 +1757,7 @@ function validateBusiness_(i, info) {
     if (!i.pickupAgreed) return 'Afhalen kan alleen na overleg. Mail eerst naar ' + info.email + '.';
     if (!info.pickupDays.some(function (d) { return d.date === i.date; })) return 'Op deze dag kun je niet afhalen. Kies een andere dag.';
   }
-  if (!open) return 'Deze dag is te snel: bestel minimaal ' + info.leadHours + ' uur van tevoren.';
+  if (!open) return 'Deze dag is te snel: bestel uiterlijk ' + (info.leadDays === 1 ? 'de dag' : info.leadDays + ' dagen') + ' van tevoren.';
   if (!i.company) return 'Vul de naam van je onderneming in.';
   if (!i.contact) return 'Vul de naam van de contactpersoon in.';
   if (i.phone.replace(/\D/g, '').length < 10) return 'Vul een geldig telefoonnummer in.';
@@ -1901,7 +1908,7 @@ function businessMailData_(id, i, t, info) {
   if (t.donation) costs.push(['Extra donatie, ' + numberNl_(i.donation) + ' oliebollen', euroNl_(t.donation), ''], ['Op je factuur', euroNl_(t.invoice), 'total']);
   const when = day(i.date);
   return {
-    id: id, company: i.company, firstName: i.contact.split(' ')[0], email: i.email, contactEmail: info.email,
+    id: id, company: i.company, firstName: i.contact.split(' ')[0], email: i.email, contactEmail: info.email, contactPhone: info.phone,
     ouderen: t.ouderen, oliebollen: t.oliebollen, donation: i.donation, pkg: pkg, bezorgen: bezorgen,
     order: [
       ['MET krenten', numberNl_(i.withRaisins)],
@@ -2029,8 +2036,9 @@ function businessMailHtml_(d, src) {
     // Questions
     rule +
     '<tr><td style="padding:32px 0 0;"><p style="margin:0 0 18px;font-family:' + TEXT + ';font-size:15px;line-height:24px;color:' + C.oliebol + ';">' +
-    '<b style="color:' + C.krent + ';">Iets aanpassen of een vraag?</b> Beantwoord deze mail of mail naar ' +
-    '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.krent + ';font-weight:bold;">' + e(d.contactEmail) + '</a> en noem je bestelnummer.</p>' +
+    '<b style="color:' + C.krent + ';">Iets aanpassen of een vraag?</b> Beantwoord deze mail, mail naar ' +
+    '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.krent + ';font-weight:bold;">' + e(d.contactEmail) + '</a> of bel ' +
+    '<a href="tel:' + e(d.contactPhone.replace(/\s/g, '')) + '" style="color:' + C.krent + ';font-weight:bold;white-space:nowrap;">' + e(d.contactPhone) + '</a>, en noem je bestelnummer.</p>' +
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="' + C.krent + '" style="border-radius:6px;">' +
     '<a href="mailto:' + e(d.contactEmail) + '?subject=' + encodeURIComponent('Bestelling ' + d.id) + '" style="display:inline-block;padding:13px 22px;font-family:' + TEXT + ';font-size:15px;line-height:20px;font-weight:bold;color:' + C.meel + ';text-decoration:none;border-radius:6px;">Mail ons over ' + e(d.id) + '</a>' +
     '</td></tr></table></td></tr>' +
@@ -2048,6 +2056,7 @@ function businessMailHtml_(d, src) {
     '<tr><td align="center" style="padding:28px 12px 0;">' + img('oliebol', 24, 24, '', 'margin:0 auto 12px;') +
     '<p style="margin:0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol · KvK 95662391<br>' +
     '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.muted + ';">' + e(d.contactEmail) + '</a> · ' +
+    '<a href="tel:' + e(d.contactPhone.replace(/\s/g, '')) + '" style="color:' + C.muted + ';white-space:nowrap;">' + e(d.contactPhone) + '</a> · ' +
     '<a href="https://www.omacobysoliebollenbar.nl" style="color:' + C.muted + ';">omacobysoliebollenbar.nl</a></p>' +
     '<p style="margin:10px 0 0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Je krijgt deze mail omdat je zakelijk bij ons bestelde.</p>' +
     '</td></tr>' +
@@ -2083,7 +2092,7 @@ function businessMailText_(d) {
     'WAT GEBEURT ER NU?'
   ]).concat(d.steps.map(function (s, n) { return (n + 1) + '. ' + s[0] + ' ' + s[1]; })).concat([
     '',
-    'Iets aanpassen of een vraag? Beantwoord deze mail of mail naar ' + d.contactEmail + ' en noem je bestelnummer.',
+    'Iets aanpassen of een vraag? Beantwoord deze mail, mail naar ' + d.contactEmail + ' of bel ' + d.contactPhone + ', en noem je bestelnummer.',
     '',
     'Warme groet,',
     'Oma Coby (100) en het hele team',

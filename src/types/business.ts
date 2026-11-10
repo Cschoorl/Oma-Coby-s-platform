@@ -41,12 +41,14 @@ export interface BusinessInfo {
   surcharges: Record<BusinessMoment, number>;
   /** Euro per extra gedoneerde oliebol. */
   donationPrice: number;
-  /** Zo veel uur vóór 9:00 op de leverdag moet de bestelling binnen zijn. */
-  leadHours: number;
+  /** Bestellen kan tot en met zo veel dagen vóór de leverdag (1 = tot en met de dag ervoor). */
+  leadDays: number;
   /** YYYY-MM-DD */
   deliveryDays: string[];
   pickupDays: PickupDay[];
   email: string;
+  /** Telefoonnummer van de stichting, voor vragen. */
+  phone: string;
   /** Brons, Zilver en Goud, van klein naar groot. */
   packages: BusinessPackage[];
 }

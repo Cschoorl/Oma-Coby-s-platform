@@ -103,10 +103,16 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   return { oliebollen, bollen, delivery, surcharge, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: Math.floor(oliebollen / 10) };
 }
 
-/** Een leverdag kan nog als de bestelling minstens leadHours vóór 9:00 op die dag binnen is. */
+/** Een leverdag kan nog tot en met leadDays dagen ervoor (1 = tot middernacht van de dag ervoor). */
 export function dayOpen(date: string, info: BusinessInfo, now = new Date()): boolean {
-  const start = new Date(`${date}T09:00:00`);
-  return start.getTime() - now.getTime() >= info.leadHours * 3600000;
+  const deadline = new Date(`${date}T00:00:00`);
+  deadline.setDate(deadline.getDate() - (info.leadDays - 1));
+  return now.getTime() < deadline.getTime();
+}
+
+/** "de dag van tevoren", "2 dagen van tevoren" */
+export function leadText(info: BusinessInfo): string {
+  return info.leadDays === 1 ? "de dag van tevoren" : `${info.leadDays} dagen van tevoren`;
 }
 
 /** Amsterdam en Aalsmeer zijn de regio; andere plaatsen buiten. Leeg als we het niet weten. */
@@ -137,12 +143,12 @@ export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, 
     if (!input.area) e.area = "Kies waar we bezorgen.";
     if (!input.date) e.date = "Kies een bezorgdag.";
     else if (!info.deliveryDays.includes(input.date)) e.date = "Op deze dag bezorgen we niet. Kies een andere dag.";
-    else if (!dayOpen(input.date, info, now)) e.date = `Deze dag is te snel: bestel minimaal ${info.leadHours} uur van tevoren.`;
+    else if (!dayOpen(input.date, info, now)) e.date = `Deze dag is te snel: bestel uiterlijk ${leadText(info)}.`;
   } else {
     if (!input.pickupAgreed) e.pickupAgreed = `Afhalen kan alleen na overleg. Mail eerst naar ${info.email}.`;
     if (!input.date) e.date = "Kies een afhaalmoment.";
     else if (!info.pickupDays.some((d) => d.date === input.date)) e.date = "Op deze dag kun je niet afhalen. Kies een andere dag.";
-    else if (!dayOpen(input.date, info, now)) e.date = `Dit moment is te snel: bestel minimaal ${info.leadHours} uur van tevoren.`;
+    else if (!dayOpen(input.date, info, now)) e.date = `Dit moment is te snel: bestel uiterlijk ${leadText(info)}.`;
   }
   if (!input.company.trim()) e.company = "Vul de naam van je onderneming in.";
   if (!input.contact.trim()) e.contact = "Vul de naam van de contactpersoon in.";

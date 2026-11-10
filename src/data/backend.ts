@@ -25,7 +25,7 @@ import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus } from "../types/business";
 import { BUSINESS_DEFAULTS } from "../config";
-import { areaFor, businessToOrder, businessTotals, chosenPackage, momentLabel, validateBusiness } from "../features/business/business";
+import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
@@ -573,11 +573,7 @@ function writeStore(store: DemoStore) {
 
 /** Fictitious requests from the order form, so the Zakelijk page has something to show. */
 function demoBusiness(): BusinessOrder[] {
-  const base: BusinessOrderInput = {
-    pakket: "zelf", withRaisins: 0, withoutRaisins: 0, donation: 0, flyers: false, fulfilment: "bezorgen", area: "regio", moment: "regulier", date: "",
-    pickupAgreed: false, street: "", postalCode: "", city: "", company: "", contact: "", phone: "", email: "", invoiceEmail: "",
-    invoiceAddress: "", reference: "", remark: ""
-  };
+  const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "regio" };
   const rows: Array<[string, string, BusinessOrder["status"], Partial<BusinessOrderInput>]> = [
     ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412" }],
     ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", pakket: "zilver", withRaisins: 110, withoutRaisins: 40, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
@@ -665,7 +661,8 @@ function createDemoBackend(notice?: string): Backend {
   async function allOrders(store: DemoStore): Promise<Order[]> {
     const sheetOrders = [...(await getOrders()), ...store.createdOrders];
     const known = new Set(sheetOrders.map((o) => o.id));
-    return [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id)).map(businessToOrder)].map((o) => applyOrderEdits(o, store.orderEdits[o.id]));
+    // A donation without oliebollen has nothing to pack or deliver.
+    return [...sheetOrders, ...store.business.filter((b) => b.status === "bevestigd" && !known.has(b.id) && b.totals.oliebollen > 0).map(businessToOrder)].map((o) => applyOrderEdits(o, store.orderEdits[o.id]));
   }
 
   function mutate(fn: (store: DemoStore) => void) {
@@ -1203,8 +1200,16 @@ function createDemoBackend(notice?: string): Backend {
         const { website: _, ...rest } = input;
         // Same as the Apps Script: the package only while the counts still add up to it.
         // The delivery area follows from the address, whatever the browser sent.
-        const area = rest.fulfilment === "bezorgen" ? areaFor(rest.postalCode, rest.city, BUSINESS_DEFAULTS.regionPostcodes) : "";
-        const clean = { ...rest, area, pakket: chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? ("zelf" as const) };
+        const only = donationOnly(rest);
+        const area = only ? "" : areaFor(rest.postalCode, rest.city, BUSINESS_DEFAULTS.regionPostcodes);
+        const clean: BusinessOrderInput = {
+          ...rest,
+          ...(only ? { street: "", postalCode: "", city: "", date: "", fulfilment: "donatie" as const } : { fulfilment: "bezorgen" as const }),
+          area,
+          flyers: false,
+          certificateName: rest.certificateName.trim() || rest.company,
+          pakket: only ? "" : chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? "zelf"
+        };
         store.business.push({ ...clean, id, createdAt: nowStamp(), status: "nieuw", reason: "", handledBy: "", handledAt: "", totals: businessTotals(clean, BUSINESS_DEFAULTS) });
       });
       return { id };

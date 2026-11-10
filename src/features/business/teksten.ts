@@ -99,8 +99,8 @@ const nl = {
     const next = nextTier(p.oliebollen, info);
     return next ? `${p.oliebollen} tot ${next.oliebollen - 1} oliebollen` : `${p.oliebollen} oliebollen of meer`;
   },
-  area: { regio: "Amsterdam of Aalsmeer", buiten: "Buiten Amsterdam" } as Record<BusinessArea, string>,
-  areaSub: { regio: "Dichtbij voor de rollator", buiten: "Te ver voor de rollator, wij rijden" } as Record<BusinessArea, string>,
+  area: { regio: "Amsterdam of Aalsmeer", buiten: "Buiten Amsterdam en Aalsmeer" } as Record<BusinessArea, string>,
+  areaSub: { regio: "dichtbij voor de rollator", buiten: "te ver voor de rollator, wij rijden" } as Record<BusinessArea, string>,
   moment: { regulier: `Tussen ${from} en ${to}`, voor10: "Vóór 10:00", voor9: "Vóór 9:00" } as Record<BusinessMoment, string>,
 
   // Kop
@@ -163,7 +163,9 @@ const nl = {
   postalCode: "Postcode",
   city: "Plaats",
   deliveryCost: "Bezorgkosten",
-  areaHint: "Bedragen excl. btw. We kiezen dit alvast op basis van de plaats.",
+  areaHint: "Excl. btw. Je postcode bepaalt het tarief.",
+  areaEmpty: "Vul je postcode in, dan rekenen we de bezorgkosten uit.",
+  postcodeShort: (pc: string) => `Postcode ${pc}`,
   whichDay: "Welke dag komen we langs?",
   deliveryDay: "Bezorgdag",
   tooSoon: " (te snel)",
@@ -302,8 +304,8 @@ const en: Teksten = {
     const next = nextTier(p.oliebollen, info);
     return next ? `${p.oliebollen} to ${next.oliebollen - 1} oliebollen` : `${p.oliebollen} oliebollen or more`;
   },
-  area: { regio: "Amsterdam or Aalsmeer", buiten: "Outside Amsterdam" },
-  areaSub: { regio: "Close enough for a walker", buiten: "Too far for a walker, so we drive" },
+  area: { regio: "Amsterdam or Aalsmeer", buiten: "Outside Amsterdam and Aalsmeer" },
+  areaSub: { regio: "close enough for a walker", buiten: "too far for a walker, so we drive" },
   moment: { regulier: `Between ${from} and ${to}`, voor10: "Before 10:00", voor9: "Before 9:00" },
 
   title: "Treat your team, get seniors rock 'n rolling",
@@ -362,7 +364,9 @@ const en: Teksten = {
   postalCode: "Postcode",
   city: "Town",
   deliveryCost: "Delivery cost",
-  areaHint: "Amounts excl. VAT. We pick this for you based on the town.",
+  areaHint: "Excl. VAT. Your postcode sets the rate.",
+  areaEmpty: "Fill in your postcode and we'll work out the delivery cost.",
+  postcodeShort: (pc) => `Postcode ${pc}`,
   whichDay: "Which day should we come?",
   deliveryDay: "Delivery day",
   tooSoon: " (too soon)",
@@ -452,7 +456,6 @@ const en: Teksten = {
     street: "Fill in street and number.",
     postalCode: "Fill in a postcode, like 1431 AB.",
     city: "Fill in the town.",
-    area: "Choose where we deliver.",
     date: "Choose a day.",
     dateClosed: "We don't deliver on this day. Choose another one.",
     dateSoon: (info) => `This day is too soon: order ${info.leadDays === 1 ? "the day before" : `${info.leadDays} days ahead`} at the latest.`,

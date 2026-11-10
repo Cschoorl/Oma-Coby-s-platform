@@ -172,6 +172,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   // Grote bedrijven bestellen ruim meer dan 500; boven de 10.000 stemmen we het eerst af.
   maximum: 10000,
   fees: { regio: 10, buiten: 25 },
+  // Amsterdam (1000–1109) en Aalsmeer met Kudelstaart (1430–1433); in de Sheet te wijzigen via Instellingen.
+  regionPostcodes: "1000-1109, 1430-1433",
   surcharges: { regulier: 0, voor10: 10, voor9: 15 },
   donationPrice: 2,
   // Bestellen kan tot en met de dag vóór de bezorgdag.

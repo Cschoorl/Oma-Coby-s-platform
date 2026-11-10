@@ -1,17 +1,17 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { backend } from "../../data/backend";
-import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessTotals } from "../../types/business";
+import type { BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessTotals } from "../../types/business";
 import { Card, Notice, OLIEBOL_SVG, Segmented, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, quickButton, rollOliebol, secondaryButton } from "../../components/ui";
 import { BUSINESS_DEFAULTS, BUSINESS_PER_COLLEAGUE } from "../../config";
 import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
 import {
+  areaFor,
   businessTotals,
   chosenPackage,
   colleaguesFor,
   dayOpen,
   emptyBusinessInput,
   formatPostcode,
-  guessArea,
   nextTier,
   packageSplit,
   tierFor,
@@ -33,7 +33,7 @@ const field = `${inputClass} min-h-[44px]`;
 
 /** Volgorde van de velden op de pagina: daar springen we heen bij versturen met fouten. */
 const FIELD_ORDER: BusinessField[] = [
-  "pakket", "withRaisins", "withoutRaisins", "donation", "street", "postalCode", "city", "area", "date",
+  "pakket", "withRaisins", "withoutRaisins", "donation", "street", "postalCode", "city", "date",
   "company", "contact", "phone", "email", "invoiceEmail"
 ];
 
@@ -617,7 +617,6 @@ export function BusinessOrderPage() {
   const [info, setInfo] = useState<BusinessInfo>(BUSINESS_DEFAULTS);
   const [input, setInput] = useState<BusinessOrderInput>(emptyBusinessInput);
   const [sameInvoice, setSameInvoice] = useState(true);
-  const [areaChosen, setAreaChosen] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -646,7 +645,9 @@ export function BusinessOrderPage() {
     return () => io.disconnect();
   }, [done]);
 
-  const order: BusinessOrderInput = { ...input, invoiceEmail: sameInvoice ? input.email : input.invoiceEmail };
+  // Bezorgkosten volgen uit postcode en plaats; de klant kiest ze niet zelf (het Apps Script rekent ze ook zo na).
+  const area = areaFor(input.postalCode, input.city, info.regionPostcodes);
+  const order: BusinessOrderInput = { ...input, area, invoiceEmail: sameInvoice ? input.email : input.invoiceEmail };
   const totals = businessTotals(order, info);
   const errors = validateBusiness(order, info, new Date(), t.validation);
   // With the same address, a wrong e-mail is one mistake, not two.
@@ -656,10 +657,7 @@ export function BusinessOrderPage() {
 
   function update<K extends keyof BusinessOrderInput>(key: K, value: BusinessOrderInput[K]) {
     setInput((prev) => {
-      const next = { ...prev, [key]: value };
-      // Area follows the town until someone picks it themselves.
-      if (key === "city" && !areaChosen) next.area = guessArea(String(value));
-      return next;
+      return { ...prev, [key]: value };
     });
   }
 
@@ -691,7 +689,7 @@ export function BusinessOrderPage() {
 
   const pkg = chosenPackage(order, info);
   const step1 = !errors.pakket && !errors.withRaisins && !errors.withoutRaisins && !errors.donation;
-  const step2 = !(["street", "postalCode", "city", "area", "date"] as BusinessField[]).some((f) => errors[f]);
+  const step2 = !(["street", "postalCode", "city", "date"] as BusinessField[]).some((f) => errors[f]);
   const step3 = !(["company", "contact", "phone", "email", "invoiceEmail"] as BusinessField[]).some((f) => errors[f]);
 
   async function submit() {
@@ -722,7 +720,6 @@ export function BusinessOrderPage() {
   function anotherAddress() {
     if (!done) return;
     setInput({ ...done.input, street: "", postalCode: "", city: "", area: "", date: "", remark: "" });
-    setAreaChosen(false);
     setShowErrors(false);
     setDone(null);
     window.setTimeout(() => document.getElementById("stap-2")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
@@ -731,7 +728,6 @@ export function BusinessOrderPage() {
   function startOver() {
     setInput(emptyBusinessInput());
     setSameInvoice(true);
-    setAreaChosen(false);
     setShowErrors(false);
     setDone(null);
   }
@@ -899,22 +895,22 @@ export function BusinessOrderPage() {
 
               <div className="grid gap-2">
                 <p className={fieldLabel}>{t.deliveryCost}</p>
-                <div id="f-area" tabIndex={-1} role="radiogroup" aria-label={t.deliveryCost} className="grid gap-2 focus:outline-none sm:grid-cols-2">
-                  {(["regio", "buiten"] as BusinessArea[]).map((a) => (
-                    <Choice
-                      key={a}
-                      active={input.area === a}
-                      onClick={() => {
-                        setAreaChosen(true);
-                        update("area", a);
-                      }}
-                      title={t.area[a]}
-                      sub={t.areaSub[a]}
-                      aside={`${t.euro(info.fees[a])}`}
-                    />
-                  ))}
+                <div id="f-area" aria-live="polite" className="flex min-h-[56px] items-center justify-between gap-3 rounded-md bg-vul px-3.5 py-2.5 text-krent">
+                  {area ? (
+                    <>
+                      <span className="grid">
+                        <span className="text-sm font-bold">{t.area[area]}</span>
+                        <span className="text-xs text-muted">
+                          {/^\d{4}/.test(input.postalCode.trim()) ? t.postcodeShort(input.postalCode.trim().slice(0, 4)) : input.city.trim()} · {t.areaSub[area]}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{t.euro(info.fees[area])}</span>
+                    </>
+                  ) : (
+                    <span className="text-sm text-muted">{t.areaEmpty}</span>
+                  )}
                 </div>
-                {shown.area ? <p className="text-xs font-bold text-feest-ink">! {shown.area}</p> : <p className="text-xs text-muted">{t.areaHint}</p>}
+                <p className="text-xs text-muted">{t.areaHint}</p>
               </div>
 
               <div className="grid gap-2">

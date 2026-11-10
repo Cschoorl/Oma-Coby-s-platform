@@ -7,7 +7,7 @@ import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE } f
  * precies hetzelfde na (businessTotals_ in Code.gs); houd die twee gelijk.
  */
 
-export const areaLabel: Record<BusinessArea, string> = { regio: "Amsterdam of Aalsmeer", buiten: "Buiten Amsterdam" };
+export const areaLabel: Record<BusinessArea, string> = { regio: "Amsterdam of Aalsmeer", buiten: "Buiten Amsterdam en Aalsmeer" };
 
 export const momentLabel: Record<BusinessMoment, string> = {
   regulier: `Tussen ${BUSINESS_DELIVERY_WINDOW.replace("–", " en ")}`,
@@ -116,11 +116,29 @@ export function leadText(info: BusinessInfo): string {
   return info.leadDays === 1 ? "de dag van tevoren" : `${info.leadDays} dagen van tevoren`;
 }
 
-/** Amsterdam en Aalsmeer zijn de regio; andere plaatsen buiten. Leeg als we het niet weten. */
-export function guessArea(city: string): BusinessArea | "" {
+/** "1000-1109, 1430-1433" → [[1000, 1109], [1430, 1433]]. Een los getal ("1431") telt als reeks van één. */
+export function parsePostcodeRanges(text: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const part of text.split(/[,;]+/)) {
+    const m = part.replace(/\s+/g, "").match(/^(\d{4})(?:-(\d{4}))?$/);
+    if (m) out.push([Number(m[1]), Number(m[2] ?? m[1])]);
+  }
+  return out;
+}
+
+/**
+ * Bezorggebied uit het adres: de vier cijfers van de postcode beslissen (info.regionPostcodes).
+ * Zonder postcode kijken we naar de plaats; leeg als we het nog niet weten. Zelfde regels als areaFor_ in Code.gs.
+ */
+export function areaFor(postalCode: string, city: string, regionPostcodes: string): BusinessArea | "" {
+  const digits = postalCode.trim().match(/^(\d{4})/);
+  if (digits) {
+    const n = Number(digits[1]);
+    return parsePostcodeRanges(regionPostcodes).some(([from, to]) => n >= from && n <= to) ? "regio" : "buiten";
+  }
   const c = city.trim().toLowerCase();
   if (!c) return "";
-  return /amsterdam|aalsmeer/.test(c) ? "regio" : "buiten";
+  return /amsterdam|aalsmeer|kudelstaart/.test(c) ? "regio" : "buiten";
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -137,7 +155,6 @@ export const validationNl = {
   street: "Vul straat en huisnummer in.",
   postalCode: "Vul een postcode in, zoals 1431 AB.",
   city: "Vul de plaats in.",
-  area: "Kies waar we bezorgen.",
   date: "Kies een dag.",
   dateClosed: "Op deze dag komen we niet langs. Kies een andere dag.",
   dateSoon: (info: BusinessInfo) => `Deze dag is te snel: bestel uiterlijk ${leadText(info)}.`,
@@ -163,7 +180,6 @@ export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, 
   if (!input.street.trim()) e.street = text.street;
   if (!POSTCODE.test(input.postalCode.trim())) e.postalCode = text.postalCode;
   if (!input.city.trim()) e.city = text.city;
-  if (!input.area) e.area = text.area;
   if (!input.date) e.date = text.date;
   else if (!info.deliveryDays.includes(input.date)) e.date = text.dateClosed;
   else if (!dayOpen(input.date, info, now)) e.date = text.dateSoon(info);

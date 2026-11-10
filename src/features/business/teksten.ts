@@ -134,7 +134,7 @@ const nl = {
   perksShort: {
     brons: ["Impactcertificaat", "Naam op de wall of fame", "Kaartje met ons verhaal"],
     zilver: ["LinkedIn-badge met post", "Logo op de wall of fame", "Oma's Oliebal voor de kerstboom"],
-    goud: ["Kom zelf mee dansen", "Foto of filmpje ervan", "Bovenaan de wall of fame"],
+    goud: ["Kom mee naar een muziekmiddag", "Foto of filmpje ervan", "Ereplek op de wall of fame", "Bezorging in heel Nederland"],
     middag60: ["Livemuziek", "Jullie naam op de middag", "Jullie kiezen de plek"],
     middag100: ["Livemuziek", "Jullie naam op de middag", "Jullie kiezen de plek"]
   } as Record<BusinessPackageKey, string[]>,
@@ -361,7 +361,7 @@ const en: Teksten = {
   perks: {
     brons: ["Impact certificate with your number of seniors", "Your name on the wall of fame", "A card with the story behind the oliebollen"],
     zilver: ["LinkedIn badge with a ready-made post", "Your logo on the wall of fame", "Oma Coby's Oliebal (limited edition) for your Christmas tree"],
-    goud: ["An invitation to the music afternoon itself", "Photo or video of your afternoon", "A podium spot on the wall of fame"],
+    goud: ["An invitation to a music afternoon", "A photo or short video of the afternoon you helped make happen", "A place of honour on the wall of fame", "Delivery anywhere in the Netherlands"],
     middag60: ["A whole music afternoon with live music", "Your name on the afternoon", "You choose the care home or community centre"],
     middag100: ["A whole music afternoon with live music", "Your name on the afternoon", "You choose the care home or community centre"]
   },
@@ -391,7 +391,7 @@ const en: Teksten = {
   perksShort: {
     brons: ["Impact certificate", "Name on the wall of fame", "Card with our story"],
     zilver: ["LinkedIn badge and post", "Logo on the wall of fame", "Oma's Oliebal for the tree"],
-    goud: ["Come and dance along", "Photo or video of it", "Top of the wall of fame"],
+    goud: ["Join a music afternoon", "Photo or video of it", "Place of honour on the wall of fame", "Delivery across the Netherlands"],
     middag60: ["Live music", "Your name on the afternoon", "You choose the venue"],
     middag100: ["Live music", "Your name on the afternoon", "You choose the venue"]
   },

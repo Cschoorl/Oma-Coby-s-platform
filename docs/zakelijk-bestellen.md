@@ -27,7 +27,7 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
    pakket eronder plus eigen extra's:
    - Brons: impactcertificaat met jullie aantal ouderen, naam op de wall of fame, kaartje met het verhaal bij de oliebollen.
    - Zilver: LinkedIn-badge met kant-en-klare post, logo op de wall of fame, kaartje van Oma voor de besteller.
-   - Goud: uitnodiging voor de muziekmiddag zelf, foto of filmpje van jullie middag, podiumplek op de wall of fame.
+   - Feestpartner: uitnodiging voor een muziekmiddag, foto of kort filmpje van de middag die jullie mede mogelijk hebben gemaakt, ereplek op de wall of fame, bezorging door heel Nederland.
 
    Een pakket kiezen zet het aantal op het pakketaantal, 70% met en 30% zonder krenten (in tientallen), in twee tegels met een getekende oliebol met en zonder krenten en een verhoudingsbalk eronder. Daarna schuif je vrij:
    samen 50 tot 10.000 oliebollen (`zakelijk_maximum`; meer gaat via de mail). Onder de aantallen staat bij welk pakket je

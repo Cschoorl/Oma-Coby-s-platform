@@ -1923,7 +1923,7 @@ function businessPackage_(i, info) {
 const BUSINESS_PERKS = {
   brons: ['Impactcertificaat met jullie aantal ouderen', 'Jullie naam op de wall of fame', 'Kaartje met het verhaal bij de oliebollen'],
   zilver: ['LinkedIn-badge met een kant-en-klare post', 'Jullie logo op de wall of fame', 'Oma Coby\'s Oliebal (limited edition) voor in de kerstboom'],
-  goud: ['Uitnodiging voor de muziekmiddag zelf', 'Foto of filmpje van jullie middag', 'Podiumplek op de wall of fame'],
+  goud: ['Uitnodiging voor een muziekmiddag', 'Foto of kort filmpje van de middag die jullie mede mogelijk hebben gemaakt', 'Ereplek op de wall of fame', 'Bezorging door heel Nederland'],
   middag60: ['Een hele muziekmiddag met livemuziek', 'Jullie naam op de middag', 'Jullie kiezen het zorgcentrum of buurthuis'],
   middag100: ['Een hele muziekmiddag met livemuziek', 'Jullie naam op de middag', 'Jullie kiezen het zorgcentrum of buurthuis']
 };

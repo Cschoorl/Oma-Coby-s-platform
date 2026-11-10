@@ -748,21 +748,13 @@ export function BusinessOrderPage() {
             {t.intro}
           </p>
         </div>
-        <dl className="grid grid-cols-3 gap-4 py-1 sm:max-w-2xl sm:gap-6">
+        {/* Prijs, minimum en de ruil: 10 oliebollen = 1 oudere, met het oudje ernaast op eigen benen, niet over de tekst. */}
+        <dl className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.3fr)] gap-3 py-1 sm:max-w-2xl sm:grid-cols-3 sm:gap-6">
           {(
             [
               [t.euro(info.price), t.perOliebol(Math.round(info.vatRate * 100))],
-              [String(info.minimum), t.minimum],
-              [
-                <span key="ruil" className="flex items-center gap-0.5 text-xl sm:gap-1 sm:text-[28px]" aria-label={t.tenIsOne}>
-                  10
-                  <Bol krenten className="h-5 w-5 sm:h-7 sm:w-7" />
-                  <span className="text-muted sm:px-0.5">=</span>1
-                  <DiscoOudje className="-my-2 ml-0.5 h-9 sm:h-11" />
-                </span>,
-                t.seniorOnFloor
-              ]
-            ] as Array<[ReactNode, string]>
+              [String(info.minimum), t.minimum]
+            ] as Array<[string, string]>
           ).map(([value, label]) => (
             <div key={label}>
               <dt className="sr-only">{label}</dt>
@@ -770,6 +762,18 @@ export function BusinessOrderPage() {
               <dd className="text-xs leading-snug text-muted">{label}</dd>
             </div>
           ))}
+          <div className="flex items-end gap-1.5 sm:gap-2.5">
+            <div className="min-w-0">
+              <dt className="sr-only">{t.tenIsOne}</dt>
+              <dd aria-hidden="true" className="flex items-center gap-1 font-serif text-2xl font-bold leading-tight tabular-nums text-krent sm:text-[28px]">
+                10
+                <Bol krenten className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="font-normal text-muted">=</span>1
+              </dd>
+              <dd className="text-xs leading-snug text-muted">{t.seniorOnFloor}</dd>
+            </div>
+            <DiscoOudje className="h-12 sm:h-14" />
+          </div>
         </dl>
       </section>
 

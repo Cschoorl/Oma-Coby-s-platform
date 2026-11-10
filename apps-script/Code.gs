@@ -1630,6 +1630,8 @@ Object.assign(HANDLERS, {
   submitBusinessOrder: function (body) {
     // Honeypot: people never see this field, bots fill it in.
     if (String(body.website || '').trim()) throw new Error('Je bestelling kon niet worden verstuurd.');
+    // The form only delivers; an old open page may still offer pickup.
+    if (body.fulfilment === 'afhalen') throw new Error('Afhalen kan niet via dit formulier, we bezorgen alleen. Ververs de pagina en vul je bezorgadres in.');
     const info = businessInfo_();
     const input = businessInput_(body, info);
     const problem = validateBusiness_(input, info);

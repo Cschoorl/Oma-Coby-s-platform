@@ -13,12 +13,12 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
    excl. btw. Een pakket kiezen verdeelt het aantal alvast 70% MET en 30% ZONDER (in tientallen); die verdeling schuif je zelf
    aan, het totaal blijft. **Zelf samenstellen** (onder de kaarten, of "Stel zelf je aantal samen") geeft de vrije aantallen:
    MET en ZONDER in tientallen, samen minimaal 50. Daarna extra doneren (€ 20 per 10) en flyers (standaard uit).
-2. **Bezorgen of afhalen.**
+2. **Bezorgen.** Alleen bezorgen: afhalen staat niet meer op het formulier (het script weigert een aanvraag met afhalen).
+   Beheer kan een bestelling achteraf nog wel op afhalen zetten.
    - Bezorgen: adres, bezorgkosten (Amsterdam/Aalsmeer € 10, daarbuiten € 25; de klant kiest dit niet zelf: de postcode
      bepaalt het, zie *Bezorgkosten* hieronder),
      bezorgdag met dagknoppen (te snel = doorgestreept, minimaal 24 uur vóór 9:00) en bezorgmoment
      (9:00–12:30, vóór 10:00 + € 10, vóór 9:00 + € 15).
-   - Afhalen: alleen na overleg met info@, dus met een vinkje "afgestemd"; woensdag 30 of donderdag 31 december, 14:00–16:00.
 3. **Je gegevens.** Onderneming, contactpersoon, telefoon, e-mail; factuur naar hetzelfde of een ander adres;
    factuuradres, referentie/grootboeknummer en opmerking zijn optioneel.
 

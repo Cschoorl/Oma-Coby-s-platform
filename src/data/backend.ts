@@ -1193,6 +1193,7 @@ function createDemoBackend(notice?: string): Backend {
     async submitBusinessOrder(input) {
       await delay(500);
       if (input.website) throw new Error("Je bestelling kon niet worden verstuurd.");
+      if (input.fulfilment === "afhalen") throw new Error("Afhalen kan niet via dit formulier, we bezorgen alleen. Ververs de pagina en vul je bezorgadres in.");
       const errors = Object.values(validateBusiness(input, BUSINESS_DEFAULTS));
       if (errors.length) throw new Error(errors[0]);
       let id = "";

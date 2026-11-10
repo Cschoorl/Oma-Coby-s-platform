@@ -3,7 +3,7 @@ import { backend } from "../../data/backend";
 import type { BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessTotals } from "../../types/business";
 import { Card, Notice, OLIEBOL_SVG, Sticker, fieldLabel, formatEuro, formatNumber, ghostButton, inputClass, primaryButton, quickButton, rollOliebol, secondaryButton, textAction } from "../../components/ui";
 import { Avatar } from "../../components/Avatar";
-import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE } from "../../config";
+import { BUSINESS_DEFAULTS, BUSINESS_PER_COLLEAGUE } from "../../config";
 import {
   areaFor,
   areaLabel,
@@ -701,114 +701,86 @@ export function BusinessOrderPage() {
           </section>
 
           <div id="stap-2" className="scroll-mt-6">
-            <Step n={2} title="Bezorgen of afhalen" sub="Wij bakken, jij zet de koffie klaar." done={step2 && !!input.date}>
-              <div role="radiogroup" aria-label="Bezorgen of afhalen" className="grid gap-2 sm:grid-cols-2">
-                <Choice active={input.fulfilment === "bezorgen"} onClick={() => update("fulfilment", "bezorgen")} title="Bezorgen" sub={`Tussen ${BUSINESS_DELIVERY_WINDOW.replace("–", " en ")}`} />
-                <Choice active={input.fulfilment === "afhalen"} onClick={() => update("fulfilment", "afhalen")} title="Afhalen" sub="Alleen na overleg" />
-              </div>
-
-              {input.fulfilment === "bezorgen" ? (
-                <>
-                  <div className="grid gap-3">
-                    <Field id="f-street" label="Straat en huisnummer" error={shown.street}>
-                      <input id="f-street" className={field} autoComplete="street-address" value={input.street} onChange={(e) => update("street", e.target.value)} placeholder="Keizersgracht 210" />
+            <Step n={2} title="Bezorgen" sub="Wij bakken en bezorgen, jij zet de koffie klaar." done={step2 && !!input.date}>
+              {/* Alleen bezorgen: afhalen kan niet via dit formulier. */}
+              <>
+                <div className="grid gap-3">
+                  <Field id="f-street" label="Straat en huisnummer" error={shown.street}>
+                    <input id="f-street" className={field} autoComplete="street-address" value={input.street} onChange={(e) => update("street", e.target.value)} placeholder="Keizersgracht 210" />
+                  </Field>
+                  <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
+                    <Field id="f-postalCode" label="Postcode" error={shown.postalCode}>
+                      <input
+                        id="f-postalCode"
+                        className={field}
+                        autoComplete="postal-code"
+                        value={input.postalCode}
+                        onChange={(e) => update("postalCode", e.target.value.toUpperCase())}
+                        onBlur={(e) => update("postalCode", formatPostcode(e.target.value))}
+                        placeholder="1016 DZ"
+                      />
                     </Field>
-                    <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
-                      <Field id="f-postalCode" label="Postcode" error={shown.postalCode}>
-                        <input
-                          id="f-postalCode"
-                          className={field}
-                          autoComplete="postal-code"
-                          value={input.postalCode}
-                          onChange={(e) => update("postalCode", e.target.value.toUpperCase())}
-                          onBlur={(e) => update("postalCode", formatPostcode(e.target.value))}
-                          placeholder="1016 DZ"
-                        />
-                      </Field>
-                      <Field id="f-city" label="Plaats" error={shown.city}>
-                        <input id="f-city" className={field} autoComplete="address-level2" value={input.city} onChange={(e) => update("city", e.target.value)} placeholder="Amsterdam" />
-                      </Field>
-                    </div>
+                    <Field id="f-city" label="Plaats" error={shown.city}>
+                      <input id="f-city" className={field} autoComplete="address-level2" value={input.city} onChange={(e) => update("city", e.target.value)} placeholder="Amsterdam" />
+                    </Field>
                   </div>
+                </div>
 
-                  <div className="grid gap-2">
-                    <p className={fieldLabel}>Bezorgkosten</p>
-                    <div id="f-area" aria-live="polite" className="flex min-h-[56px] items-center justify-between gap-3 rounded-md bg-vul px-3.5 py-2.5 text-krent">
-                      {area ? (
-                        <>
-                          <span className="grid">
-                            <span className="text-sm font-bold">{areaLabel[area]}</span>
-                            <span className="text-xs text-muted">
-                              {/^\d{4}/.test(input.postalCode.trim()) ? `Op basis van postcode ${input.postalCode.trim().slice(0, 4)}` : `Op basis van ${input.city.trim()}`}
-                              {area === "regio" ? ", op fietsafstand" : ", verder weg met de auto"}
-                            </span>
+                <div className="grid gap-2">
+                  <p className={fieldLabel}>Bezorgkosten</p>
+                  <div id="f-area" aria-live="polite" className="flex min-h-[56px] items-center justify-between gap-3 rounded-md bg-vul px-3.5 py-2.5 text-krent">
+                    {area ? (
+                      <>
+                        <span className="grid">
+                          <span className="text-sm font-bold">{areaLabel[area]}</span>
+                          <span className="text-xs text-muted">
+                            {/^\d{4}/.test(input.postalCode.trim()) ? `Op basis van postcode ${input.postalCode.trim().slice(0, 4)}` : `Op basis van ${input.city.trim()}`}
+                            {area === "regio" ? ", op fietsafstand" : ", verder weg met de auto"}
                           </span>
-                          <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{formatEuro(info.fees[area])}</span>
-                        </>
-                      ) : (
-                        <span className="text-sm text-muted">Vul je postcode in, dan rekenen we de bezorgkosten uit.</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted">
-                      Amsterdam en Aalsmeer {formatEuro(info.fees.regio)}, daarbuiten {formatEuro(info.fees.buiten)}. Bedragen excl. btw.
-                    </p>
+                        </span>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{formatEuro(info.fees[area])}</span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted">Vul je postcode in, dan rekenen we de bezorgkosten uit.</span>
+                    )}
                   </div>
-
-                  <div className="grid gap-2">
-                    <p className={fieldLabel}>Bezorgdag</p>
-                    <DayPicker days={info.deliveryDays} value={input.date} onChange={(d) => update("date", d)} info={info} error={shown.date} />
-                    <p className="text-xs text-muted">
-                      Liever een ander moment?{" "}
-                      <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent" href={mailLink}>
-                        Mail ons
-                      </a>
-                      .
-                    </p>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <p className={fieldLabel}>Bezorgmoment</p>
-                    <div role="radiogroup" aria-label="Bezorgmoment" className="grid gap-2 sm:grid-cols-3">
-                      {(["regulier", "voor10", "voor9"] as BusinessMoment[]).map((m) => (
-                        <Choice
-                          key={m}
-                          active={input.moment === m}
-                          onClick={() => update("moment", m)}
-                          title={momentLabel[m]}
-                          sub={info.surcharges[m] ? `+ ${formatEuro(info.surcharges[m])} excl. btw` : "Geen toeslag"}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <p className="rounded-md bg-vul px-3.5 py-2.5 text-sm text-oliebol">
-                    <b className="text-krent">Meerdere adressen?</b> Plaats per adres een bestelling. Na het versturen voeg je met één klik het volgende adres toe; je gegevens
-                    blijven staan.
+                  <p className="text-xs text-muted">
+                    Amsterdam en Aalsmeer {formatEuro(info.fees.regio)}, daarbuiten {formatEuro(info.fees.buiten)}. Bedragen excl. btw.
                   </p>
-                </>
-              ) : (
-                <>
-                  <Notice tone="info">
-                    Gezellig! Afhalen kan alleen na overleg. Mail eerst even naar{" "}
-                    <a className="font-bold underline underline-offset-4" href={mailLink}>
-                      {info.email}
+                </div>
+
+                <div className="grid gap-2">
+                  <p className={fieldLabel}>Bezorgdag</p>
+                  <DayPicker days={info.deliveryDays} value={input.date} onChange={(d) => update("date", d)} info={info} error={shown.date} />
+                  <p className="text-xs text-muted">
+                    Liever een ander moment?{" "}
+                    <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent" href={mailLink}>
+                      Mail ons
                     </a>
-                    , dan spreken we samen waar en hoe af.
-                  </Notice>
-                  <Check id="f-pickupAgreed" checked={input.pickupAgreed} onChange={(v) => update("pickupAgreed", v)} error={shown.pickupAgreed}>
-                    Ik heb het afhalen al afgestemd met Oma Coby's Oliebollenbar.
-                  </Check>
-                  <div className="grid gap-2">
-                    <p className={fieldLabel}>Afhaalmoment</p>
-                    <div id="f-date" tabIndex={-1} role="radiogroup" aria-label="Afhaalmoment" className="grid gap-2 focus:outline-none sm:grid-cols-2">
-                      {info.pickupDays.map((d) => (
-                        <Choice key={d.date} active={input.date === d.date} onClick={() => update("date", d.date)} title={longDay(d.date)} sub={`Tussen ${d.time.replace("–", " en ")}`} />
-                      ))}
-                    </div>
-                    {shown.date ? <p className="text-xs font-bold text-feest-ink">! {shown.date}</p> : null}
+                    .
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <p className={fieldLabel}>Bezorgmoment</p>
+                  <div role="radiogroup" aria-label="Bezorgmoment" className="grid gap-2 sm:grid-cols-3">
+                    {(["regulier", "voor10", "voor9"] as BusinessMoment[]).map((m) => (
+                      <Choice
+                        key={m}
+                        active={input.moment === m}
+                        onClick={() => update("moment", m)}
+                        title={momentLabel[m]}
+                        sub={info.surcharges[m] ? `+ ${formatEuro(info.surcharges[m])} excl. btw` : "Geen toeslag"}
+                      />
+                    ))}
                   </div>
-                </>
-              )}
+                </div>
+
+                <p className="rounded-md bg-vul px-3.5 py-2.5 text-sm text-oliebol">
+                  <b className="text-krent">Meerdere adressen?</b> Plaats per adres een bestelling. Na het versturen voeg je met één klik het volgende adres toe; je gegevens
+                  blijven staan.
+                </p>
+              </>
             </Step>
           </div>
 

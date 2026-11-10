@@ -8,6 +8,7 @@
 @font-face { font-family: "Arvo"; src: url("./assets/fonts/Arvo-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
 @font-face { font-family: "VTC SuperMarket"; src: url("./assets/fonts/VTCSuperMarketSale-Italic.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "Vollkorn"; src: url("./assets/fonts/Vollkorn-Variable.woff2") format("woff2"); font-weight: 400 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Jost"; src: url("./assets/fonts/Jost-Variable.woff2") format("woff2"); font-weight: 300 800; font-style: normal; font-display: swap; }
 
 :root {
   font-family: Arvo, Rockwell, Georgia, serif;
@@ -129,3 +130,6 @@ body {
 @keyframes oc-drawer { from { transform: translateX(24px); } to { transform: none; } }
 .oc-drawer { animation: oc-drawer 0.18s ease-out; }
 @media (prefers-reduced-motion: reduce) { .oc-drawer { animation: none; } }
+
+/* Proef: het bestelformulier in Jost in plaats van Arvo (koppen en getallen blijven VTC SuperMarket en Vollkorn). */
+.oc-jost { font-family: Jost, "Futura", "Century Gothic", sans-serif; font-weight: 450; }

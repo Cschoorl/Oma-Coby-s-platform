@@ -8,7 +8,11 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon onderaan, met het totaal in een balk).
 
 1. **Hoeveel ouderen laat je dansen?** Drie pakketkaarten, de ladder uit het bouwplan: **Brons** (50 tot 149 oliebollen),
-   **Zilver** (150 tot 499, "Tip van Oma") en **Goud** (500 of meer, de donkere kaart: "Het grote feest"). Een pakket geldt
+   **Zilver** (150 tot 499, "Tip van Oma") en **Goud** (500 of meer, de donkere kaart). Elke kaart is zo kaal mogelijk,
+   zoals Coolblue zijn keuzes toont: naam en bereik, het aantal ouderen met de oudjes, drie korte extra's met een vinkje
+   (hogere pakketten beginnen met "Alles van Brons"), dan "vanaf € 125,- excl. btw", "Voor ± 25 collega's" en één knop.
+   Geen tussenkopjes en geen tabelletje. De extra's staan op de kaart kort ("Impactcertificaat"); voluit staan ze in de
+   bevestiging en de mail. Onder de kaarten alleen "Ander aantal? Stel zelf samen". Een pakket geldt
    vanaf zijn aantal: meer blijft dat pakket, minder valt terug naar het pakket eronder. Elk pakket krijgt alles van het
    pakket eronder plus eigen extra's:
    - Brons: impactcertificaat met jullie aantal ouderen, naam op de wall of fame, kaartje met het verhaal bij de oliebollen.
@@ -19,7 +23,7 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
    samen 50 tot 10.000 oliebollen (`zakelijk_maximum`; meer gaat via de mail). Onder de aantallen staat bij welk pakket je
    zit. Zak je onder het pakket dat je koos, dan staat er "Onder de 150 val je uit Zilver" met een knop terug; zit je
    vanaf 75% onder het volgende pakket, dan een duwtje ("Nog 30 tot Zilver: … en 3 ouderen extra", knop "Maak er 150 van").
-   **Zelf samenstellen** begint met lege aantallen. Daarna extra doneren (€ 20 per 10) en flyers (standaard uit).
+   **Stel zelf samen** houdt de aantallen van het gekozen pakket als begin. Daarna extra doneren (€ 20 per 10) en flyers (standaard uit).
    Kies je een pakket, dan ploffen er oliebollen en confetti als vuurwerk uit de medaille (bij Goud een dubbele) en gaan de
    oudjes op de kaart dansen.
 2. **Wanneer komt Oma langs?** Afhalen kan niet: we bezorgen altijd. Adres, bezorgkosten (Amsterdam/Aalsmeer € 10,

@@ -385,8 +385,8 @@ function Medal({ tier, className = "" }: { tier: BusinessPackageKey; className?:
 }
 
 /**
- * Een pakketkaart: eerst de ouderen, dan wat je erbij krijgt en voor wie het past. Hoe hoger, hoe meer extra's;
- * Goud is de donkere kaart met gouden letters, het grote feest.
+ * Een pakketkaart, zo rustig mogelijk: naam en bereik, hoeveel ouderen er dansen, drie korte extra's en de prijs met
+ * één knop. Geen tussenkopjes; hogere pakketten beginnen met "Alles van Brons". Goud is de donkere kaart.
  */
 function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessPackage; info: BusinessInfo; below?: BusinessPackage; active: boolean; tip: boolean; onPick: () => void }) {
   // Counts the picks, so the little party plays again each time this card is chosen.
@@ -396,7 +396,9 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
   const gold = pkg.key === "goud";
   const ouderen = Math.floor(pkg.oliebollen / 10);
   const next = nextTier(pkg.oliebollen, info);
-  const colleagues = t.num(colleaguesFor(pkg.oliebollen));
+  const ink = gold ? "text-meel" : "text-krent";
+  const soft = gold ? "text-meel/70" : "text-muted";
+  const check = gold ? "text-gouwe" : "text-kerst-ink";
   return (
     <button
       type="button"
@@ -407,29 +409,31 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         if (!active) setPlay((n) => n + 1);
         onPick();
       }}
-      className={`relative flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${gold ? "bg-krent text-meel" : "bg-papier"} ${
+      className={`relative flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${gold ? "bg-krent" : "bg-papier"} ${
         active ? `shadow-zwevend ring-2 ${gold ? "ring-gouwe" : "ring-krent"}` : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
       }`}
     >
       {tip ? (
         <span className="absolute -top-2.5 right-4 -rotate-3 rounded bg-gouwe px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-krent shadow-zacht">{t.tip}</span>
-      ) : gold ? (
-        <span className="absolute -top-2.5 right-4 rotate-2 rounded bg-feest px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-papier shadow-zacht">{t.bigParty}</span>
       ) : null}
       <span className="flex items-center gap-3">
         <span className="relative">
           <Medal key={`medaille-${play}`} tier={pkg.key} className={play ? "oc-medal" : ""} />
           {play ? <Burst key={`vuurwerk-${play}`} big={gold} /> : null}
         </span>
-        <span className="grid gap-0.5">
+        <span className="grid">
           <span className={`font-display text-[34px] uppercase leading-none tracking-wide ${gold ? "text-gouwe" : "text-krent"}`}>{name}</span>
+          <span className={`text-xs tabular-nums ${soft}`}>{t.rangeShort(pkg, info)}</span>
         </span>
       </span>
 
-      <span className="grid gap-2">
-        <span className="flex items-end gap-2.5">
-          <span className={`font-serif text-[46px] font-bold leading-[0.85] tabular-nums ${gold ? "text-meel" : "text-krent"}`}>{ouderen}{next ? "" : "+"}</span>
-          <span className={`text-sm font-bold leading-tight ${gold ? "text-meel" : "text-krent"}`}>
+      <span className="grid gap-1">
+        <span className="flex items-end gap-2">
+          <span className={`font-serif text-[40px] font-bold leading-none tabular-nums ${ink}`}>
+            {ouderen}
+            {next ? "" : "+"}
+          </span>
+          <span className={`text-sm font-bold leading-tight ${ink}`}>
             {t.cardSeniors[0]}
             <br />
             {t.cardSeniors[1]}
@@ -440,42 +444,41 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         </span>
       </span>
 
-
-      <span className="grid gap-1.5 text-sm">
-        <span className={`text-[11px] font-bold uppercase tracking-[0.14em] ${gold ? "text-gouwe" : "text-muted"}`}>
-          {below ? t.allOf(t.tier[below.key]) : t.youGet}
-        </span>
-        {t.perks[pkg.key].map((perk) => (
-          <span key={perk} className="flex gap-2 leading-snug">
-            <span aria-hidden="true" className={gold ? "text-gouwe" : "text-kerst-ink"}>
+      <span className="grid gap-1.5 text-sm leading-snug">
+        {below ? (
+          <span className={`flex gap-2 ${soft}`}>
+            <span aria-hidden="true" className={check}>
               ✓
             </span>
-            <span className={gold ? "text-meel" : "text-krent"}>{perk}</span>
+            {t.allOf(t.tier[below.key])}
+          </span>
+        ) : null}
+        {t.perksShort[pkg.key].map((perk) => (
+          <span key={perk} className={`flex gap-2 ${ink}`}>
+            <span aria-hidden="true" className={check}>
+              ✓
+            </span>
+            {perk}
           </span>
         ))}
       </span>
 
-      <span className={`grid gap-1 border-t pt-3 text-sm ${gold ? "border-meel/15" : "border-lijn"}`}>
-        {(
-          [
-            [t.rowCount, t.range(pkg, info)],
-            [t.rowFits, t.fits(colleagues, !next)],
-            [t.rowFrom, t.exclVat(t.euro(pkg.oliebollen * info.price))]
-          ] as Array<[string, string]>
-        ).map(([label, value]) => (
-          <span key={label} className="flex items-baseline justify-between gap-3">
-            <span className={gold ? "text-meel/70" : "text-muted"}>{label}</span>
-            <span className={`text-right font-bold tabular-nums ${gold ? "text-meel" : "text-krent"}`}>{value}</span>
+      <span className={`mt-auto grid gap-3 border-t pt-3 ${gold ? "border-meel/15" : "border-lijn"}`}>
+        <span className="grid gap-1">
+          <span className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className={`text-xs ${soft}`}>{t.from}</span>
+            <span className={`font-serif text-2xl font-bold leading-none tabular-nums ${ink}`}>{t.euroRound(pkg.oliebollen * info.price)}</span>
+            <span className={`text-xs ${soft}`}>{t.exclVatShort}</span>
           </span>
-        ))}
-      </span>
-
-      <span
-        className={`mt-auto inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold transition ${
-          gold ? (active ? "bg-gouwe text-krent" : "bg-meel/10 text-gouwe") : active ? "bg-krent text-meel" : "bg-vul text-krent"
-        }`}
-      >
-        {active ? t.chosen : t.choose(name)}
+          <span className={`text-xs ${soft}`}>{t.fits(t.num(colleaguesFor(pkg.oliebollen)), !next)}</span>
+        </span>
+        <span
+          className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold transition ${
+            gold ? (active ? "bg-gouwe text-krent" : "bg-meel/10 text-gouwe") : active ? "bg-krent text-meel" : "bg-vul text-krent"
+          }`}
+        >
+          {active ? t.chosen : t.choose(name)}
+        </span>
       </span>
     </button>
   );
@@ -735,10 +738,13 @@ export function BusinessOrderPage() {
 
   const mailLink = `mailto:${info.email}?subject=${encodeURIComponent(t.mailSubject)}`;
 
+  // Proef met de letter Jost: #/bestellen?letter=jost.
+  const jost = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("letter") === "jost";
+
   if (done) return <Confirmation done={done} info={info} onAnother={anotherAddress} onRestart={startOver} />;
 
   return (
-    <div className="grid gap-6 pb-24 lg:pb-0">
+    <div className={`grid gap-6 pb-24 lg:pb-0 ${jost ? "oc-jost" : ""}`}>
       <section className="grid gap-4 pt-2">
         <div className="grid gap-2">
           <h1 className="max-w-3xl font-display text-[40px] uppercase leading-[0.95] tracking-wide text-krent sm:text-[56px]">
@@ -801,14 +807,17 @@ export function BusinessOrderPage() {
               ))}
             </div>
             {shown.pakket ? <p className="text-xs font-bold text-feest-ink">! {shown.pakket}</p> : null}
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-              <p className="text-xs leading-relaxed text-muted">
-                {t.priceNote(t.euro(info.price))}
-              </p>
-              <button type="button" className={`${secondaryButton} min-h-[44px]`} aria-pressed={input.pakket === "zelf"} onClick={composeYourself}>
+            <p className="text-center text-sm text-muted">
+              {t.otherAmount}{" "}
+              <button
+                type="button"
+                className="min-h-[44px] font-bold text-krent underline decoration-lijn-2 underline-offset-4 hover:decoration-krent"
+                aria-pressed={input.pakket === "zelf"}
+                onClick={composeYourself}
+              >
                 {t.composeButton}
               </button>
-            </div>
+            </p>
 
             {input.pakket ? (
               <Card className="grid gap-5">

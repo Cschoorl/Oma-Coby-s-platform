@@ -128,13 +128,14 @@ in de plaats ervan delen.
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
   - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_btw` (9),
-    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1109, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (10),
-    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_dagen_vooraf` (1 = bestellen tot en met de dag ervoor),
+    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1199, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (10),
+    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2,50 per gedoneerde oliebol), `zakelijk_werkdagen_vooraf` (3 werkdagen van tevoren bestellen),
+    `zakelijk_sluiting` (`2026-12-28 12:00`: daarna is zakelijk bestellen dicht),
     `zakelijk_pakket_brons` (50), `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500): vanaf die aantallen geldt
     het pakket, `zakelijk_email`, `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar` (wie bij elke nieuwe
     aanvraag direct een mail krijgt; leeg = info@, meerdere adressen met een komma).
-    De prijs per oliebol (€ 2,50, uit het bouwplan) staat vast in `CONFIG.BUSINESS.price`; een regel `zakelijk_prijs` in
-    Instellingen telt niet meer mee. De oude `zakelijk_uren_vooraf` ook niet.
+    De prijs per oliebol (€ 2,29 excl. btw, uit het zakelijk concept 2026) staat vast in `CONFIG.BUSINESS.price`; een regel `zakelijk_prijs` in
+    Instellingen telt niet meer mee. De oude `zakelijk_uren_vooraf` en `zakelijk_dagen_vooraf` ook niet.
   - De bevestigingsmail van een zakelijke bestelling is opgemaakt (HTML, met een tekstversie erbij). De plaatjes komen uit
     `public/mail` op de GitHub Pages-site (`CONFIG.BUSINESS.mailImages`) en gaan als bijlage in de mail mee, zodat ze ook
     zonder "afbeeldingen laden" te zien zijn. Lukt het ophalen niet, dan gaat de mail zonder plaatjes. Voorbeeld bekijken:

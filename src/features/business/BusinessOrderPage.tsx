@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { backend } from "../../data/backend";
-import type { BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessTotals } from "../../types/business";
+import type { BusinessInfo, BusinessMoment, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessSource, BusinessTotals } from "../../types/business";
 import { Card, Notice, OLIEBOL_SVG, Segmented, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, quickButton, rollOliebol, secondaryButton } from "../../components/ui";
 import { BUSINESS_DEFAULTS, BUSINESS_PER_COLLEAGUE } from "../../config";
 import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
@@ -10,12 +10,19 @@ import {
   chosenPackage,
   colleaguesFor,
   dayOpen,
+  donationOnly,
+  donationStep,
   emptyBusinessInput,
   formatPostcode,
+  isAdoption,
   nextTier,
+  packageRank,
   packageSplit,
+  previewNow,
+  seasonClosed,
   tierFor,
   validateBusiness,
+  viaFromLink,
   type BusinessField
 } from "./business";
 import { setLang, useLang, useT, type Lang } from "./teksten";
@@ -257,11 +264,11 @@ function Check({ id, checked, onChange, children, error }: { id: string; checked
 }
 
 /** Dagknoppen per maand. Te snel = doorgestreept en niet te kiezen. */
-function DayPicker({ days, value, onChange, info, error }: { days: string[]; value: string; onChange: (d: string) => void; info: BusinessInfo; error?: string }) {
+function DayPicker({ days, value, onChange, info, now, error }: { days: string[]; value: string; onChange: (d: string) => void; info: BusinessInfo; now: Date; error?: string }) {
   const t = useT();
   const months = new Map<string, string[]>();
   for (const d of days) months.set(d.slice(0, 7), [...(months.get(d.slice(0, 7)) ?? []), d]);
-  const anyClosed = days.some((d) => !dayOpen(d, info));
+  const anyClosed = days.some((d) => !dayOpen(d, info, now));
   return (
     <div id="f-date" tabIndex={-1} className="grid gap-3 focus:outline-none" role="radiogroup" aria-label={t.deliveryDay} aria-invalid={error ? true : undefined}>
       {[...months].map(([key, list]) => {
@@ -273,7 +280,7 @@ function DayPicker({ days, value, onChange, info, error }: { days: string[]; val
             </p>
             <div className="flex flex-wrap gap-1.5">
               {list.map((d) => {
-                const open = dayOpen(d, info);
+                const open = dayOpen(d, info, now);
                 const active = value === d;
                 const date = new Date(`${d}T12:00:00`);
                 return (
@@ -308,14 +315,14 @@ function DayPicker({ days, value, onChange, info, error }: { days: string[]; val
 }
 
 /** Rijtje oudjes uit de discozaal: één per tien oliebollen, de rest als getal. Met `dance` gaan ze kort na elkaar swingen. */
-function Oudjes({ count, dance = false }: { count: number; dance?: boolean }) {
+function Oudjes({ count, dance = false, small = false }: { count: number; dance?: boolean; small?: boolean }) {
   const t = useT();
   const shown = Math.min(count, 7);
   return (
     <span className="flex items-end">
       {Array.from({ length: shown }, (_, i) => (
         <span key={i} className={`${i ? "-ml-1" : ""} ${dance ? "oc-dance" : ""}`} style={dance ? { animationDelay: `${120 + i * 55}ms` } : undefined}>
-          <DiscoOudje cast={i} className="h-10" />
+          <DiscoOudje cast={i} className={small ? "h-10 md:h-7 xl:h-10" : "h-10"} />
         </span>
       ))}
       {count > shown ? (
@@ -359,7 +366,10 @@ function Burst({ big }: { big: boolean }) {
 const MEDAL: Record<BusinessPackageKey, [string, string, string]> = {
   brons: ["#e7b184", "#b8743f", "#83491f"],
   zilver: ["#f4f2ec", "#c9c4b8", "#868072"],
-  goud: ["#f7e6a0", "#dcc05d", "#a3842a"]
+  goud: ["#f7e6a0", "#dcc05d", "#a3842a"],
+  // Een muziekmiddag: goud, want het is meer dan Feestpartner.
+  middag60: ["#f7e6a0", "#dcc05d", "#a3842a"],
+  middag100: ["#f7e6a0", "#dcc05d", "#a3842a"]
 };
 
 /** Medaille aan een lint in feest-rood: Brons, Zilver of Goud. */
@@ -422,14 +432,15 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
           {play ? <Burst key={`vuurwerk-${play}`} big={gold} /> : null}
         </span>
         <span className="grid">
-          <span className={`font-display text-[34px] uppercase leading-none tracking-wide ${gold ? "text-gouwe" : "text-krent"}`}>{name}</span>
+          {/* Lange namen (Polonaisepartner) breken af als "Polonaise-partner" wanneer de kaart te smal is. */}
+          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] xl:text-[30px] tracking-wide [hyphens:manual] ${gold ? "text-gouwe" : "text-krent"}`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
           <span className={`text-xs tabular-nums ${soft}`}>{t.rangeShort(pkg, info)}</span>
         </span>
       </span>
 
       <span className="grid gap-1">
         <span className="flex items-end gap-2">
-          <span className={`font-serif text-[40px] font-bold leading-none tabular-nums ${ink}`}>
+          <span className={`font-serif text-[40px] font-bold leading-none tabular-nums md:text-[32px] xl:text-[40px] ${ink}`}>
             {ouderen}
             {next ? "" : "+"}
           </span>
@@ -440,7 +451,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
           </span>
         </span>
         <span className="oc-floor flex h-11 items-end pb-1.5">
-          <Oudjes key={play} count={ouderen} dance={play > 0} />
+          <Oudjes key={play} count={ouderen} dance={play > 0} small />
         </span>
       </span>
 
@@ -491,11 +502,14 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
 function TierStatus({ input, info, onSet }: { input: BusinessOrderInput; info: BusinessInfo; onSet: (n: number) => void }) {
   const t = useT();
   const total = input.withRaisins + input.withoutRaisins;
-  const tier = tierFor(total, info);
-  const picked = info.packages.find((p) => p.key === input.pakket);
-  const next = nextTier(total, info);
+  const tier = chosenPackage(input, info);
+  const adopt = isAdoption(tier);
+  const picked = [...info.packages, ...info.adoptions].find((p) => p.key === input.pakket);
+  const next = adopt ? undefined : nextTier(total, info);
   if (!tier) return null;
-  const fell = picked && picked.oliebollen > total ? picked : undefined;
+  // Een muziekmiddag geldt bij precies zijn aantal: wie ervan afwijkt, krijgt het terugduwtje naar dat aantal.
+  const fell = picked && (isAdoption(picked) ? picked.oliebollen !== total : picked.oliebollen > total) ? picked : undefined;
+  // Het duwtje alleen vlak onder de grens: vanaf 75% van het volgende pakket (113–149 en 375–499).
   const nudge = !fell && next && total >= next.oliebollen * 0.75 ? next : undefined;
   const target = fell ?? nudge;
   return (
@@ -512,7 +526,7 @@ function TierStatus({ input, info, onSet }: { input: BusinessOrderInput; info: B
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <p className="max-w-md text-oliebol">
             {fell ? (
-              t.fell(t.num(fell.oliebollen), t.tier[fell.key], t.tier[tier.key])
+              isAdoption(fell) ? t.adoptBack(t.num(fell.oliebollen), t.tier[fell.key]) : t.fell(t.num(fell.oliebollen), t.tier[fell.key], t.tier[tier.key])
             ) : (
               t.nudge(t.num(target.oliebollen - total), t.tier[target.key], t.perks[target.key][0], t.num(Math.floor(target.oliebollen / 10) - Math.floor(total / 10)))
             )}
@@ -526,6 +540,78 @@ function TierStatus({ input, info, onSet }: { input: BusinessOrderInput; info: B
   );
 }
 
+/** Adopteer een hele muziekmiddag: een brede kaart per middag, onder de pakketten. */
+function AdoptionCard({ pkg, info, active, onPick }: { pkg: BusinessPackage; info: BusinessInfo; active: boolean; onPick: () => void }) {
+  const t = useT();
+  const ouderen = pkg.ouderen ?? 0;
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={active}
+      aria-label={t.adoptAria(t.num(pkg.oliebollen), ouderen, t.euro(pkg.oliebollen * info.price))}
+      onClick={onPick}
+      className={`flex flex-col gap-3 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${active ? "bg-krent shadow-zwevend ring-2 ring-gouwe" : "bg-papier shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"}`}
+    >
+      <span className="flex items-end gap-2">
+        <span className={`font-serif text-[40px] font-bold leading-none tabular-nums ${active ? "text-gouwe" : "text-krent"}`}>{ouderen}</span>
+        <span className={`text-sm font-bold leading-tight ${active ? "text-meel" : "text-krent"}`}>{t.adoptUnit}</span>
+      </span>
+      <span className="oc-floor flex h-11 items-end pb-1.5">
+        <Oudjes count={ouderen} dance={active} />
+      </span>
+      <span className={`flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t pt-3 ${active ? "border-meel/15" : "border-lijn"}`}>
+        <span className={`text-sm tabular-nums ${active ? "text-meel/80" : "text-muted"}`}>{t.num(pkg.oliebollen)} oliebollen</span>
+        <span className={`font-serif text-xl font-bold tabular-nums ${active ? "text-meel" : "text-krent"}`}>
+          {t.euroRound(pkg.oliebollen * info.price)} <span className={`text-xs font-normal ${active ? "text-meel/70" : "text-muted"}`}>{t.exclVatShort}</span>
+        </span>
+      </span>
+      <span className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold ${active ? "bg-gouwe text-krent" : "bg-vul text-krent"}`}>
+        {active ? t.chosen : t.adoptChoose}
+      </span>
+    </button>
+  );
+}
+
+/** Doneren, ook zonder oliebollen: € 2,50, dan € 25 (één oudere), en verder per € 25. */
+function DonationBlock({ value, info, onChange, error }: { value: number; info: BusinessInfo; onChange: (n: number) => void; error?: string }) {
+  const t = useT();
+  const euro = value * info.donationPrice;
+  const step = "grid h-11 w-11 place-items-center rounded-md bg-vul text-xl font-bold text-krent transition hover:bg-vul-2 active:translate-y-px disabled:opacity-40";
+  return (
+    <Card className="grid gap-4">
+      <div>
+        <h3 className="font-serif text-lg font-bold leading-tight text-krent">{t.donate}</h3>
+        <p className="mt-0.5 text-sm text-muted">{t.donateSub}</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div id="f-donation" tabIndex={-1} className="flex items-center gap-2 focus:outline-none">
+          <button type="button" className={step} onClick={() => onChange(donationStep(value, false))} disabled={value <= 0} aria-label={t.donateLess}>
+            −
+          </button>
+          <span className="min-w-[6.5rem] text-center font-serif text-2xl font-bold tabular-nums text-krent" aria-live="polite">
+            {t.euro(euro)}
+          </span>
+          <button type="button" className={step} onClick={() => onChange(donationStep(value, true))} aria-label={t.donateMore}>
+            +
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {[1, 10, 20, 40].map((n) => (
+            <button key={n} type="button" aria-pressed={value === n} className={`${quickButton} min-h-[44px] px-3 ${value === n ? "bg-krent text-meel hover:bg-krent" : ""}`} onClick={() => onChange(n)}>
+              {t.euroRound(n * info.donationPrice)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="text-sm text-oliebol">{value ? `${t.donateAmount(t.euro(euro))} ${t.donateSeniors(Math.floor(value / 10))}` : t.donateNone}</p>
+      {error ? <p className="text-xs font-bold text-feest-ink">! {error}</p> : null}
+    </Card>
+  );
+}
+
+const SOURCES: Exclude<BusinessSource, "">[] = ["ambassadeur", "collega", "klant", "linkedin", "instagram", "pers", "google", "anders"];
+
 function Line({ label, value, strong = false, muted = false }: { label: ReactNode; value: ReactNode; strong?: boolean; muted?: boolean }) {
   return (
     <div className={`flex items-baseline justify-between gap-3 ${strong ? "font-bold text-krent" : muted ? "text-muted" : "text-oliebol"}`}>
@@ -537,8 +623,21 @@ function Line({ label, value, strong = false, muted = false }: { label: ReactNod
 
 function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: BusinessTotals; info: BusinessInfo }) {
   const t = useT();
-  const short = Math.max(0, info.minimum - totals.oliebollen);
+  const only = donationOnly(input);
+  const short = only ? 0 : Math.max(0, info.minimum - totals.oliebollen);
   const pkg = chosenPackage(input, info);
+  if (only) {
+    return (
+      <dl className="grid gap-1.5 text-sm">
+        <Line label={t.donationLine(t.num(input.donation))} value={t.euro(totals.donation)} />
+        <div className="mt-1 flex items-baseline justify-between gap-3">
+          <dt className="font-bold text-krent">{t.onInvoice}</dt>
+          <dd className="font-serif text-2xl font-bold tabular-nums text-krent">{t.euro(totals.invoice)}</dd>
+        </div>
+        <p className="text-xs text-muted">{t.donationNoVat}</p>
+      </dl>
+    );
+  }
   return (
     <dl className="grid gap-1.5 text-sm">
       {pkg ? (
@@ -552,6 +651,7 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
       ) : null}
       <Line label={t.withRaisins} value={t.num(input.withRaisins)} />
       <Line label={t.withoutRaisins} value={t.num(input.withoutRaisins)} />
+      {totals.oliebollen ? <Line label={t.sugar} value={t.free} /> : null}
       <div className="my-1.5 border-t border-lijn" />
       <Line label={t.bollenLine(t.num(totals.oliebollen), t.euro(info.price))} value={t.euro(totals.bollen)} />
       <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={input.area ? t.euro(totals.delivery) : "–"} />
@@ -576,6 +676,7 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
           {t.short(t.num(short), info.minimum)}
         </p>
       ) : null}
+      {totals.oliebollen ? <p className="mt-1 text-xs text-muted">{t.cardNote}</p> : null}
     </dl>
   );
 }
@@ -625,6 +726,12 @@ export function BusinessOrderPage() {
   const [summaryVisible, setSummaryVisible] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
 
+  // Via een ambassadeur (?via=naam in de link): alvast ingevuld bij "Hoe kwamen jullie bij ons terecht?".
+  useEffect(() => {
+    const via = viaFromLink();
+    if (via) setInput((prev) => ({ ...prev, via, source: "ambassadeur", ambassador: prev.ambassador || via }));
+  }, []);
+
   useEffect(() => {
     let live = true;
     backend
@@ -646,10 +753,12 @@ export function BusinessOrderPage() {
   }, [done]);
 
   // Bezorgkosten volgen uit postcode en plaats; de klant kiest ze niet zelf (het Apps Script rekent ze ook zo na).
-  const area = areaFor(input.postalCode, input.city, info.regionPostcodes);
-  const order: BusinessOrderInput = { ...input, area, invoiceEmail: sameInvoice ? input.email : input.invoiceEmail };
+  const now = previewNow() ?? new Date();
+  const only = donationOnly(input);
+  const area = only ? "" : areaFor(input.postalCode, input.city, info.regionPostcodes);
+  const order: BusinessOrderInput = { ...input, area, fulfilment: only ? "donatie" : "bezorgen", invoiceEmail: sameInvoice ? input.email : input.invoiceEmail };
   const totals = businessTotals(order, info);
-  const errors = validateBusiness(order, info, new Date(), t.validation);
+  const errors = validateBusiness(order, info, now, t.validation);
   // With the same address, a wrong e-mail is one mistake, not two.
   if (sameInvoice) delete errors.invoiceEmail;
   const shown = showErrors ? errors : {};
@@ -663,7 +772,7 @@ export function BusinessOrderPage() {
 
   /** Pakket kiezen: het aantal wordt het pakketaantal, verdeeld 70% met en 30% zonder. Zit je er al in, dan blijft je aantal. */
   function pickPackage(p: BusinessPackage) {
-    if (chosenPackage(input, info)?.key === p.key) {
+    if (chosenPackage(input, info)?.key === p.key || (isAdoption(p) && input.withRaisins + input.withoutRaisins === p.oliebollen)) {
       setInput((prev) => ({ ...prev, pakket: p.key }));
       return;
     }
@@ -688,6 +797,7 @@ export function BusinessOrderPage() {
   }
 
   const pkg = chosenPackage(order, info);
+  const rank = packageRank(pkg);
   const step1 = !errors.pakket && !errors.withRaisins && !errors.withoutRaisins && !errors.donation;
   const step2 = !(["street", "postalCode", "city", "date"] as BusinessField[]).some((f) => errors[f]);
   const step3 = !(["company", "contact", "phone", "email", "invoiceEmail"] as BusinessField[]).some((f) => errors[f]);
@@ -703,8 +813,18 @@ export function BusinessOrderPage() {
     }
     setBusy(true);
     try {
-      // The package is the one the number reaches, whatever card was clicked.
-      const clean: BusinessOrderInput = { ...order, fulfilment: "bezorgen", pakket: tierFor(totals.oliebollen, info)?.key ?? "zelf", postalCode: formatPostcode(order.postalCode) };
+      // The package is the one the number reaches, whatever card was clicked. What the package does not allow is left out.
+      const clean: BusinessOrderInput = {
+        ...order,
+        ...(only ? { street: "", postalCode: "", city: "", date: "" } : { postalCode: formatPostcode(order.postalCode) }),
+        pakket: only ? "" : pkg?.key ?? "zelf",
+        flyers: false,
+        wallOfFame: rank >= 1 && order.wallOfFame,
+        certificate: rank >= 1 && order.certificate,
+        certificateName: rank >= 1 && order.certificate ? order.certificateName.trim() || order.company.trim() : "",
+        linkedin: rank >= 2 && order.linkedin,
+        ambassador: order.source === "ambassadeur" ? order.ambassador.trim() : ""
+      };
       const { id, warning } = await backend.submitBusinessOrder({ ...clean, website });
       setDone({ id, warning, input: clean, totals });
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -736,8 +856,27 @@ export function BusinessOrderPage() {
 
   // Proef met de letter Jost: #/bestellen?letter=jost.
   const jost = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("letter") === "jost";
+  const inclPrice = Math.round(info.price * (1 + info.vatRate) * 100) / 100;
 
   if (done) return <Confirmation done={done} info={info} onAnother={anotherAddress} onRestart={startOver} />;
+
+  // Na de sluitingstijd (28 december 12:00) is zakelijk bestellen dicht voor dit seizoen.
+  if (seasonClosed(info, now)) {
+    return (
+      <div className={`mx-auto grid w-full max-w-2xl gap-5 py-4 ${jost ? "oc-jost" : ""}`}>
+        <Card className="grid gap-4 sm:p-7">
+          <DiscoOudje className="h-16" />
+          <h1 className="font-serif text-[28px] font-bold leading-tight text-krent">{t.closedTitle}</h1>
+          <p className="text-[15px] leading-relaxed text-oliebol">
+            {t.closedText}{" "}
+            <a className="font-bold text-krent underline decoration-lijn-2 underline-offset-4" href={`mailto:${info.email}`}>
+              {info.email}
+            </a>
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className={`grid gap-6 pb-24 lg:pb-0 ${jost ? "oc-jost" : ""}`}>
@@ -754,7 +893,7 @@ export function BusinessOrderPage() {
         <dl className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.3fr)] gap-3 py-1 sm:max-w-2xl sm:grid-cols-3 sm:gap-6">
           {(
             [
-              [t.euro(info.price), t.perOliebol(Math.round(info.vatRate * 100))],
+              [t.euro(info.price), t.perOliebol(Math.round(info.vatRate * 100), t.euro(inclPrice))],
               [String(info.minimum), t.minimum]
             ] as Array<[string, string]>
           ).map(([value, label]) => (
@@ -803,6 +942,19 @@ export function BusinessOrderPage() {
               ))}
             </div>
             {shown.pakket ? <p className="text-xs font-bold text-feest-ink">! {shown.pakket}</p> : null}
+            {info.adoptions.length ? (
+              <div className="grid gap-3 rounded-kaart bg-gouwe-50 p-4 sm:p-5">
+                <div>
+                  <h3 className="font-serif text-lg font-bold leading-tight text-krent">{t.adoptTitle}</h3>
+                  <p className="mt-0.5 text-sm text-gouwe-ink">{t.adoptSub}</p>
+                </div>
+                <div role="radiogroup" aria-label={t.adoptTitle} className="grid gap-3 sm:grid-cols-2">
+                  {info.adoptions.map((a) => (
+                    <AdoptionCard key={a.key} pkg={a} info={info} active={pkg?.key === a.key} onPick={() => pickPackage(a)} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <p className="text-center text-sm text-muted">
               {t.otherAmount}{" "}
               <button
@@ -851,26 +1003,17 @@ export function BusinessOrderPage() {
                   <SplitBar met={input.withRaisins} zonder={input.withoutRaisins} />
                   <TierStatus input={order} info={info} onSet={setTotal} />
                 </div>
-                <div className="grid gap-4 border-t border-lijn pt-5">
-                  <Counter
-                    id="f-donation"
-                    label={t.donate}
-                    sub={t.donateSub(t.euroRound(info.donationPrice * 10))}
-                    value={input.donation}
-                    onChange={(n) => update("donation", n)}
-                    quick={[10, 50]}
-                    error={shown.donation}
-                  />
-                  <Check id="f-flyers" checked={input.flyers} onChange={(v) => update("flyers", v)}>
-                    <b>{t.flyers}</b> <span className="text-muted">· {t.flyersSub}</span>
-                  </Check>
-                </div>
               </Card>
             ) : null}
+
+            {/* Doneren staat altijd in beeld, ook voor wie geen oliebollen bestelt. */}
+            <DonationBlock value={input.donation} info={info} onChange={(n) => update("donation", n)} error={shown.donation} />
           </section>
 
           <div id="stap-2" className="scroll-mt-6">
-            <Step n={2} title={t.step2} sub={t.step2Sub} done={step2 && !!input.date}>
+            <Step n={2} title={t.step2} sub={only ? t.step2Donation : t.step2Sub} done={only || (step2 && !!input.date)}>
+              {only ? null : (
+              <>
               <div className="grid gap-3">
                 <Field id="f-street" label={t.street} error={shown.street}>
                   <input id="f-street" className={field} autoComplete="street-address" value={input.street} onChange={(e) => update("street", e.target.value)} placeholder="Keizersgracht 210" />
@@ -915,9 +1058,9 @@ export function BusinessOrderPage() {
 
               <div className="grid gap-2">
                 <p className={fieldLabel}>{t.whichDay}</p>
-                <DayPicker days={info.deliveryDays} value={input.date} onChange={(d) => update("date", d)} info={info} error={shown.date} />
+                <DayPicker days={info.deliveryDays} value={input.date} onChange={(d) => update("date", d)} info={info} now={now} error={shown.date} />
                 <p className="text-xs text-muted">
-                  {t.otherMoment}{" "}
+                  {t.deadline(t.lead(info), t.closeText(info))} {t.otherMoment}{" "}
                   <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent" href={mailLink}>
                     {t.mailUs}
                   </a>
@@ -943,6 +1086,8 @@ export function BusinessOrderPage() {
               <p className="rounded-md bg-vul px-3.5 py-2.5 text-sm text-oliebol">
                 <b className="text-krent">{t.moreAddresses}</b> {t.moreAddressesText}
               </p>
+              </>
+              )}
             </Step>
           </div>
 
@@ -988,6 +1133,53 @@ export function BusinessOrderPage() {
                 <input id="f-website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} />
               </div>
             </div>
+            <div className="grid gap-3 border-t border-lijn pt-5">
+              {rank >= 1 ? (
+                <>
+                  <p className={fieldLabel}>{t.extras}</p>
+                  <Check id="f-wallOfFame" checked={input.wallOfFame} onChange={(v) => update("wallOfFame", v)}>
+                    {t.wallOfFame(rank >= 2)}
+                  </Check>
+                  {input.wallOfFame && rank >= 2 ? <p className="-mt-1 px-1 text-xs text-muted">{t.logoHint}</p> : null}
+                  <Check id="f-certificate" checked={input.certificate} onChange={(v) => update("certificate", v)}>
+                    {t.certificate}
+                  </Check>
+                  {input.certificate ? (
+                    <Field id="f-certificateName" label={t.certificateName}>
+                      <input
+                        id="f-certificateName"
+                        className={field}
+                        value={input.certificateName || input.company}
+                        onChange={(e) => update("certificateName", e.target.value)}
+                        placeholder={t.company}
+                      />
+                    </Field>
+                  ) : null}
+                  {rank >= 2 ? (
+                    <Check id="f-linkedin" checked={input.linkedin} onChange={(v) => update("linkedin", v)}>
+                      {t.linkedin}
+                    </Check>
+                  ) : null}
+                </>
+              ) : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="f-source" label={t.sourceLabel} optional>
+                  <select id="f-source" className={field} value={input.source} onChange={(e) => update("source", e.target.value as BusinessSource)}>
+                    <option value="">{t.sourcePick}</option>
+                    {SOURCES.map((k) => (
+                      <option key={k} value={k}>
+                        {t.sources[k]}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                {input.source === "ambassadeur" ? (
+                  <Field id="f-ambassador" label={t.ambassador}>
+                    <input id="f-ambassador" className={field} value={input.ambassador} onChange={(e) => update("ambassador", e.target.value)} />
+                  </Field>
+                ) : null}
+              </div>
+            </div>
             <p className="text-xs leading-relaxed text-muted">
               {t.privacy}
             </p>
@@ -998,7 +1190,7 @@ export function BusinessOrderPage() {
           <Card className="grid gap-4">
             <div className="flex items-baseline justify-between">
               <h2 className="font-serif text-xl font-bold text-krent">{t.yourOrder}</h2>
-              {input.date ? <span className="text-xs font-bold text-oliebol">{t.longDay(input.date)}</span> : null}
+              {input.date && !only ? <span className="text-xs font-bold text-oliebol">{t.longDay(input.date)}</span> : null}
             </div>
             <Summary input={order} totals={totals} info={info} />
             <div className="grid gap-2 border-t border-lijn pt-4">
@@ -1007,7 +1199,7 @@ export function BusinessOrderPage() {
                   <Oudjes count={totals.ouderen} />
                   <p className="text-sm text-krent">
                     {t.goodFor} <b>{t.num(totals.ouderen)}</b> {t.seniors(totals.ouderen)} {t.onFloor}
-                    {input.donation ? t.donated(t.num(input.donation)) : "."}
+                    {input.donation && !only ? t.donated(t.num(input.donation)) : "."}
                   </p>
                 </>
               ) : (
@@ -1038,7 +1230,13 @@ export function BusinessOrderPage() {
               </Notice>
             ) : null}
             <button type="button" className={`${primaryButton} min-h-[48px] w-full text-[15px]`} disabled={busy} onClick={() => void submit()}>
-              {busy ? t.sending : totals.oliebollen >= info.minimum ? t.orderN(t.num(totals.oliebollen)) : t.placeOrder}
+              {busy
+                ? t.sending
+                : only
+                  ? t.donateN(t.euro(totals.donation), totals.ouderen)
+                  : totals.oliebollen >= info.minimum
+                    ? t.orderN(t.num(totals.oliebollen), totals.ouderen)
+                    : t.placeOrder}
             </button>
             <p className="text-center text-xs leading-relaxed text-muted">
               {t.payLater}
@@ -1063,7 +1261,7 @@ export function BusinessOrderPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div className="min-w-0 leading-tight">
             <p className="truncate text-xs text-muted">
-              {pkg ? t.tier[pkg.key] : `${t.num(totals.oliebollen)} oliebollen`} · {t.barSeniors(t.num(totals.ouderen))}
+              {pkg ? t.tier[pkg.key] : only ? t.donate : `${t.num(totals.oliebollen)} oliebollen`} · {t.barSeniors(t.num(totals.ouderen))}
             </p>
             <p className="font-serif text-lg font-bold tabular-nums text-krent">{t.euro(totals.invoice)}</p>
           </div>
@@ -1082,12 +1280,19 @@ const HALL_MAX_OUDJES = 300;
 function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: BusinessInfo; onAnother: () => void; onRestart: () => void }) {
   const t = useT();
   const { input, totals } = done;
-  const pkg = chosenPackage(input, info);
+  const only = donationOnly(input);
+  const pkg = only ? undefined : chosenPackage(input, info);
+  // Een muziekmiddag krijgt alles van de pakketten, plus de middag zelf.
+  const perks = pkg ? [...info.packages.filter((p) => isAdoption(pkg) || p.oliebollen <= pkg.oliebollen), ...(isAdoption(pkg) ? [pkg] : [])].flatMap((p) => t.perks[p.key]) : [];
   const rows: Array<[string, ReactNode]> = [
-    [t.package, pkg ? <span className="inline-flex items-center gap-1.5 font-bold text-krent"><Medal tier={pkg.key} className="h-6 w-5" />{t.tier[pkg.key]}</span> : t.custom],
-    [t.rowOliebollen, t.splitShort(t.num(totals.oliebollen), t.num(input.withRaisins), t.num(input.withoutRaisins))],
+    ...(only
+      ? []
+      : ([
+          [t.package, pkg ? <span className="inline-flex items-center gap-1.5 font-bold text-krent"><Medal tier={pkg.key} className="h-6 w-5" />{t.tier[pkg.key]}</span> : t.custom],
+          [t.rowOliebollen, t.splitShort(t.num(totals.oliebollen), t.num(input.withRaisins), t.num(input.withoutRaisins))]
+        ] as Array<[string, ReactNode]>)),
     ...(input.donation ? ([[t.rowDonated, t.rowDonatedValue(t.num(input.donation))]] as Array<[string, ReactNode]>) : []),
-    [t.rowVisit, <>{t.longDay(input.date)}, {t.moment[input.moment].toLowerCase()}<br />{input.street}, {input.postalCode} {input.city}</>],
+    ...(only ? [] : ([[t.rowVisit, <>{t.longDay(input.date)}, {t.moment[input.moment].toLowerCase()}<br />{input.street}, {input.postalCode} {input.city}</>]] as Array<[string, ReactNode]>)),
     [t.onInvoice, <b className="text-krent">{t.euro(totals.invoice)}</b>]
   ];
   return (
@@ -1099,10 +1304,10 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
           </Sticker>
           <div>
             <h1 className="font-serif text-[28px] font-bold leading-tight text-krent">
-              {totals.ouderen > 0 ? t.doneTitle(t.num(totals.ouderen)) : t.doneTitleEmpty}
+              {totals.ouderen > 0 ? t.doneTitle(t.num(totals.ouderen), totals.ouderen) : t.doneTitleEmpty}
             </h1>
             <p className="mt-1 text-[15px] leading-relaxed text-oliebol">
-              {t.doneText(input.company)}
+              {only ? t.doneDonation(input.company) : t.doneText(input.company)}
               <b className="text-krent">{input.email}</b>.
             </p>
           </div>
@@ -1137,7 +1342,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
         {pkg ? (
           <div className="grid gap-1.5 border-t border-lijn pt-4 text-sm">
             <p className={fieldLabel}>{t.youGetWith(t.tier[pkg.key])}</p>
-            {info.packages.filter((p) => p.oliebollen <= pkg.oliebollen).flatMap((p) => t.perks[p.key]).map((perk) => (
+            {perks.map((perk) => (
               <p key={perk} className="flex gap-2 text-krent">
                 <span aria-hidden="true" className="text-kerst-ink">
                   ✓
@@ -1150,9 +1355,11 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
         {done.warning ? <Notice tone="warning">{done.warning} {t.keepNumber}</Notice> : null}
         {backend.kind === "demo" ? <Notice tone="info">{t.demo}</Notice> : null}
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={primaryButton} onClick={onAnother}>
-            {t.another}
-          </button>
+          {only ? null : (
+            <button type="button" className={primaryButton} onClick={onAnother}>
+              {t.another}
+            </button>
+          )}
           <button type="button" className={ghostButton} onClick={onRestart}>
             {t.newOrder}
           </button>

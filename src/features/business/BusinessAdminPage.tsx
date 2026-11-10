@@ -6,7 +6,7 @@ import { Badge, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Note, Notice, 
 import { Drawer } from "../../components/Drawer";
 import { BUSINESS_DEFAULTS, BUSINESS_LARGE } from "../../config";
 import { appLink } from "../../lib/router";
-import { areaLabel, longDay, momentLabel, pakketName } from "./business";
+import { areaLabel, longDay, momentLabel, pakketName, sourceLabel } from "./business";
 
 /*
  * Beheer: de zakelijke aanvragen van het bestelformulier. Elke aanvraag nakijken en bevestigen
@@ -29,6 +29,7 @@ function daysUntil(date: string): number {
 /** Wat beheer moet weten voordat ze bevestigen. Altijd met woord, nooit alleen kleur. */
 function flags(b: BusinessOrder): Array<[BadgeTone, string]> {
   const out: Array<[BadgeTone, string]> = [];
+  if (b.fulfilment === "donatie") return [["zacht", "Alleen donatie"]];
   const days = daysUntil(b.date);
   if (b.status === "nieuw" && days <= 3) out.push(["probleem", days <= 0 ? "! Dag is voorbij" : `! Over ${days} ${days === 1 ? "dag" : "dagen"}`]);
   if (b.fulfilment === "afhalen") out.push(["aandacht", "~ Afhalen"]);
@@ -100,14 +101,20 @@ export function BusinessAdminPage({ state, session, run }: { state: DashboardSta
                         <span className="text-xs tabular-nums text-muted">{b.id}</span>
                       </span>
                       <span className="block truncate text-sm text-oliebol">
-                        {b.contact} · {b.fulfilment === "bezorgen" ? `${b.street}, ${b.city}` : "Afhalen"}
+                        {b.contact} · {b.fulfilment === "bezorgen" ? `${b.street}, ${b.city}` : b.fulfilment === "donatie" ? "Alleen een donatie" : "Afhalen"}
                       </span>
                     </span>
                     <span className="min-w-0 text-sm">
-                      <span className="block font-bold text-krent">{longDay(b.date)}</span>
+                      <span className="block font-bold text-krent">{b.date ? longDay(b.date) : "Geen bezorging"}</span>
                       <span className="block tabular-nums text-oliebol">
-                        {b.pakket ? `${pakketName(b.pakket)} · ` : ""}
-                        {formatNumber(b.withRaisins)} MET · {formatNumber(b.withoutRaisins)} ZONDER
+                        {b.fulfilment === "donatie" ? (
+                          `${formatNumber(b.donation)} oliebollen gedoneerd`
+                        ) : (
+                          <>
+                            {b.pakket ? `${pakketName(b.pakket)} · ` : ""}
+                            {formatNumber(b.withRaisins)} MET · {formatNumber(b.withoutRaisins)} ZONDER
+                          </>
+                        )}
                       </span>
                     </span>
                     <span className="flex flex-wrap items-center gap-1.5 sm:justify-end">
@@ -117,7 +124,7 @@ export function BusinessAdminPage({ state, session, run }: { state: DashboardSta
                         </Badge>
                       ))}
                       {filter === "alles" ? <Badge tone={statusBadge[b.status][0]}>{statusBadge[b.status][1]}</Badge> : null}
-                      <span className="ml-1 font-serif text-lg font-bold tabular-nums text-krent">{formatEuro(b.totals.total)}</span>
+                      <span className="ml-1 font-serif text-lg font-bold tabular-nums text-krent">{formatEuro(b.fulfilment === "donatie" ? b.totals.invoice : b.totals.total)}</span>
                     </span>
                   </button>
                 </li>
@@ -214,12 +221,27 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
             ["MET krenten", formatNumber(b.withRaisins)],
             ["ZONDER krenten", formatNumber(b.withoutRaisins)],
             ["TOTAAL", <b>{formatNumber(t.oliebollen)} oliebollen</b>],
-            ["Extra gedoneerd", b.donation ? `${formatNumber(b.donation)} oliebollen` : ""],
-            ["Flyers", b.flyers ? "Ja, graag" : "Nee"]
+            ["Gedoneerd", b.donation ? `${formatNumber(b.donation)} ${b.donation === 1 ? "oliebol" : "oliebollen"} (${formatEuro(t.donation)})` : ""],
+            // Flyers vragen we niet meer; alleen oude aanvragen hebben ze nog.
+            ["Flyers", b.flyers ? "Ja, graag" : ""]
           ]}
         />
       </Block>
 
+      <Block title="Naam en herkomst">
+        <Rows
+          rows={[
+            ["Wall of fame", b.wallOfFame ? "✓ Mag, zonder bedragen" : "Nee"],
+            ["Certificaat", b.certificate ? `✓ Op naam van ${b.certificateName || b.company}` : "Nee"],
+            ["LinkedIn-badge", b.linkedin ? "✓ Graag" : "Nee"],
+            ["Gevonden via", b.source ? sourceLabel[b.source] : ""],
+            ["Ambassadeur", b.ambassador],
+            ["Link", b.via ? `?via=${b.via}` : ""]
+          ]}
+        />
+      </Block>
+
+      {b.fulfilment === "donatie" ? null : (
       <Block title={b.fulfilment === "bezorgen" ? "Bezorgen" : "Afhalen"}>
         <Rows
           rows={
@@ -237,6 +259,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
           }
         />
       </Block>
+      )}
 
       <Block title="Contact en factuur">
         <Rows

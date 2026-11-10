@@ -5,6 +5,16 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 
 ## De pagina voor de klant
 
+> **Feedback 10 november 2026** (verwerkt): prijs € 2,29 excl. btw (€ 2,50 incl.); pakketten heten **Danspartner**,
+> **Polonaisepartner** en **Feestpartner** (de sleutels in code en Instellingen blijven `brons`, `zilver`, `goud`); bij
+> Polonaisepartner vervangt *Oma Coby's Oliebal (limited edition) voor in de kerstboom* het kaartje van Oma; nieuw blok
+> **Adopteer een hele muziekmiddag** (2.500 oliebollen = zo'n 60 ouderen, 3.100 = zo'n 100); doneren staat altijd in beeld,
+> ook zonder oliebollen (€ 2,50, € 25, dan per € 25); flyers zijn weg (er gaat altijd een kaartje met het verhaal mee);
+> stap 3 vraagt wall of fame, impactcertificaat, LinkedIn-badge en "Hoe kwamen jullie bij ons terecht?" (`?via=naam`
+> vult de ambassadeur in); bezorgen in 10xx, 11xx en 1430–1433 voor € 10; alle werkdagen van 7 december tot en met
+> 8 januari behalve 25 december en 1 januari, minimaal 3 werkdagen van tevoren en uiterlijk 28 december 12:00.
+> Waar de tekst hieronder iets anders zegt, geldt dit blok.
+
 Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon onderaan, met het totaal in een balk).
 
 1. **Hoeveel ouderen laat je dansen?** Drie pakketkaarten, de ladder uit het bouwplan: **Brons** (50 tot 149 oliebollen),
@@ -49,7 +59,7 @@ Rechtsboven staat een knop **NL | EN**. Alle teksten van het formulier en de bev
 `src/features/business/teksten.ts`, in beide talen naast elkaar; het Engels heeft dezelfde vorm, dus een vergeten vertaling
 geeft een typefout. Bedragen, getallen en datums volgen de taal (€ 2,50 / €2.50, maandag 14 december / Monday 14 December).
 Vaste woorden in het Engels: oliebollen blijft oliebollen ("the Dutch doughnut" in de intro), ouderen zijn seniors,
-Oma blijft Oma, Brons/Zilver/Goud worden Bronze/Silver/Gold, btw is VAT, rollator is walker.
+Oma blijft Oma, de pakketnamen (Danspartner, Polonaisepartner, Feestpartner) blijven Nederlands, btw is VAT.
 
 Welke taal je eerst ziet: `#/bestellen?taal=en` (of `?taal=nl`) in de link wint, dan wat je eerder koos (bewaard in de
 browser), dan de browser. Engels alleen als de browser geen Nederlands kent én je niet in de Nederlandse of Belgische
@@ -97,11 +107,44 @@ en in Max' Google Drive in de map *Oma Coby – Zakelijk bestellen*.
 
 ## Bezorgkosten
 
-De postcode bepaalt het tarief: **1000–1109** (Amsterdam) en **1430–1433** (Aalsmeer en Kudelstaart) betalen het lage
-tarief (`zakelijk_bezorgen_regio`, € 10), alle andere postcodes het hoge (`zakelijk_bezorgen_buiten`, € 25). Zonder
-postcode kijkt het formulier naar de plaats (Amsterdam, Aalsmeer of Kudelstaart = laag). Weesp, Diemen en Amstelveen vallen
-dus buiten het lage tarief. Andere postcodes erbij? Zet in **Instellingen** de sleutel `zakelijk_postcodes_regio`, bijvoorbeeld
-`1000-1109, 1430-1433, 1180-1189` (dan telt Amstelveen ook als regio).
+De postcode bepaalt het tarief: **1000–1199** (Groot-Amsterdam: ook Diemen, Duivendrecht, Amstelveen, Ouderkerk en
+Badhoevedorp, maar ook Volendam en Edam, 113x) en **1430–1433** (Aalsmeer en Kudelstaart) betalen het lage tarief
+(`zakelijk_bezorgen_regio`, € 10), alle andere postcodes het hoge (`zakelijk_bezorgen_buiten`, € 25). Zonder postcode
+kijkt het formulier naar de plaats (Amsterdam, Aalsmeer of Kudelstaart = laag). Weesp (138x) valt erbuiten. Andere
+postcodes? Zet in **Instellingen** de sleutel `zakelijk_postcodes_regio`, bijvoorbeeld `1000-1199, 1380-1384, 1430-1433`.
+
+## Bezorgdagen en deadline
+
+Alle doordeweekse dagen van maandag 7 december tot en met vrijdag 8 januari, behalve vrijdag 25 december en vrijdag
+1 januari (tabblad **Zakelijke dagen**; dat tabblad wint van de standaard in de code). Bestellen kan tot en met de dag die
+3 werkdagen vóór de bezorgdag ligt (`zakelijk_werkdagen_vooraf`): maandag bestellen, donderdag bezorgd. Werkdagen zijn
+maandag tot en met vrijdag, zonder 25 en 26 december en 1 januari. Na maandag 28 december 12:00 (`zakelijk_sluiting`) is
+zakelijk bestellen dicht: de pagina zegt dan "Zakelijk bestellen is gesloten voor dit seizoen". Op 28 december om 11:30 kan
+dus nog donderdag 31 december en de eerste week van januari.
+
+Laten zien hoe dat werkt: `#/bestellen?nu=2026-12-07T10:00` doet op de pagina alsof het dan is (doorgestreepte dagen), en
+`#/bestellen?nu=2026-12-28T12:00` toont de gesloten pagina. Alleen de pagina doet alsof; het script kijkt altijd naar de
+echte tijd.
+
+## Doneren en muziekmiddagen
+
+- Doneren kan altijd, ook zonder oliebollen: € 2,50 (1 oliebol), € 25 (10 oliebollen, 1 oudere) en verder per € 25. Een
+  donatie heeft geen btw (nog navragen). Alleen een donatie: geen minimum, geen adres en geen dag; in de Sheet staat bij
+  `afhalen_bezorgen` dan "Alleen donatie" en hij komt na bevestigen niet in Bestellingen, Inpakken of Routes.
+- Ouderen: 1 per 10 oliebollen, besteld en gedoneerd samen.
+- Precies 2.500 oliebollen is de **Muziekmiddag voor 60 ouderen**, precies 3.100 de **Muziekmiddag voor 100 ouderen**
+  (`adoptions` in `config.ts` en `CONFIG.BUSINESS`). Zo'n middag telt het vaste aantal ouderen (plus wat er gedoneerd is),
+  niet 1 per 10, en krijgt alle extra's van de pakketten plus livemuziek, de naam op de middag en de keuze van de plek.
+
+## Stap 3: wat mogen we met jullie naam doen?
+
+Alleen met een pakket: wall of fame (toestemming, standaard uit; naam en aantal ouderen, vanaf Polonaisepartner ook logo,
+nooit bedragen), impactcertificaat (standaard aan, met de naam erop, vooraf de bedrijfsnaam) en vanaf Polonaisepartner de
+LinkedIn-badge. Altijd: "Hoe kwamen jullie bij ons terecht?" (ambassadeur met naam, collega of kennis, vorig jaar al klant,
+LinkedIn, Instagram, pers of nieuws, Google, anders). Een link met `?via=naam` (bijv. `#/bestellen?via=kees`) vult
+"ambassadeur" en de naam alvast in; de link zelf komt in de kolom `via_link`. Nieuwe kolommen in Zakelijke aanvragen:
+`wall_of_fame`, `certificaat`, `naam_certificaat`, `linkedin_badge`, `herkomst`, `ambassadeur`, `via_link`; het script
+zet ze er zelf bij.
 
 Het script rekent het gebied bij versturen zelf opnieuw uit (`areaFor_`); wat de browser meestuurt telt niet. Past beheer bij
 een zakelijke bestelling de postcode of plaats aan, dan worden gebied en bedrag opnieuw berekend.
@@ -110,19 +153,24 @@ een zakelijke bestelling de postcode of plaats aan, dan worden gebied en bedrag 
 
 `businessTotals` in `src/features/business/business.ts` en `businessTotals_` in `apps-script/Code.gs` rekenen hetzelfde;
 het script rekent bij versturen alles opnieuw na en controleert dezelfde regels (`validateBusiness` / `validateBusiness_`).
-De prijs per oliebol (€ 2,50) volgt het bouwplan en staat vast in het script; Instellingen kan hem niet overschrijven.
-Bestellen kan tot en met de dag vóór de bezorgdag (`zakelijk_dagen_vooraf`, standaard 1; afgestemd met Mark).
+De prijs per oliebol (€ 2,29 excl. btw, € 2,50 incl.) volgt het zakelijk concept 2026 en staat vast in het script;
+Instellingen kan hem niet overschrijven.
 Prijzen, pakketten en dagen staan standaard in `BUSINESS_DEFAULTS` (`src/config.ts`) en `CONFIG.BUSINESS` (`Code.gs`).
 Het pakket volgt uit MET + ZONDER: het grootste pakket waarvan je het aantal haalt (`tierFor` / `businessPackage_`), welke
 kaart je ook aanklikte. De extra's per pakket staan in `packageCopy` (`business.ts`) en `BUSINESS_PERKS` (`Code.gs`).
 
-Rekenvoorbeeld: 120 MET + 80 ZONDER, bezorgen in Amsterdam vóór 10:00, 20 gedoneerd →
-200 × € 2,50 = € 500,00 + € 10 + € 10 = € 520,00 excl. btw, + € 46,80 btw = € 566,80, + € 40 donatie = € 606,80 op de factuur.
+Rekenvoorbeeld: 110 MET + 40 ZONDER (Polonaisepartner), bezorgen in Diemen, 20 gedoneerd →
+150 × € 2,29 = € 343,50 + € 10 = € 353,50 excl. btw, + € 31,82 btw = € 385,32, + € 50 donatie = € 435,32 op de factuur;
+17 ouderen.
 
 ## Nog afstemmen met Mark
 
 - De extra's per pakket komen uit de ladder in het bouwplan; bevestigen dat ze zo kloppen (de kerstballen bij Zilver en
   de bezorging door heel Nederland bij Goud staan er nog niet in).
 - Of de donatie zonder btw op de factuur komt (nu: aparte regel, buiten de btw).
+- Muziekmiddag: 2.500 oliebollen geeft zo'n 60 ouderen, terwijl 2.490 oliebollen als Feestpartner 249 ouderen geeft
+  (1 per 10). Welke telling klopt?
+- De extra's per pakket: het zakelijk concept 2026 (PDF) zat niet in de repo; alleen de wijziging bij Polonaisepartner is
+  verwerkt.
 - Bezorgdagen 14 december en 4–8 januari vallen buiten de aanmelddagen voor vrijwilligers (15–31 december).
 - Spam: het formulier heeft een onzichtbaar lokveld voor bots; komt er toch rommel binnen, dan kan er een limiet per e-mailadres bij.

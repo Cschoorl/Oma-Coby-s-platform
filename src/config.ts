@@ -165,32 +165,50 @@ export const LABEL_SIZE = { name: "DYMO 99014", widthMm: 101, heightMm: 54 };
  * en de dagen in het tabblad Zakelijke dagen. De prijs per oliebol niet: die volgt het bouwplan. Zie apps-script/README.md.
  */
 export const BUSINESS_DEFAULTS: BusinessInfo = {
-  // Uit het bouwplan van november: €2,50 per bol excl. btw, op elk niveau dezelfde prijs.
-  price: 2.5,
+  // € 2,29 per bol excl. 9% btw, dus € 2,50 incl. (zakelijk concept 2026).
+  price: 2.29,
   vatRate: 0.09,
   minimum: 50,
   // Grote bedrijven bestellen ruim meer dan 500; boven de 10.000 stemmen we het eerst af.
   maximum: 10000,
   fees: { regio: 10, buiten: 25 },
-  // Amsterdam (1000–1109) en Aalsmeer met Kudelstaart (1430–1433); in de Sheet te wijzigen via Instellingen.
-  regionPostcodes: "1000-1109, 1430-1433",
+  // Groot-Amsterdam (10xx en 11xx: ook Diemen en Amstelveen) en Aalsmeer met Kudelstaart (1430–1433).
+  regionPostcodes: "1000-1199, 1430-1433",
   surcharges: { regulier: 0, voor10: 10, voor9: 15 },
-  donationPrice: 2,
-  // Bestellen kan tot en met de dag vóór de bezorgdag.
-  leadDays: 1,
-  deliveryDays: [
-    ...[14, 15, 16, 17, 18, 21, 22, 28, 29, 30, 31].map((d) => `${SEASON_YEAR}-12-${String(d).padStart(2, "0")}`),
-    ...[4, 5, 6, 7, 8].map((d) => `${SEASON_YEAR + 1}-01-0${d}`)
-  ],
+  // € 2,50 per gedoneerde oliebol: € 25 is 10 oliebollen, één oudere.
+  donationPrice: 2.5,
+  // Minimaal 3 werkdagen van tevoren, en uiterlijk maandag 28 december 12:00.
+  leadWorkdays: 3,
+  closeAt: `${SEASON_YEAR}-12-28T12:00`,
+  holidays: [`${SEASON_YEAR}-12-25`, `${SEASON_YEAR}-12-26`, `${SEASON_YEAR + 1}-01-01`],
+  // Alle doordeweekse dagen van maandag 7 december tot en met vrijdag 8 januari, behalve 25 december en 1 januari.
+  deliveryDays: weekdays(`${SEASON_YEAR}-12-07`, `${SEASON_YEAR + 1}-01-08`, [`${SEASON_YEAR}-12-25`, `${SEASON_YEAR + 1}-01-01`]),
   email: "info@omacobysoliebollenbar.nl",
   phone: "06 45 44 35 09",
-  // De ladder uit het bouwplan: Brons 50 tot 149, Zilver 150 tot 499, Goud vanaf 500. In de Sheet te wijzigen via Instellingen.
+  // Danspartner 50 tot 149, Polonaisepartner 150 tot 499, Feestpartner vanaf 500. Aantallen te wijzigen via Instellingen.
   packages: [
-    { key: "brons", name: "Brons", oliebollen: 50 },
-    { key: "zilver", name: "Zilver", oliebollen: 150 },
-    { key: "goud", name: "Goud", oliebollen: 500 }
+    { key: "brons", name: "Danspartner", oliebollen: 50 },
+    { key: "zilver", name: "Polonaisepartner", oliebollen: 150 },
+    { key: "goud", name: "Feestpartner", oliebollen: 500 }
+  ],
+  // Adopteer een hele muziekmiddag: bij precies dit aantal, met livemuziek en jullie naam op de middag.
+  adoptions: [
+    { key: "middag60", name: "Muziekmiddag voor 60 ouderen", oliebollen: 2500, ouderen: 60 },
+    { key: "middag100", name: "Muziekmiddag voor 100 ouderen", oliebollen: 3100, ouderen: 100 }
   ]
 };
+
+/** Alle maandagen tot en met vrijdagen van `from` tot en met `to`, zonder de dagen in `skip`. */
+function weekdays(from: string, to: string, skip: string[]): string[] {
+  const out: string[] = [];
+  const day = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  for (; day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
+    const iso = day.toISOString().slice(0, 10);
+    if (day.getUTCDay() >= 1 && day.getUTCDay() <= 5 && !skip.includes(iso)) out.push(iso);
+  }
+  return out;
+}
 
 /** Oliebollen per collega als richtlijn bij de pakketten (3 als ze er een mee naar huis nemen). */
 export const BUSINESS_PER_COLLEAGUE = 2;

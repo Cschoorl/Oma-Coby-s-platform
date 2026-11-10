@@ -169,6 +169,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   price: 2.5,
   vatRate: 0.09,
   minimum: 50,
+  // Grote bedrijven bestellen ruim meer dan 500; boven de 10.000 stemmen we het eerst af.
+  maximum: 10000,
   fees: { regio: 10, buiten: 25 },
   surcharges: { regulier: 0, voor10: 10, voor9: 15 },
   donationPrice: 2,
@@ -178,13 +180,9 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
     ...[14, 15, 16, 17, 18, 21, 22, 28, 29, 30, 31].map((d) => `${SEASON_YEAR}-12-${String(d).padStart(2, "0")}`),
     ...[4, 5, 6, 7, 8].map((d) => `${SEASON_YEAR + 1}-01-0${d}`)
   ],
-  pickupDays: [
-    { date: `${SEASON_YEAR}-12-30`, time: "14:00–16:00" },
-    { date: `${SEASON_YEAR}-12-31`, time: "14:00–16:00" }
-  ],
   email: "info@omacobysoliebollenbar.nl",
   phone: "06 45 44 35 09",
-  // De ladder uit het bouwplan (50, 150 en 500 oliebollen); in de Sheet te wijzigen via Instellingen.
+  // De ladder uit het bouwplan: Brons 50 tot 149, Zilver 150 tot 499, Goud vanaf 500. In de Sheet te wijzigen via Instellingen.
   packages: [
     { key: "brons", name: "Brons", oliebollen: 50 },
     { key: "zilver", name: "Zilver", oliebollen: 150 },

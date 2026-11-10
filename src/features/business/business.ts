@@ -17,22 +17,19 @@ export const momentLabel: Record<BusinessMoment, string> = {
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 
-/** Per pakket: voor wie het is en wat het doet. De aantallen komen uit BusinessInfo.packages. */
-export const packageCopy: Record<BusinessPackageKey, { kicker: string; text: string; andMore: boolean }> = {
+/**
+ * Per pakket: wat je erbij krijgt. De extra's komen uit de ladder in het
+ * bouwplan; elk pakket krijgt alles van het pakket eronder, plus zijn eigen extra's. De aantallen staan in BusinessInfo.packages.
+ */
+export const packageCopy: Record<BusinessPackageKey, { perks: string[] }> = {
   brons: {
-    kicker: "Voor het team",
-    text: "Een warme traktatie bij de borrel. En een groepje ouderen dat weer even de dansvloer op gaat.",
-    andMore: false
+    perks: ["Impactcertificaat met jullie aantal ouderen", "Jullie naam op de wall of fame", "Kaartje met het verhaal bij de oliebollen"]
   },
   zilver: {
-    kicker: "Voor het hele kantoor",
-    text: "Iedereen aan de oliebol. Samen laten jullie een volle tafel ouderen swingen op livemuziek.",
-    andMore: false
+    perks: ["LinkedIn-badge met een kant-en-klare post", "Jullie logo op de wall of fame", "Een kaartje van Oma voor de besteller"]
   },
   goud: {
-    kicker: "Voor grote teams, events en relaties",
-    text: "Jullie vullen een complete dansvloer. Een middag lang rock 'n rollen, namens jullie bedrijf.",
-    andMore: true
+    perks: ["Uitnodiging voor de muziekmiddag zelf", "Foto of filmpje van jullie middag", "Podiumplek op de wall of fame"]
   }
 };
 
@@ -47,15 +44,19 @@ export function packageSplit(oliebollen: number): Pick<BusinessOrderInput, "with
   return { withRaisins, withoutRaisins: oliebollen - withRaisins };
 }
 
-/** Het gekozen pakket, als de aantallen er nog precies op uitkomen. */
-export function chosenPackage(input: BusinessOrderInput, info: BusinessInfo): BusinessPackage | undefined {
-  const p = info.packages.find((x) => x.key === input.pakket);
-  return p && input.withRaisins + input.withoutRaisins === p.oliebollen ? p : undefined;
+/** Het pakket bij dit aantal: het grootste waarvan je het aantal haalt. Onder Brons geen pakket. */
+export function tierFor(oliebollen: number, info: BusinessInfo): BusinessPackage | undefined {
+  return [...info.packages].reverse().find((p) => oliebollen >= p.oliebollen);
 }
 
-/** "Brons", "Zilver", "Goud" of "Zelf samengesteld"; zo staat het ook in de Sheet. */
-export function packageLabel(input: BusinessOrderInput, info: BusinessInfo): string {
-  return chosenPackage(input, info)?.name ?? "Zelf samengesteld";
+/** Het pakket van deze bestelling: meer dan het pakketaantal blijft dat pakket, minder valt een pakket terug. */
+export function chosenPackage(input: BusinessOrderInput, info: BusinessInfo): BusinessPackage | undefined {
+  return tierFor(input.withRaisins + input.withoutRaisins, info);
+}
+
+/** Het volgende pakket boven dit aantal, of niets bij Goud. */
+export function nextTier(oliebollen: number, info: BusinessInfo): BusinessPackage | undefined {
+  return info.packages.find((p) => p.oliebollen > oliebollen);
 }
 
 /** Voor beheer: de pakketnaam zoals de Sheet hem bewaart; leeg bij oudere bestellingen zonder pakket. */
@@ -127,34 +128,50 @@ const POSTCODE = /^\d{4}\s?[a-z]{2}$/i;
 
 export type BusinessField = keyof BusinessOrderInput;
 
+/** De foutmeldingen van het formulier; de Engelse staan in teksten.ts. */
+export const validationNl = {
+  pakket: "Kies een pakket, of stel zelf je aantal samen.",
+  tens: "Kies een aantal in tientallen.",
+  min: (n: number) => `Samen minimaal ${n} oliebollen.`,
+  max: (n: number) => `Samen hooguit ${n.toLocaleString("nl-NL")} oliebollen. Meer? Mail ons, dan plannen we het samen.`,
+  street: "Vul straat en huisnummer in.",
+  postalCode: "Vul een postcode in, zoals 1431 AB.",
+  city: "Vul de plaats in.",
+  area: "Kies waar we bezorgen.",
+  date: "Kies een dag.",
+  dateClosed: "Op deze dag komen we niet langs. Kies een andere dag.",
+  dateSoon: (info: BusinessInfo) => `Deze dag is te snel: bestel uiterlijk ${leadText(info)}.`,
+  company: "Vul de naam van je onderneming in.",
+  contact: "Vul de naam van de contactpersoon in.",
+  phone: "Vul een telefoonnummer in, zoals 06 12345678.",
+  email: "Vul een geldig e-mailadres in.",
+  invoiceEmail: "Vul een geldig e-mailadres voor de factuur in."
+};
+export type ValidationText = typeof validationNl;
+
 /** Per veld wat er nog mist, in de volgorde van het formulier. Leeg = klaar om te versturen. */
-export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, now = new Date()): Partial<Record<BusinessField, string>> {
+export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, now = new Date(), text: ValidationText = validationNl): Partial<Record<BusinessField, string>> {
   const e: Partial<Record<BusinessField, string>> = {};
   const total = input.withRaisins + input.withoutRaisins;
-  if (!input.pakket && total === 0) e.pakket = "Kies een pakket, of stel zelf je aantal samen.";
+  if (!input.pakket && total === 0) e.pakket = text.pakket;
   for (const key of ["withRaisins", "withoutRaisins", "donation"] as const) {
-    if (input[key] % 10 !== 0) e[key] = "Kies een aantal in tientallen.";
+    if (input[key] % 10 !== 0) e[key] = text.tens;
   }
-  if (!e.withRaisins && !e.withoutRaisins && total < info.minimum) e.withRaisins = `Samen minimaal ${info.minimum} oliebollen.`;
-  if (input.fulfilment === "bezorgen") {
-    if (!input.street.trim()) e.street = "Vul straat en huisnummer in.";
-    if (!POSTCODE.test(input.postalCode.trim())) e.postalCode = "Vul een postcode in, zoals 1431 AB.";
-    if (!input.city.trim()) e.city = "Vul de plaats in.";
-    if (!input.area) e.area = "Kies waar we bezorgen.";
-    if (!input.date) e.date = "Kies een bezorgdag.";
-    else if (!info.deliveryDays.includes(input.date)) e.date = "Op deze dag bezorgen we niet. Kies een andere dag.";
-    else if (!dayOpen(input.date, info, now)) e.date = `Deze dag is te snel: bestel uiterlijk ${leadText(info)}.`;
-  } else {
-    if (!input.pickupAgreed) e.pickupAgreed = `Afhalen kan alleen na overleg. Mail eerst naar ${info.email}.`;
-    if (!input.date) e.date = "Kies een afhaalmoment.";
-    else if (!info.pickupDays.some((d) => d.date === input.date)) e.date = "Op deze dag kun je niet afhalen. Kies een andere dag.";
-    else if (!dayOpen(input.date, info, now)) e.date = `Dit moment is te snel: bestel uiterlijk ${leadText(info)}.`;
-  }
-  if (!input.company.trim()) e.company = "Vul de naam van je onderneming in.";
-  if (!input.contact.trim()) e.contact = "Vul de naam van de contactpersoon in.";
-  if (input.phone.replace(/\D/g, "").length < 10) e.phone = "Vul een telefoonnummer in, zoals 06 12345678.";
-  if (!EMAIL.test(input.email.trim())) e.email = "Vul een geldig e-mailadres in.";
-  if (!EMAIL.test(input.invoiceEmail.trim())) e.invoiceEmail = "Vul een geldig e-mailadres voor de factuur in.";
+  if (!e.withRaisins && !e.withoutRaisins && total < info.minimum) e.withRaisins = text.min(info.minimum);
+  if (!e.withRaisins && !e.withoutRaisins && total > info.maximum) e.withRaisins = text.max(info.maximum);
+  // Afhalen kan niet: we bezorgen altijd.
+  if (!input.street.trim()) e.street = text.street;
+  if (!POSTCODE.test(input.postalCode.trim())) e.postalCode = text.postalCode;
+  if (!input.city.trim()) e.city = text.city;
+  if (!input.area) e.area = text.area;
+  if (!input.date) e.date = text.date;
+  else if (!info.deliveryDays.includes(input.date)) e.date = text.dateClosed;
+  else if (!dayOpen(input.date, info, now)) e.date = text.dateSoon(info);
+  if (!input.company.trim()) e.company = text.company;
+  if (!input.contact.trim()) e.contact = text.contact;
+  if (input.phone.replace(/\D/g, "").length < 10) e.phone = text.phone;
+  if (!EMAIL.test(input.email.trim())) e.email = text.email;
+  if (!EMAIL.test(input.invoiceEmail.trim())) e.invoiceEmail = text.invoiceEmail;
   return e;
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fieldLabel, formatNumber, rollOliebol, toast } from "../../components/ui";
 import { GOAL_MILESTONES, GOAL_OLIEBOLLEN, OLIEBOLLEN_PER_OUDJE } from "../../config";
 import "./discozaal.css";
@@ -129,6 +129,11 @@ export function cardDancerSvgs(count: number): string[] {
   );
 }
 
+/** One dancer from the disco hall as a small inline drawing, e.g. next to a number. */
+export function DiscoOudje({ cast = 0, className = "" }: { cast?: number; className?: string }) {
+  return <span aria-hidden="true" className={`block shrink-0 [&>svg]:block [&>svg]:h-full [&>svg]:w-auto ${className}`} dangerouslySetInnerHTML={{ __html: dancerSvg(cast % CAST.length, cast) }} />;
+}
+
 // ---------- inrichting: het bruine café van Oma Coby, licht getekend ----------
 
 /** A standing lamp with a fringed shade, as in the old café. */
@@ -177,23 +182,6 @@ export function DiscoBallIcon() {
 export function Discozaal({ oliebollen }: { oliebollen: number }) {
   const oudjes = oudjesFor(oliebollen);
   const rest = oliebollen % OLIEBOLLEN_PER_OUDJE;
-  const zaalRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(900);
-
-  useLayoutEffect(() => {
-    const el = zaalRef.current;
-    if (!el) return;
-    const measure = () => setWidth(el.clientWidth);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const layout = useMemo(() => floorLayout(oudjes, width), [oudjes, width]);
-  // The check: one slot per oudje, so the floor always holds exactly the number on the letter board.
-  const counted = layout.slots.length;
-  const diverse = Array.from({ length: counted }, (_, i) => i).filter(isDiverse).length;
 
   const tags = [
     oliebollen >= GOAL_OLIEBOLLEN ? <span key="goal" className="rounded bg-kerst-50 px-2 py-0.5 text-kerst-ink">Doel gehaald</span> : null
@@ -233,14 +221,84 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
         </div>
       </div>
 
-      <div className="dz-zaal" ref={zaalRef} role="img" aria-label={`Discozaal met ${formatNumber(counted)} dansende oudjes`} style={{ height: layout.height }}>
+      <DiscoHall oudjes={oudjes} corner={tags}>
+        {(layout) => {
+          // The check: one slot per oudje, so the floor always holds exactly the number on the letter board.
+          const counted = layout.slots.length;
+          const diverse = Array.from({ length: counted }, (_, i) => i).filter(isDiverse).length;
+          return (
+            <>
+              {/* On phones the labels sit under the hall, so they do not cover the letter board. */}
+              {tags.length > 0 ? <div className="flex flex-wrap gap-1 text-[11px] font-bold sm:hidden">{tags}</div> : null}
+              {counted === oudjes ? (
+                oudjes > 0 ? (
+                  <p className="text-xs text-muted">
+                    <span className="font-bold text-kerst-ink">✓ Geteld:</span> alle {formatNumber(counted)} {counted === 1 ? "oudje danst" : "oudjes dansen"} op de vloer
+                    {diverse ? `, ${formatNumber(diverse)} met een donkere huid` : ""}.
+                  </p>
+                ) : null
+              ) : (
+                <p className="text-xs font-bold text-feest-ink">! Op de vloer staan er {formatNumber(counted)}, maar het moeten er {formatNumber(oudjes)} zijn.</p>
+              )}
+            </>
+          );
+        }}
+      </DiscoHall>
+
+      <Rollatorbalk oliebollen={oliebollen} />
+    </div>
+  );
+}
+
+/**
+ * The hall itself: Oma Coby's café with the disco ball, the letter board and every oudje on the floor.
+ * On the Tussenstand behind the disco-ball button, and after a business order (BusinessOrderPage).
+ * `children` gets the layout, for the count under the hall.
+ */
+export function DiscoHall({
+  oudjes,
+  sign = "Vanavond",
+  unit = (n) => (n === 1 ? "oudje" : "oudjes"),
+  label = (n) => `Discozaal met ${n} dansende oudjes`,
+  corner,
+  children
+}: {
+  oudjes: number;
+  /** Top line of the letter board. */
+  sign?: string;
+  /** "oudje" or "oudjes" on the letter board; another language passes its own. */
+  unit?: (n: number) => string;
+  /** Screen-reader text for the whole hall, with the counted dancers. */
+  label?: (n: string) => string;
+  /** Labels in the top right corner (from sm). */
+  corner?: ReactNode[];
+  children?: (layout: FloorLayout) => ReactNode;
+}) {
+  const zaalRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(900);
+
+  useLayoutEffect(() => {
+    const el = zaalRef.current;
+    if (!el) return;
+    const measure = () => setWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const layout = useMemo(() => floorLayout(oudjes, width), [oudjes, width]);
+
+  return (
+    <>
+      <div className="dz-zaal" ref={zaalRef} role="img" aria-label={label(formatNumber(layout.slots.length))} style={{ height: layout.height }}>
         <div className="dz-wainscot" aria-hidden="true" />
         <div className="dz-flecks" aria-hidden="true" />
         <svg className="dz-slinger" viewBox="0 0 1000 44" preserveAspectRatio="none" aria-hidden="true" dangerouslySetInnerHTML={{ __html: SLINGER_SVG }} />
         <div className="dz-prop dz-lamp" aria-hidden="true" dangerouslySetInnerHTML={{ __html: LAMP_SVG }} />
         <div className="dz-sign" aria-hidden="true">
-          <span>Vanavond</span>
-          <b className="tabular-nums">{oudjes === 0 ? "Nog leeg" : `${formatNumber(oudjes)} ${oudjes === 1 ? "oudje" : "oudjes"}`}</b>
+          <span>{sign}</span>
+          <b className="tabular-nums">{oudjes === 0 ? "Nog leeg" : `${formatNumber(oudjes)} ${unit(oudjes)}`}</b>
         </div>
         <div className="dz-prop dz-player" aria-hidden="true" dangerouslySetInnerHTML={{ __html: PLAYER_SVG }} />
         <div className="dz-prop dz-bookcase" aria-hidden="true" dangerouslySetInnerHTML={{ __html: BOOKCASE_SVG }} />
@@ -254,23 +312,10 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
             Bij {OLIEBOLLEN_PER_OUDJE} oliebollen komt het eerste oudje binnen.
           </p>
         ) : null}
-        <div className="absolute right-2.5 top-2.5 z-[5] hidden justify-items-end gap-1 text-[11px] font-bold sm:grid">{tags}</div>
+        {corner?.length ? <div className="absolute right-2.5 top-2.5 z-[5] hidden justify-items-end gap-1 text-[11px] font-bold sm:grid">{corner}</div> : null}
       </div>
-      {/* On phones the labels sit under the hall, so they do not cover the letter board. */}
-      {tags.length > 0 ? <div className="flex flex-wrap gap-1 text-[11px] font-bold sm:hidden">{tags}</div> : null}
-      {counted === oudjes ? (
-        oudjes > 0 ? (
-          <p className="text-xs text-muted">
-            <span className="font-bold text-kerst-ink">✓ Geteld:</span> alle {formatNumber(counted)} {counted === 1 ? "oudje danst" : "oudjes dansen"} op de vloer
-            {diverse ? `, ${formatNumber(diverse)} met een donkere huid` : ""}.
-          </p>
-        ) : null
-      ) : (
-        <p className="text-xs font-bold text-feest-ink">! Op de vloer staan er {formatNumber(counted)}, maar het moeten er {formatNumber(oudjes)} zijn.</p>
-      )}
-
-      <Rollatorbalk oliebollen={oliebollen} />
-    </div>
+      {children?.(layout)}
+    </>
   );
 }
 

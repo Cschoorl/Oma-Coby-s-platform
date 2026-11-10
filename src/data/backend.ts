@@ -399,7 +399,8 @@ function createAppsScriptBackend(url: string): Backend {
     async getBusinessInfo() {
       // An older script without businessInfo: the form still works with the defaults from config.ts.
       try {
-        return { ...BUSINESS_DEFAULTS, ...(await call<Partial<BusinessInfo>>("businessInfo", {})) };
+        // The price follows the bouwplan, also when an older script still sends the one from Instellingen.
+        return { ...BUSINESS_DEFAULTS, ...(await call<Partial<BusinessInfo>>("businessInfo", {})), price: BUSINESS_DEFAULTS.price };
       } catch {
         return BUSINESS_DEFAULTS;
       }
@@ -580,7 +581,7 @@ function demoBusiness(): BusinessOrder[] {
   const rows: Array<[string, string, BusinessOrder["status"], Partial<BusinessOrderInput>]> = [
     ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412" }],
     ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", pakket: "zilver", withRaisins: 110, withoutRaisins: 40, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
-    ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", fulfilment: "afhalen", area: "", pickupAgreed: true, invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
+    ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", pakket: "goud", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", street: "Herenweg 80", postalCode: "2101 MS", city: "Heemstede", area: "buiten", invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
     ["Z26-0004", "2026-10-25 16:30:00", "afgewezen", { company: "Sportschool Fit", contact: "Rick Bos", withRaisins: 0, withoutRaisins: 60, date: "2026-12-24", street: "Stationsweg 4", postalCode: "3811 MP", city: "Amersfoort", area: "buiten" }]
   ];
   return rows.map(([id, createdAt, status, extra]) => {

@@ -14,7 +14,7 @@ import { StatsPage } from "./features/stats/StatsPage";
 import { SignupPage } from "./features/volunteers/SignupPage";
 import { VolunteersPage } from "./features/volunteers/VolunteersPage";
 import { BusinessAdminPage } from "./features/business/BusinessAdminPage";
-import { BusinessOrderPage } from "./features/business/BusinessOrderPage";
+import { BusinessOrderPage, LangSwitch } from "./features/business/BusinessOrderPage";
 import { Notice, Skeleton, Toaster } from "./components/ui";
 import { Avatar, setAvatarRoster } from "./components/Avatar";
 import logoUrl from "./assets/logo-oliebollenbar.svg";
@@ -137,12 +137,15 @@ function App() {
   }
 
   // Pages without login (signup, login) get a simple centred layout.
-  const simpleShell = (content: React.ReactNode, wide = false) => (
+  const simpleShell = (content: React.ReactNode, wide = false, extra?: React.ReactNode) => (
     <div className="min-h-screen bg-meel">
       <header className="border-b border-lijn bg-papier">
         <div className={`mx-auto flex h-16 items-center justify-between px-4 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
           <Brand />
-          <DemoPill />
+          <div className="flex items-center gap-2">
+            <DemoPill />
+            {extra}
+          </div>
         </div>
       </header>
       <main className={`mx-auto grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>{content}</main>
@@ -151,7 +154,7 @@ function App() {
   );
 
   if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
-  if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, true);
+  if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, true, <LangSwitch />);
   if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
   const { state, error, lastSync, saving, run } = dashboard;

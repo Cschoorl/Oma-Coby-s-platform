@@ -84,10 +84,15 @@ const CONFIG = {
   BUSINESS: {
     /** Per oliebol, excl. btw: de prijs uit het bouwplan 2026 is leidend, Instellingen kan hem niet overschrijven. */
     price: 2.5,
-    /** Pakketten in stap 1: [sleutel, naam, oliebollen]. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud. */
+    /**
+     * Pakketten in stap 1: [sleutel, naam, vanaf zo veel oliebollen]. Een pakket geldt tot het volgende; meer blijft het pakket,
+     * minder valt terug. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud.
+     */
     packages: [['brons', 'Brons', 50], ['zilver', 'Zilver', 150], ['goud', 'Goud', 500]],
     vatPercent: 9,
     minimum: 50,
+    /** Hooguit zo veel oliebollen per bestelling; meer gaat via de mail. Instelling: zakelijk_maximum. */
+    maximum: 10000,
     fees: { regio: 10, buiten: 25 },
     surcharges: { regulier: 0, voor10: 10, voor9: 15 },
     donationPrice: 2,
@@ -95,7 +100,6 @@ const CONFIG = {
     leadDays: 1,
     deliveryDays: ['2026-12-14', '2026-12-15', '2026-12-16', '2026-12-17', '2026-12-18', '2026-12-21', '2026-12-22', '2026-12-28',
       '2026-12-29', '2026-12-30', '2026-12-31', '2027-01-04', '2027-01-05', '2027-01-06', '2027-01-07', '2027-01-08'],
-    pickupDays: [['2026-12-30', '14:00–16:00'], ['2026-12-31', '14:00–16:00']],
     email: 'info@omacobysoliebollenbar.nl',
     /** Telefoonnummer van de stichting, voor vragen. Instelling: zakelijk_telefoon. */
     phone: '06 45 44 35 09',
@@ -1644,11 +1648,9 @@ Object.assign(HANDLERS, {
         telefoon: input.phone, email: input.email, factuur_email: input.invoiceEmail, factuuradres: input.invoiceAddress,
         referentie: input.reference, met_krenten: input.withRaisins, zonder_krenten: input.withoutRaisins,
         donatie_oliebollen: input.donation, flyers: input.flyers ? 'Ja' : 'Nee',
-        afhalen_bezorgen: input.fulfilment === 'afhalen' ? 'Afhalen' : 'Bezorgen', leverdatum: input.date,
-        bezorgmoment: input.fulfilment === 'bezorgen' ? BUSINESS_MOMENTS[input.moment] : '',
-        bezorgomgeving: input.fulfilment === 'bezorgen' ? BUSINESS_AREAS[input.area] : '',
-        adres: input.street, postcode: input.postalCode, plaats: input.city,
-        afhalen_afgestemd: input.fulfilment === 'afhalen' ? (input.pickupAgreed ? 'Ja' : 'Nee') : '',
+        afhalen_bezorgen: 'Bezorgen', leverdatum: input.date,
+        bezorgmoment: BUSINESS_MOMENTS[input.moment], bezorgomgeving: BUSINESS_AREAS[input.area],
+        adres: input.street, postcode: input.postalCode, plaats: input.city, afhalen_afgestemd: '',
         opmerking: input.remark, oliebollen: totals.oliebollen, bedrag_excl_btw: totals.subtotal, btw: totals.vat,
         bedrag_incl_btw: totals.total, donatie_bedrag: totals.donation, factuurbedrag: totals.invoice, ouderen: totals.ouderen,
         pakket: businessPackage_(input, info).name
@@ -1695,20 +1697,19 @@ function businessInfo_() {
     return r.datum && String(r.open || 'ja').trim().toLowerCase() !== 'nee';
   });
   const iso = function (r) { return isoDate_(r.datum) || dutchDate_(r.datum, CONFIG.SEASON_YEAR); };
+  // Afhalen kan niet meer: rijen met soort "afhalen" tellen niet mee.
   const delivery = days.filter(function (r) { return String(r.soort).trim().toLowerCase() !== 'afhalen'; }).map(iso).filter(String).sort();
-  const pickup = days.filter(function (r) { return String(r.soort).trim().toLowerCase() === 'afhalen'; })
-    .map(function (r) { return { date: iso(r), time: String(r.tijd || '') }; }).filter(function (d) { return d.date; });
   return {
     price: b.price,
     vatRate: number('zakelijk_btw', b.vatPercent) / 100,
     minimum: number('zakelijk_minimum', b.minimum),
+    maximum: number('zakelijk_maximum', b.maximum),
     fees: { regio: number('zakelijk_bezorgen_regio', b.fees.regio), buiten: number('zakelijk_bezorgen_buiten', b.fees.buiten) },
     surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_9', b.surcharges.voor9) },
     donationPrice: number('zakelijk_donatie', b.donationPrice),
     leadDays: number('zakelijk_dagen_vooraf', b.leadDays),
     // An emptied tab means: no days yet, use the defaults.
     deliveryDays: days.length ? delivery : b.deliveryDays,
-    pickupDays: days.length ? pickup : b.pickupDays.map(function (p) { return { date: p[0], time: p[1] }; }),
     packages: b.packages.map(function (p) { return { key: p[0], name: p[1], oliebollen: number('zakelijk_pakket_' + p[0], p[2]) }; }),
     email: String(settings.zakelijk_email || b.email),
     phone: String(settings.zakelijk_telefoon || b.phone)
@@ -1717,23 +1718,21 @@ function businessInfo_() {
 
 function defaultBusinessDays_() {
   const b = CONFIG.BUSINESS;
-  return b.deliveryDays.map(function (d) { return [d, 'bezorgen', '9:00–12:30', 'ja']; })
-    .concat(b.pickupDays.map(function (p) { return [p[0], 'afhalen', p[1], 'ja']; }));
+  return b.deliveryDays.map(function (d) { return [d, 'bezorgen', '9:00–12:30', 'ja']; });
 }
 
 function businessInput_(body) {
   const text = function (v, max) { return String(v === undefined || v === null ? '' : v).trim().slice(0, max || 200); };
   const count = function (v) { const n = Math.round(Number(v)); return isFinite(n) && n > 0 ? n : 0; };
-  const fulfilment = body.fulfilment === 'afhalen' ? 'afhalen' : 'bezorgen';
+  // Afhalen kan niet: we bezorgen altijd. Het pakket volgt uit het aantal (businessPackage_).
   return {
     pakket: ['brons', 'zilver', 'goud'].indexOf(body.pakket) !== -1 ? body.pakket : 'zelf',
     withRaisins: count(body.withRaisins), withoutRaisins: count(body.withoutRaisins), donation: count(body.donation),
-    flyers: !!body.flyers, fulfilment: fulfilment,
-    area: fulfilment === 'bezorgen' && BUSINESS_AREAS[body.area] ? body.area : '',
+    flyers: !!body.flyers, fulfilment: 'bezorgen',
+    area: BUSINESS_AREAS[body.area] ? body.area : '',
     moment: BUSINESS_MOMENTS[body.moment] ? body.moment : 'regulier',
-    date: text(body.date, 10), pickupAgreed: !!body.pickupAgreed,
-    street: fulfilment === 'bezorgen' ? text(body.street) : '', postalCode: fulfilment === 'bezorgen' ? text(body.postalCode, 10).toUpperCase() : '',
-    city: fulfilment === 'bezorgen' ? text(body.city) : '',
+    date: text(body.date, 10), pickupAgreed: false,
+    street: text(body.street), postalCode: text(body.postalCode, 10).toUpperCase(), city: text(body.city),
     company: text(body.company), contact: text(body.contact), phone: text(body.phone, 30), email: text(body.email),
     invoiceEmail: text(body.invoiceEmail), invoiceAddress: text(body.invoiceAddress, 400), reference: text(body.reference),
     remark: text(body.remark, 1000)
@@ -1745,18 +1744,14 @@ function validateBusiness_(i, info) {
   const email = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
   if (i.withRaisins % 10 || i.withoutRaisins % 10 || i.donation % 10) return 'Kies de aantallen in tientallen.';
   if (i.withRaisins + i.withoutRaisins < info.minimum) return 'Bestel samen minimaal ' + info.minimum + ' oliebollen.';
+  if (i.withRaisins + i.withoutRaisins > info.maximum) return 'Bestel samen hooguit ' + numberNl_(info.maximum) + ' oliebollen. Meer? Mail naar ' + info.email + '.';
   // Same as dayOpen in business.ts: open until midnight, leadDays - 1 days before the day itself.
   const deadline = new Date(i.date + 'T00:00:00');
   deadline.setDate(deadline.getDate() - (info.leadDays - 1));
   const open = Date.now() < deadline.getTime();
-  if (i.fulfilment === 'bezorgen') {
-    if (!i.street || !i.city || !/^\d{4}\s?[A-Z]{2}$/.test(i.postalCode)) return 'Vul het bezorgadres helemaal in.';
-    if (!i.area) return 'Kies waar we bezorgen.';
-    if (info.deliveryDays.indexOf(i.date) === -1) return 'Op deze dag bezorgen we niet. Kies een andere dag.';
-  } else {
-    if (!i.pickupAgreed) return 'Afhalen kan alleen na overleg. Mail eerst naar ' + info.email + '.';
-    if (!info.pickupDays.some(function (d) { return d.date === i.date; })) return 'Op deze dag kun je niet afhalen. Kies een andere dag.';
-  }
+  if (!i.street || !i.city || !/^\d{4}\s?[A-Z]{2}$/.test(i.postalCode)) return 'Vul het bezorgadres helemaal in.';
+  if (!i.area) return 'Kies waar we bezorgen.';
+  if (info.deliveryDays.indexOf(i.date) === -1) return 'Op deze dag komen we niet langs. Kies een andere dag.';
   if (!open) return 'Deze dag is te snel: bestel uiterlijk ' + (info.leadDays === 1 ? 'de dag' : info.leadDays + ' dagen') + ' van tevoren.';
   if (!i.company) return 'Vul de naam van je onderneming in.';
   if (!i.contact) return 'Vul de naam van de contactpersoon in.';
@@ -1783,12 +1778,26 @@ function businessTotals_(i, info) {
 }
 
 /**
- * The chosen package while the counts still add up to it, else "Zelf samengesteld" (key "zelf").
- * Same as chosenPackage / packageLabel in src/features/business/business.ts.
+ * The package for this number: the biggest one it reaches (more stays that package, less falls back). Below Brons
+ * "Zelf samengesteld" (key "zelf"). Same as tierFor / packageLabel in src/features/business/business.ts.
  */
 function businessPackage_(i, info) {
-  const p = info.packages.filter(function (x) { return x.key === i.pakket; })[0];
-  return p && i.withRaisins + i.withoutRaisins === p.oliebollen ? p : { key: 'zelf', name: 'Zelf samengesteld', oliebollen: 0 };
+  const total = i.withRaisins + i.withoutRaisins;
+  const reached = info.packages.filter(function (p) { return total >= p.oliebollen; });
+  return reached.length ? reached[reached.length - 1] : { key: 'zelf', name: 'Zelf samengesteld', oliebollen: 0 };
+}
+
+/** What each package adds, from the ladder in the bouwplan. Same as packageCopy[…].perks in business.ts. */
+const BUSINESS_PERKS = {
+  brons: ['Impactcertificaat met jullie aantal ouderen', 'Jullie naam op de wall of fame', 'Kaartje met het verhaal bij de oliebollen'],
+  zilver: ['LinkedIn-badge met een kant-en-klare post', 'Jullie logo op de wall of fame', 'Een kaartje van Oma voor de besteller'],
+  goud: ['Uitnodiging voor de muziekmiddag zelf', 'Foto of filmpje van jullie middag', 'Podiumplek op de wall of fame']
+};
+
+/** Everything that comes with this package: its own perks and those of every package below. */
+function businessPerks_(pkg, info) {
+  return info.packages.filter(function (p) { return p.oliebollen <= pkg.oliebollen && pkg.key !== 'zelf'; })
+    .reduce(function (all, p) { return all.concat(BUSINESS_PERKS[p.key] || []); }, []);
 }
 
 /** "Z26-0001", "Z26-0002", … per seizoen. Call inside withLock_. */
@@ -1872,8 +1881,17 @@ function businessOrderRows_(orders) {
 
 /** Labels for the customer, the same as areaLabel in src/features/business/business.ts. */
 const BUSINESS_AREA_LABELS = { regio: 'Amsterdam of Aalsmeer', buiten: 'Buiten Amsterdam' };
-/** The images in public/mail, sent along inside the mail (cid:) so they show without "load images". */
-const BUSINESS_MAIL_IMAGES = ['logo', 'bedankt', 'oudjes', 'oma', 'oliebol', 'medaille-brons', 'medaille-zilver', 'medaille-goud'];
+/**
+ * The images in public/mail by name, sent along inside the mail (cid:) so they show without "load images".
+ * The dancers (dans-1 … dans-10) are small animated GIFs of the oudjes from the disco hall; dans-9 and dans-10 have a darker skin.
+ */
+const BUSINESS_MAIL_FILES = {
+  logo: 'logo.png', bedankt: 'bedankt.png', oma: 'oma.png', oliebol: 'oliebol.png', discobal: 'discobal.gif', slinger: 'slinger.png',
+  'medaille-brons': 'medaille-brons.png', 'medaille-zilver': 'medaille-zilver.png', 'medaille-goud': 'medaille-goud.png',
+  'dans-1': 'dans-1.gif', 'dans-2': 'dans-2.gif', 'dans-3': 'dans-3.gif', 'dans-4': 'dans-4.gif', 'dans-5': 'dans-5.gif',
+  'dans-6': 'dans-6.gif', 'dans-7': 'dans-7.gif', 'dans-8': 'dans-8.gif', 'dans-9': 'dans-9.gif', 'dans-10': 'dans-10.gif'
+};
+const BUSINESS_MAIL_IMAGES = Object.keys(BUSINESS_MAIL_FILES);
 
 /** "1.250" */
 function numberNl_(n) {
@@ -1896,12 +1914,10 @@ function businessMailData_(id, i, t, info) {
     const d = new Date(iso + 'T12:00:00');
     return ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'][d.getDay()] + ' ' + d.getDate() + ' ' + DUTCH_MONTHS[d.getMonth()];
   };
-  const bezorgen = i.fulfilment === 'bezorgen';
-  const pickup = info.pickupDays.filter(function (d) { return d.date === i.date; })[0];
   const moment = BUSINESS_MOMENTS[i.moment].charAt(0).toLowerCase() + BUSINESS_MOMENTS[i.moment].slice(1);
   const pkg = businessPackage_(i, info);
   const costs = [[numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']];
-  if (bezorgen) costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], euroNl_(t.delivery), '']);
+  costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], euroNl_(t.delivery), '']);
   if (t.surcharge) costs.push([BUSINESS_MOMENTS[i.moment], euroNl_(t.surcharge), '']);
   costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted'], ['Btw ' + Math.round(info.vatRate * 100) + '%', euroNl_(t.vat), 'muted']);
   costs.push(['Totaal incl. btw', euroNl_(t.total), 'total']);
@@ -1909,14 +1925,14 @@ function businessMailData_(id, i, t, info) {
   const when = day(i.date);
   return {
     id: id, company: i.company, firstName: i.contact.split(' ')[0], email: i.email, contactEmail: info.email, contactPhone: info.phone,
-    ouderen: t.ouderen, oliebollen: t.oliebollen, donation: i.donation, pkg: pkg, bezorgen: bezorgen,
+    ouderen: t.ouderen, oliebollen: t.oliebollen, donation: i.donation, pkg: pkg, perks: businessPerks_(pkg, info),
     order: [
       ['MET krenten', numberNl_(i.withRaisins)],
       ['ZONDER krenten', numberNl_(i.withoutRaisins)]
     ].concat(i.donation ? [['Extra gedoneerd', numberNl_(i.donation) + ' oliebollen']] : []).concat([['Flyers', i.flyers ? 'Ja, doe er flyers bij' : 'Nee']]),
-    when: when.charAt(0).toUpperCase() + when.slice(1) + ', ' + (bezorgen ? moment : (pickup ? pickup.time : '')),
-    where: bezorgen ? i.street + ', ' + i.postalCode + ' ' + i.city : 'Op de plek die we met je afspraken',
-    whereLines: bezorgen ? [i.street, i.postalCode + ' ' + i.city] : ['Op de plek die we met je afspraken'],
+    when: when.charAt(0).toUpperCase() + when.slice(1) + ', ' + moment,
+    where: i.street + ', ' + i.postalCode + ' ' + i.city,
+    whereLines: [i.street, i.postalCode + ' ' + i.city],
     contact: i.contact + ', ' + i.phone,
     contactLines: [i.contact, i.phone],
     costs: costs,
@@ -1925,9 +1941,7 @@ function businessMailData_(id, i, t, info) {
     remark: i.remark,
     steps: [
       ['We kijken je bestelling na', 'en bevestigen hem per mail.'],
-      bezorgen
-        ? ['Op ' + when + ' bakken we vers', 'en bezorgen we ' + moment + ' op ' + i.street + '.']
-        : ['Op ' + when + ' bakken we vers', 'en kun je ze ophalen' + (pickup && pickup.time ? ', ' + pickup.time : '') + '.'],
+      ['Op ' + when + ' bakken we vers', 'en komen we ' + moment + ' langs op ' + i.street + '.'],
       ['De factuur volgt per mail', 'naar ' + i.invoiceEmail + '. Je betaalt achteraf.']
     ]
   };
@@ -1964,7 +1978,42 @@ function businessMailHtml_(d, src) {
   const medal = d.pkg.key !== 'zelf' ? img('medaille-' + d.pkg.key, 18, 22, '', 'display:inline-block;vertical-align:-5px;margin-right:6px;') : '';
   const order = [['Pakket', medal + '<b>' + e(d.pkg.name) + '</b>']].concat(d.order.map(function (r) { return [r[0], e(r[1])]; }));
   const lines = function (list) { return list.map(e).join('<br>'); };
-  const delivery = [['Wanneer', e(d.when)], [d.bezorgen ? 'Adres' : 'Waar', lines(d.whereLines)], ['Contactpersoon', lines(d.contactLines)]];
+  const delivery = [['Wanneer', e(d.when)], ['Adres', lines(d.whereLines)], ['Contactpersoon', lines(d.contactLines)]];
+  const perks = d.perks.map(function (p) {
+    return '<p style="margin:0 0 6px;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.krent + ';"><span style="color:#4a6129;font-weight:bold;">✓</span>&nbsp; ' + e(p) + '</p>';
+  }).join('');
+
+  // The disco hall, as on the platform: one dancing oudje per 10 oliebollen. The fuller the hall, the smaller they get
+  // (rows of 6 to 12, never wider than a phone); above 8 rows the rest stands there as a number.
+  const room = function (n) {
+    const size = n <= 6 ? [6, 44, 80] : n <= 24 ? [8, 33, 60] : n <= 60 ? [10, 26, 47] : [12, 21, 38];
+    const cols = size[0];
+    const shown = Math.min(n, cols * 8);
+    let grid = '';
+    for (let r = 0; r * cols < shown; r++) {
+      let cells = '';
+      for (let c = 0; c < cols && r * cols + c < shown; c++) {
+        const k = r * cols + c;
+        // Same mix as the hall: every tenth oudje (7, 17, 27, …) has a darker skin.
+        const name = k % 10 === 6 ? 'dans-' + (9 + Math.floor(k / 10) % 2) : 'dans-' + ((k * 3 + Math.floor(k / 8)) % 8 + 1);
+        cells += '<td valign="bottom" style="padding:0 1px;">' + img(name, size[1], size[2], '', '') + '</td>';
+      }
+      grid += '<tr><td align="center" style="padding:' + (r ? 2 : 14) + 'px 8px 0;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' + cells + '</tr></table></td></tr>';
+    }
+    const rest = n - shown;
+    return '<tr><td bgcolor="#f6ebc4" style="background:#f6ebc4;border-radius:10px 10px 0 0;padding:0;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+      '<tr><td style="padding:0;line-height:0;">' + img('slinger', 512, 21, '', 'width:100%;height:auto;border-radius:10px 10px 0 0;') + '</td></tr>' +
+      '<tr><td align="center" style="padding:0;">' + img('discobal', 42, 60, '', 'margin:-8px auto 0;') + '</td></tr>' +
+      '<tr><td align="center" style="padding:8px 0 0;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#3a2f2c" style="background:#3a2f2c;border-radius:4px;padding:6px 12px 5px;">' +
+      '<p style="margin:0;font-family:' + TEXT + ';font-size:10px;line-height:12px;letter-spacing:0.18em;text-transform:uppercase;color:#fffdf6;">Dankzij jullie</p>' +
+      '<p style="margin:1px 0 0;font-family:' + NUM + ';font-size:16px;line-height:20px;font-weight:bold;letter-spacing:0.12em;text-transform:uppercase;color:#f4e5a6;">' + numberNl_(n) + (n === 1 ? ' oudje' : ' oudjes') + '</p>' +
+      '</td></tr></table></td></tr>' +
+      grid +
+      (rest > 0 ? '<tr><td align="center" style="padding:8px 12px 0;font-family:' + TEXT + ';font-size:13px;line-height:18px;color:' + C.oliebol + ';">en nog ' + numberNl_(rest) + ' oudjes die niet meer op de foto passen</td></tr>' : '') +
+      '<tr><td style="padding:6px 0 0;"><div style="height:16px;line-height:16px;font-size:1px;background:#e3cb9c;">&nbsp;</div></td></tr>' +
+      '</table></td></tr>';
+  };
   const costs = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + d.costs.map(function (c) {
     const total = c[2] === 'total';
     const color = c[2] === 'muted' ? C.muted : C.krent;
@@ -2009,8 +2058,8 @@ function businessMailHtml_(d, src) {
     // Impact
     (d.ouderen > 0
       ? '<tr><td style="padding:32px 0 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + C.gouwe50 + '" style="background:' + C.gouwe50 + ';border-radius:10px;">' +
-        '<tr><td style="padding:28px 28px 26px;">' +
-        img('oudjes', 284, 52, '', 'max-width:100%;height:auto;margin:0 0 18px -2px;') +
+        (src('dans-1') ? room(d.ouderen) : '') +
+        '<tr><td style="padding:24px 28px 26px;">' +
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
         '<td valign="middle" class="oc-big" style="padding:0 14px 0 0;font-family:' + NUM + ';font-size:48px;line-height:48px;font-weight:bold;color:' + C.krent + ';">' + ouderen + '</td>' +
         '<td valign="middle" style="font-family:' + TEXT + ';font-size:16px;line-height:21px;font-weight:bold;color:' + C.krent + ';">ouderen een middag<br>op de dansvloer</td></tr></table>' +
@@ -2026,7 +2075,8 @@ function businessMailHtml_(d, src) {
     '<p style="margin:6px 0 0;font-family:' + TEXT + ';font-size:13px;line-height:20px;color:' + C.muted + ';">Noem dit nummer als je ons mailt.</p></td></tr>' +
 
     section('Je bestelling', rows(order)) +
-    section(d.bezorgen ? 'Bezorgen' : 'Afhalen', rows(delivery)) +
+    (d.perks.length ? section('Je krijgt erbij met ' + e(d.pkg.name), perks) : '') +
+    section('Oma komt langs', rows(delivery)) +
     section('Kosten', costs) +
     (d.remark
       ? section('Je opmerking', '<p style="margin:0;padding:2px 0 2px 14px;border-left:3px solid ' + C.lijn + ';font-family:' + TEXT + ';font-size:15px;line-height:24px;font-style:italic;color:' + C.oliebol + ';">' + e(d.remark).replace(/\n/g, '<br>') + '</p>')
@@ -2078,7 +2128,8 @@ function businessMailText_(d) {
     'Pakket: ' + d.pkg.name
   ].concat(d.order.map(function (r) { return r[0] + ': ' + r[1]; })).concat([
     '',
-    d.bezorgen ? 'BEZORGEN' : 'AFHALEN',
+    d.perks.length ? 'JE KRIJGT ERBIJ MET ' + d.pkg.name.toUpperCase() + '\n' + d.perks.map(function (p) { return '- ' + p; }).join('\n') + '\n' : '',
+    'OMA KOMT LANGS',
     d.when,
     d.where,
     'Contactpersoon: ' + d.contact,
@@ -2109,9 +2160,10 @@ function businessMailImages_() {
   if (!base) return {};
   const images = {};
   try {
-    const responses = UrlFetchApp.fetchAll(BUSINESS_MAIL_IMAGES.map(function (name) { return { url: base + name + '.png', muteHttpExceptions: true }; }));
+    const responses = UrlFetchApp.fetchAll(BUSINESS_MAIL_IMAGES.map(function (name) { return { url: base + BUSINESS_MAIL_FILES[name], muteHttpExceptions: true }; }));
     responses.forEach(function (r, n) {
-      if (r.getResponseCode() === 200) images[BUSINESS_MAIL_IMAGES[n]] = r.getBlob().setName(BUSINESS_MAIL_IMAGES[n] + '.png');
+      const name = BUSINESS_MAIL_IMAGES[n];
+      if (r.getResponseCode() === 200) images[name] = r.getBlob().setName(BUSINESS_MAIL_FILES[name]);
     });
   } catch (err) {
     // No images: the mail still works, with text in place of the logo.

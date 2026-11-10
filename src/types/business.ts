@@ -1,5 +1,6 @@
 /** Zakelijke bestelling via het bestelformulier (#/bestellen). Komt in het tabblad "Zakelijke aanvragen". */
 
+/** Afhalen kan niet meer: we bezorgen altijd. "afhalen" staat alleen nog in oude aanvragen. */
 export type BusinessFulfilment = "bezorgen" | "afhalen";
 
 /** Binnen Amsterdam/Aalsmeer (fietsafstand) of daarbuiten: dat bepaalt de bezorgkosten. */
@@ -18,15 +19,8 @@ export interface BusinessPackage {
   key: BusinessPackageKey;
   /** "Brons" */
   name: string;
-  /** Aantal oliebollen in het pakket (MET + ZONDER). */
+  /** Vanaf zo veel oliebollen (MET + ZONDER) hoort een bestelling bij dit pakket. */
   oliebollen: number;
-}
-
-export interface PickupDay {
-  /** YYYY-MM-DD */
-  date: string;
-  /** "14:00–16:00" */
-  time: string;
 }
 
 /** Prijzen en dagen. Standaard uit config.ts; de Sheet kan ze overschrijven (Instellingen en Zakelijke dagen). */
@@ -37,6 +31,8 @@ export interface BusinessInfo {
   vatRate: number;
   /** Minimaal aantal oliebollen (MET + ZONDER). */
   minimum: number;
+  /** Maximaal aantal oliebollen per bestelling (MET + ZONDER); meer gaat via de mail. */
+  maximum: number;
   fees: Record<BusinessArea, number>;
   surcharges: Record<BusinessMoment, number>;
   /** Euro per extra gedoneerde oliebol. */
@@ -45,17 +41,16 @@ export interface BusinessInfo {
   leadDays: number;
   /** YYYY-MM-DD */
   deliveryDays: string[];
-  pickupDays: PickupDay[];
   email: string;
   /** Telefoonnummer van de stichting, voor vragen. */
   phone: string;
-  /** Brons, Zilver en Goud, van klein naar groot. */
+  /** Brons, Zilver en Goud, van klein naar groot. Elk pakket geldt vanaf zijn aantal tot het volgende. */
   packages: BusinessPackage[];
 }
 
 /** Wat de klant invult. */
 export interface BusinessOrderInput {
-  /** Gekozen pakket; de aantallen hieronder tellen er samen precies op uit. */
+  /** Het pakket dat de klant aanklikte. Bij versturen wordt het het pakket dat bij het aantal hoort (tierFor). */
   pakket: BusinessPackageChoice;
   withRaisins: number;
   withoutRaisins: number;
@@ -67,7 +62,7 @@ export interface BusinessOrderInput {
   moment: BusinessMoment;
   /** YYYY-MM-DD */
   date: string;
-  /** Afhalen kan alleen na overleg met info@. */
+  /** Alleen nog in oude aanvragen met afhalen. */
   pickupAgreed: boolean;
   street: string;
   postalCode: string;

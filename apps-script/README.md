@@ -128,19 +128,20 @@ in de plaats ervan delen.
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
   - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_btw` (9),
-    `zakelijk_minimum` (50), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_toeslag_voor_10` (10),
+    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_toeslag_voor_10` (10),
     `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_dagen_vooraf` (1 = bestellen tot en met de dag ervoor),
-    `zakelijk_pakket_brons` (50), `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500), `zakelijk_email`,
-    `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar`.
+    `zakelijk_pakket_brons` (50), `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500): vanaf die aantallen geldt
+    het pakket, `zakelijk_email`, `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar` (wie bij elke nieuwe
+    aanvraag direct een mail krijgt; leeg = info@, meerdere adressen met een komma).
     De prijs per oliebol (€ 2,50, uit het bouwplan) staat vast in `CONFIG.BUSINESS.price`; een regel `zakelijk_prijs` in
     Instellingen telt niet meer mee. De oude `zakelijk_uren_vooraf` ook niet.
   - De bevestigingsmail van een zakelijke bestelling is opgemaakt (HTML, met een tekstversie erbij). De plaatjes komen uit
     `public/mail` op de GitHub Pages-site (`CONFIG.BUSINESS.mailImages`) en gaan als bijlage in de mail mee, zodat ze ook
     zonder "afbeeldingen laden" te zien zijn. Lukt het ophalen niet, dan gaat de mail zonder plaatjes. Voorbeeld bekijken:
     `node apps-script/mail-preview.mjs`, dan `docs/mail-zakelijke-bevestiging.html` openen.
-- **Zakelijke dagen** (`datum`, `soort`, `tijd`, `open`): de dagen op het zakelijke bestelformulier. `soort` is `bezorgen` of
-  `afhalen`; `open` = `nee` sluit een dag zonder hem te wissen. Het script vult het tabblad de eerste keer met de dagen uit
-  Marks formulier (14–31 december en 4–8 januari, afhalen 30 en 31 december).
+- **Zakelijke dagen** (`datum`, `soort`, `tijd`, `open`): de dagen op het zakelijke bestelformulier. `soort` is `bezorgen`
+  (afhalen kan niet meer; rijen met `afhalen` tellen niet mee); `open` = `nee` sluit een dag zonder hem te wissen. Het script
+  vult het tabblad de eerste keer met de dagen uit Marks formulier (14–31 december en 4–8 januari).
 
 ## Kosten en declaraties
 

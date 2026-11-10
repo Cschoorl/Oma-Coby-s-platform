@@ -128,7 +128,7 @@ in de plaats ervan delen.
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
   - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_prijs` (2,50), `zakelijk_btw` (9),
-    `zakelijk_minimum` (50), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_toeslag_voor_10` (10),
+    `zakelijk_minimum` (50), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1109, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (10),
     `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2), `zakelijk_uren_vooraf` (24), `zakelijk_pakket_brons` (50),
     `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500), `zakelijk_email` en `zakelijk_melding_naar`.
     Let op: staat `zakelijk_prijs` nog op 1,83, dan geldt die prijs en niet de 2,50 uit het bouwplan.

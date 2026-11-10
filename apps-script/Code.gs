@@ -89,6 +89,8 @@ const CONFIG = {
     vatPercent: 9,
     minimum: 50,
     fees: { regio: 10, buiten: 25 },
+    /** Postcodes met het lage bezorgtarief: Amsterdam, Aalsmeer en Kudelstaart. Instelling: zakelijk_postcodes_regio. */
+    regionPostcodes: '1000-1109, 1430-1433',
     surcharges: { regulier: 0, voor10: 10, voor9: 15 },
     donationPrice: 2,
     leadHours: 24,
@@ -1629,7 +1631,7 @@ Object.assign(HANDLERS, {
     // Honeypot: people never see this field, bots fill it in.
     if (String(body.website || '').trim()) throw new Error('Je bestelling kon niet worden verstuurd.');
     const info = businessInfo_();
-    const input = businessInput_(body);
+    const input = businessInput_(body, info);
     const problem = validateBusiness_(input, info);
     if (problem) throw new Error(problem);
     const totals = businessTotals_(input, info);
@@ -1700,6 +1702,7 @@ function businessInfo_() {
     vatRate: number('zakelijk_btw', b.vatPercent) / 100,
     minimum: number('zakelijk_minimum', b.minimum),
     fees: { regio: number('zakelijk_bezorgen_regio', b.fees.regio), buiten: number('zakelijk_bezorgen_buiten', b.fees.buiten) },
+    regionPostcodes: String(settings.zakelijk_postcodes_regio || b.regionPostcodes),
     surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_9', b.surcharges.voor9) },
     donationPrice: number('zakelijk_donatie', b.donationPrice),
     leadHours: number('zakelijk_uren_vooraf', b.leadHours),
@@ -1717,15 +1720,14 @@ function defaultBusinessDays_() {
     .concat(b.pickupDays.map(function (p) { return [p[0], 'afhalen', p[1], 'ja']; }));
 }
 
-function businessInput_(body) {
+function businessInput_(body, info) {
   const text = function (v, max) { return String(v === undefined || v === null ? '' : v).trim().slice(0, max || 200); };
   const count = function (v) { const n = Math.round(Number(v)); return isFinite(n) && n > 0 ? n : 0; };
   const fulfilment = body.fulfilment === 'afhalen' ? 'afhalen' : 'bezorgen';
-  return {
+  const input = {
     pakket: ['brons', 'zilver', 'goud'].indexOf(body.pakket) !== -1 ? body.pakket : 'zelf',
     withRaisins: count(body.withRaisins), withoutRaisins: count(body.withoutRaisins), donation: count(body.donation),
     flyers: !!body.flyers, fulfilment: fulfilment,
-    area: fulfilment === 'bezorgen' && BUSINESS_AREAS[body.area] ? body.area : '',
     moment: BUSINESS_MOMENTS[body.moment] ? body.moment : 'regulier',
     date: text(body.date, 10), pickupAgreed: !!body.pickupAgreed,
     street: fulfilment === 'bezorgen' ? text(body.street) : '', postalCode: fulfilment === 'bezorgen' ? text(body.postalCode, 10).toUpperCase() : '',
@@ -1734,6 +1736,28 @@ function businessInput_(body) {
     invoiceEmail: text(body.invoiceEmail), invoiceAddress: text(body.invoiceAddress, 400), reference: text(body.reference),
     remark: text(body.remark, 1000)
   };
+  // Delivery costs follow from the address; what the browser chose does not count.
+  input.area = fulfilment === 'bezorgen' ? areaFor_(input.postalCode, input.city, info.regionPostcodes) : '';
+  return input;
+}
+
+/**
+ * Delivery area from the address: the four digits of the postcode decide (ranges like '1000-1109, 1430-1433').
+ * Without a postcode the town decides; '' when we do not know yet. Same rules as areaFor in business.ts.
+ */
+function areaFor_(postalCode, city, ranges) {
+  const digits = String(postalCode || '').trim().match(/^(\d{4})/);
+  if (digits) {
+    const n = Number(digits[1]);
+    const inRange = String(ranges || '').split(/[,;]+/).some(function (part) {
+      const m = part.replace(/\s+/g, '').match(/^(\d{4})(?:-(\d{4}))?$/);
+      return m && n >= Number(m[1]) && n <= Number(m[2] || m[1]);
+    });
+    return inRange ? 'regio' : 'buiten';
+  }
+  const c = String(city || '').trim().toLowerCase();
+  if (!c) return '';
+  return /amsterdam|aalsmeer|kudelstaart/.test(c) ? 'regio' : 'buiten';
 }
 
 /** Same rules as validateBusiness in src/features/business/business.ts; returns the first problem. */
@@ -1864,7 +1888,7 @@ function businessOrderRows_(orders) {
 }
 
 /** Labels for the customer, the same as areaLabel in src/features/business/business.ts. */
-const BUSINESS_AREA_LABELS = { regio: 'Amsterdam of Aalsmeer', buiten: 'Buiten Amsterdam' };
+const BUSINESS_AREA_LABELS = { regio: 'Amsterdam of Aalsmeer', buiten: 'Buiten Amsterdam en Aalsmeer' };
 /** The images in public/mail, sent along inside the mail (cid:) so they show without "load images". */
 const BUSINESS_MAIL_IMAGES = ['logo', 'bedankt', 'oudjes', 'oma', 'oliebol', 'medaille-brons', 'medaille-zilver', 'medaille-goud'];
 
@@ -2298,13 +2322,17 @@ Object.assign(HANDLERS, {
           withoutRaisins: byField.withoutRaisins ? byField.withoutRaisins.to : b.withoutRaisins,
           fulfilment: byField.fulfilment ? byField.fulfilment.to : b.fulfilment,
           moment: byField.deliveryMoment ? Object.keys(BUSINESS_MOMENTS).filter(function (k) { return BUSINESS_MOMENTS[k] === byField.deliveryMoment.to; })[0] || b.moment : b.moment,
-          area: b.area,
           donation: b.donation
         };
+        // Another address can mean other delivery costs.
+        const info = businessInfo_();
+        input.area = input.fulfilment === 'bezorgen'
+          ? areaFor_(byField.postalCode ? byField.postalCode.to : b.postalCode, byField.city ? byField.city.to : b.city, info.regionPostcodes) : '';
+        set.bezorgomgeving = input.area ? BUSINESS_AREAS[input.area] : '';
         if (byField.deliveryMoment && !Object.keys(BUSINESS_MOMENTS).some(function (k) { return BUSINESS_MOMENTS[k] === byField.deliveryMoment.to; })) {
           throw new Error('Kies een bezorgmoment: ' + Object.keys(BUSINESS_MOMENTS).map(function (k) { return BUSINESS_MOMENTS[k]; }).join(', ') + '.');
         }
-        const t = businessTotals_(input, businessInfo_());
+        const t = businessTotals_(input, info);
         Object.assign(set, {
           oliebollen: t.oliebollen, bedrag_excl_btw: t.subtotal, btw: t.vat, bedrag_incl_btw: t.total,
           donatie_bedrag: t.donation, factuurbedrag: t.invoice, ouderen: t.ouderen

@@ -38,6 +38,8 @@ export interface BusinessInfo {
   /** Minimaal aantal oliebollen (MET + ZONDER). */
   minimum: number;
   fees: Record<BusinessArea, number>;
+  /** Postcodes met het lage bezorgtarief, bijv. "1000-1109, 1430-1433" (Amsterdam, Aalsmeer en Kudelstaart). */
+  regionPostcodes: string;
   surcharges: Record<BusinessMoment, number>;
   /** Euro per extra gedoneerde oliebol. */
   donationPrice: number;

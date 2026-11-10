@@ -14,7 +14,8 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
    aan, het totaal blijft. **Zelf samenstellen** (onder de kaarten, of "Stel zelf je aantal samen") geeft de vrije aantallen:
    MET en ZONDER in tientallen, samen minimaal 50. Daarna extra doneren (€ 20 per 10) en flyers (standaard uit).
 2. **Bezorgen of afhalen.**
-   - Bezorgen: adres, bezorgkosten (Amsterdam/Aalsmeer € 10, daarbuiten € 25; alvast gekozen op basis van de plaats),
+   - Bezorgen: adres, bezorgkosten (Amsterdam/Aalsmeer € 10, daarbuiten € 25; de klant kiest dit niet zelf: de postcode
+     bepaalt het, zie *Bezorgkosten* hieronder),
      bezorgdag met dagknoppen (te snel = doorgestreept, minimaal 24 uur vóór 9:00) en bezorgmoment
      (9:00–12:30, vóór 10:00 + € 10, vóór 9:00 + € 15).
    - Afhalen: alleen na overleg met info@, dus met een vinkje "afgestemd"; woensdag 30 of donderdag 31 december, 14:00–16:00.
@@ -65,6 +66,17 @@ telt mee als order, tenzij er in Totaal_lijst al een rij met dat ordernummer als
 
 Een opgemaakte versie van de tabbladen met uitleg staat in [`docs/sheets/zakelijk-bestellen-tabbladen.xlsx`](sheets/zakelijk-bestellen-tabbladen.xlsx),
 en in Max' Google Drive in de map *Oma Coby – Zakelijk bestellen*.
+
+## Bezorgkosten
+
+De postcode bepaalt het tarief: **1000–1109** (Amsterdam) en **1430–1433** (Aalsmeer en Kudelstaart) betalen het lage
+tarief (`zakelijk_bezorgen_regio`, € 10), alle andere postcodes het hoge (`zakelijk_bezorgen_buiten`, € 25). Zonder
+postcode kijkt het formulier naar de plaats (Amsterdam, Aalsmeer of Kudelstaart = laag). Weesp, Diemen en Amstelveen vallen
+dus buiten het lage tarief. Andere postcodes erbij? Zet in **Instellingen** de sleutel `zakelijk_postcodes_regio`, bijvoorbeeld
+`1000-1109, 1430-1433, 1180-1189` (dan telt Amstelveen ook als regio).
+
+Het script rekent het gebied bij versturen zelf opnieuw uit (`areaFor_`); wat de browser meestuurt telt niet. Past beheer bij
+een zakelijke bestelling de postcode of plaats aan, dan worden gebied en bedrag opnieuw berekend.
 
 ## Rekenen
 

@@ -25,7 +25,7 @@ import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus } from "../types/business";
 import { BUSINESS_DEFAULTS } from "../config";
-import { businessToOrder, businessTotals, chosenPackage, momentLabel, validateBusiness } from "../features/business/business";
+import { areaFor, businessToOrder, businessTotals, chosenPackage, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
@@ -1018,6 +1018,8 @@ function createDemoBackend(notice?: string): Backend {
             else if (c.field === "city") b.city = v;
             else if (c.field === "email") b.email = v;
           }
+          // Another address can mean other delivery costs.
+          b.area = b.fulfilment === "bezorgen" ? areaFor(b.postalCode, b.city, BUSINESS_DEFAULTS.regionPostcodes) : "";
           const totals = businessTotals(b, BUSINESS_DEFAULTS);
           if (totals.total !== b.totals.total) log.push({ at, kind: "bestelling", orderId, field: "amount", from: String(b.totals.total), to: String(totals.total), by: session.name, note: "opnieuw berekend" });
           b.totals = totals;
@@ -1191,6 +1193,7 @@ function createDemoBackend(notice?: string): Backend {
     async submitBusinessOrder(input) {
       await delay(500);
       if (input.website) throw new Error("Je bestelling kon niet worden verstuurd.");
+      if (input.fulfilment === "afhalen") throw new Error("Afhalen kan niet via dit formulier, we bezorgen alleen. Ververs de pagina en vul je bezorgadres in.");
       const errors = Object.values(validateBusiness(input, BUSINESS_DEFAULTS));
       if (errors.length) throw new Error(errors[0]);
       let id = "";
@@ -1198,7 +1201,9 @@ function createDemoBackend(notice?: string): Backend {
         id = `Z${String(new Date().getFullYear()).slice(2)}-${String(store.business.length + 1).padStart(4, "0")}`;
         const { website: _, ...rest } = input;
         // Same as the Apps Script: the package only while the counts still add up to it.
-        const clean = { ...rest, pakket: chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? ("zelf" as const) };
+        // The delivery area follows from the address, whatever the browser sent.
+        const area = rest.fulfilment === "bezorgen" ? areaFor(rest.postalCode, rest.city, BUSINESS_DEFAULTS.regionPostcodes) : "";
+        const clean = { ...rest, area, pakket: chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? ("zelf" as const) };
         store.business.push({ ...clean, id, createdAt: nowStamp(), status: "nieuw", reason: "", handledBy: "", handledAt: "", totals: businessTotals(clean, BUSINESS_DEFAULTS) });
       });
       return { id };

@@ -170,6 +170,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   vatRate: 0.09,
   minimum: 50,
   fees: { regio: 10, buiten: 25 },
+  // Amsterdam (1000–1109) en Aalsmeer met Kudelstaart (1430–1433); in de Sheet te wijzigen via Instellingen.
+  regionPostcodes: "1000-1109, 1430-1433",
   surcharges: { regulier: 0, voor10: 10, voor9: 15 },
   donationPrice: 2,
   leadHours: 24,

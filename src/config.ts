@@ -186,10 +186,10 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   deliveryDays: weekdays(`${SEASON_YEAR}-12-07`, `${SEASON_YEAR + 1}-01-08`, [`${SEASON_YEAR}-12-25`, `${SEASON_YEAR + 1}-01-01`]),
   email: "info@omacobysoliebollenbar.nl",
   phone: "06 45 44 35 09",
-  // Herstructurering november: de aantallen blijven, de namen schuiven door. Shufflepartner 50 tot 149, Danspartner 150 tot 499,
+  // Herstructurering november: de aantallen blijven, de namen schuiven door. Schuifelpartner 50 tot 149, Danspartner 150 tot 499,
   // Polonaisepartner vanaf 500. Aantallen te wijzigen via Instellingen.
   packages: [
-    { key: "brons", name: "Shufflepartner", oliebollen: 50 },
+    { key: "brons", name: "Schuifelpartner", oliebollen: 50 },
     { key: "zilver", name: "Danspartner", oliebollen: 150 },
     { key: "goud", name: "Polonaisepartner", oliebollen: 500 }
   ],

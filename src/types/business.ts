@@ -18,7 +18,7 @@ export type BusinessMoment = "regulier" | "voor10" | "voor9";
 export type BusinessStatus = "nieuw" | "bevestigd" | "afgewezen";
 
 /**
- * De ladder van drie pakketten op aantal (brons Shufflepartner, zilver Danspartner, goud Polonaisepartner; de sleutel is de medaille)
+ * De ladder van drie pakketten op aantal (brons Schuifelpartner, zilver Danspartner, goud Polonaisepartner; de sleutel is de medaille)
  * en daarboven Feestpartner ("feest"): een feest op locatie met een vaste feestprijs plus de oliebollen, dat je bewust kiest.
  * De muziekmiddagen (Bandpartner) staan niet meer op het formulier; ze staan alleen nog in oude aanvragen.
  * "zelf" = zelf samengesteld, "" = nog niets gekozen.
@@ -69,7 +69,7 @@ export interface BusinessInfo {
   email: string;
   /** Telefoonnummer van de stichting, voor vragen. */
   phone: string;
-  /** Shufflepartner, Danspartner en Polonaisepartner, van klein naar groot. Elk pakket geldt vanaf zijn aantal tot het volgende. */
+  /** Schuifelpartner, Danspartner en Polonaisepartner, van klein naar groot. Elk pakket geldt vanaf zijn aantal tot het volgende. */
   packages: BusinessPackage[];
   /** Feestpartner: alleen als de klant hem kiest, nooit vanzelf op aantal. */
   party: BusinessParty;

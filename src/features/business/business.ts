@@ -49,7 +49,7 @@ export function isAdoption(p: BusinessPackage | undefined): boolean {
   return Boolean(p && p.ouderen);
 }
 
-/** Rang voor wat een pakket toelaat: Shufflepartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (en een oude muziekmiddag) 4, geen pakket 0. */
+/** Rang voor wat een pakket toelaat: Schuifelpartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (en een oude muziekmiddag) 4, geen pakket 0. */
 export function packageRank(p: BusinessPackage | undefined): number {
   if (!p) return 0;
   if (isAdoption(p) || p.key === "feest") return 4;

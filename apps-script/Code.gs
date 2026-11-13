@@ -88,7 +88,7 @@ const CONFIG = {
      * De ladder in stap 1: [sleutel (de medaille), naam, vanaf zo veel oliebollen]. Een pakket geldt tot het volgende; meer blijft
      * het pakket, minder valt terug. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud.
      */
-    packages: [['brons', 'Shufflepartner', 50], ['zilver', 'Danspartner', 150], ['goud', 'Polonaisepartner', 500]],
+    packages: [['brons', 'Schuifelpartner', 50], ['zilver', 'Danspartner', 150], ['goud', 'Polonaisepartner', 500]],
     /**
      * Feestpartner: feest op locatie met band, vanaf 501 oliebollen. Alleen als de klant hem kiest, nooit vanzelf op aantal.
      * Totaal = feestprijs − € 1 per oliebol (het goede-doelendeel, tot € 0) + de oliebollen. Vanaf largeFrom gasten de hogere
@@ -2019,7 +2019,7 @@ function businessPartyFee_(guests, oliebollen, info) {
   return businessPartyBase_(guests, info) - businessPartyCredit_(guests, oliebollen, info);
 }
 
-/** What a package allows: Shufflepartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (and an old music afternoon) 4. Same as packageRank. */
+/** What a package allows: Schuifelpartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (and an old music afternoon) 4. Same as packageRank. */
 function businessRank_(pkg) {
   if (pkg.ouderen || pkg.key === 'feest') return 4;
   return ({ brons: 1, zilver: 2, goud: 3 })[pkg.key] || 0;
@@ -2097,7 +2097,7 @@ function readBusiness_() {
       // Namen sinds de herstructurering van november; rijen van daarvoor met Danspartner of Polonaisepartner schuiven één trede op.
       pakket: ({
         brons: 'brons', zilver: 'zilver', goud: 'goud', feest: 'feest',
-        shufflepartner: 'brons', danspartner: 'zilver', polonaisepartner: 'goud', feestpartner: 'feest',
+        schuifelpartner: 'brons', shufflepartner: 'brons', danspartner: 'zilver', polonaisepartner: 'goud', feestpartner: 'feest',
         'muziekmiddag voor 60 ouderen': 'middag60', 'muziekmiddag voor 100 ouderen': 'middag100', 'zelf samengesteld': 'zelf',
         'bandpartner 60 gasten': 'middag60', 'bandpartner 100 gasten': 'middag100'
       })[String(r.pakket || '').trim().toLowerCase()] || '',

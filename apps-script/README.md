@@ -133,7 +133,7 @@ in de plaats ervan delen.
     `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1199, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (20: vóór 10:00 is een aanvraag;
     let op: staat hier nog 10 uit vorig jaar, maak het dan 15 of maak het vak leeg), `zakelijk_werkdagen_vooraf` (3 werkdagen van tevoren bestellen),
     `zakelijk_sluiting` (`2026-12-28 12:00`: daarna is zakelijk bestellen dicht),
-    `zakelijk_pakket_brons` (50, Shufflepartner), `zakelijk_pakket_zilver` (150, Danspartner), `zakelijk_pakket_goud` (500,
+    `zakelijk_pakket_brons` (50, Schuifelpartner), `zakelijk_pakket_zilver` (150, Danspartner), `zakelijk_pakket_goud` (500,
     Polonaisepartner): vanaf die aantallen geldt het pakket. Feestpartner (alleen als de klant hem kiest):
     `zakelijk_feest_minimum` (501), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
     `zakelijk_feest_gasten_groot` (60: vanaf zo veel gasten de hogere prijs), `zakelijk_feest_korting` (1: zo veel euro per

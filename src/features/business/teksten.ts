@@ -104,7 +104,7 @@ const nl = {
   optional: "(optioneel)",
   less10: "10 minder",
   more10: "10 meer",
-  tier: { brons: "Shufflepartner", zilver: "Danspartner", goud: "Polonaisepartner", feest: "Feestpartner", middag60: "Bandpartner", middag100: "Bandpartner" } as Record<BusinessPackageKey, string>,
+  tier: { brons: "Schuifelpartner", zilver: "Danspartner", goud: "Polonaisepartner", feest: "Feestpartner", middag60: "Bandpartner", middag100: "Bandpartner" } as Record<BusinessPackageKey, string>,
   perks: {
     brons: packageCopy.brons.perks,
     zilver: packageCopy.zilver.perks,
@@ -435,7 +435,7 @@ const en: Teksten = {
   optional: "(optional)",
   less10: "10 fewer",
   more10: "10 more",
-  tier: { brons: "Shufflepartner", zilver: "Danspartner", goud: "Polonaisepartner", feest: "Feestpartner", middag60: "Bandpartner", middag100: "Bandpartner" },
+  tier: { brons: "Schuifelpartner", zilver: "Danspartner", goud: "Polonaisepartner", feest: "Feestpartner", middag60: "Bandpartner", middag100: "Bandpartner" },
   perks: {
     brons: ["Impact certificate with your number of seniors", "Your name on the wall of fame", "A card with the story behind the oliebollen"],
     zilver: ["LinkedIn badge with a ready-made post", "Your logo on the wall of fame", "Oma Coby's Oliebal (limited edition) for your Christmas tree"],

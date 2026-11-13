@@ -1133,6 +1133,29 @@ export function BusinessOrderPage() {
                 />
               </div>
             </div>
+            {/* Bovenaan: wie met het team rekent, vult het aantal collega's in; dat zet het aantal oliebollen en het pakket dat erbij hoort. */}
+            <div className="grid gap-3 rounded-md bg-vul px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6">
+              <div>
+                <label htmlFor="f-colleagues" className="font-bold text-krent">
+                  {t.colleaguesTitle}
+                </label>
+                <p className="text-sm text-muted">
+                  {Number(colleagues) > 0
+                    ? t.colleaguesHint(BUSINESS_PER_COLLEAGUE, t.num(Math.min(info.maximum, Math.ceil((Number(colleagues) * BUSINESS_PER_COLLEAGUE) / 10) * 10)))
+                    : t.colleaguesEmpty(BUSINESS_PER_COLLEAGUE)}
+                </p>
+              </div>
+              <input
+                id="f-colleagues"
+                inputMode="numeric"
+                aria-label={t.colleagues}
+                placeholder={t.colleagues}
+                value={colleagues}
+                onChange={(e) => fromColleagues(e.target.value)}
+                className={`${field} w-full bg-papier text-center font-serif text-lg font-bold tabular-nums sm:w-44`}
+              />
+            </div>
+
             <div id="f-pakket" tabIndex={-1} role="radiogroup" aria-label={t.packages} className="grid gap-4 pt-1 focus:outline-none md:grid-cols-3 md:gap-3 xl:gap-4">
               {info.packages.map((p, i) => (
                 <PackageCard key={p.key} pkg={p} info={info} below={info.packages[i - 1]} active={pkg?.key === p.key} tip={i === 1} onPick={() => pickPackage(p)} />
@@ -1163,29 +1186,6 @@ export function BusinessOrderPage() {
                 {t.composeButton}
               </button>
             </p>
-
-            {/* Liever rekenen met het team: het aantal collega's zet het aantal oliebollen en het pakket dat erbij hoort. */}
-            <div className="grid gap-3 rounded-md bg-vul px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6">
-              <div>
-                <label htmlFor="f-colleagues" className="font-bold text-krent">
-                  {t.colleaguesTitle}
-                </label>
-                <p className="text-sm text-muted">
-                  {Number(colleagues) > 0
-                    ? t.colleaguesHint(BUSINESS_PER_COLLEAGUE, t.num(Math.min(info.maximum, Math.ceil((Number(colleagues) * BUSINESS_PER_COLLEAGUE) / 10) * 10)))
-                    : t.colleaguesEmpty(BUSINESS_PER_COLLEAGUE)}
-                </p>
-              </div>
-              <input
-                id="f-colleagues"
-                inputMode="numeric"
-                aria-label={t.colleagues}
-                placeholder={t.colleagues}
-                value={colleagues}
-                onChange={(e) => fromColleagues(e.target.value)}
-                className={`${field} w-full bg-papier text-center font-serif text-lg font-bold tabular-nums sm:w-44`}
-              />
-            </div>
 
             {input.pakket ? (
               <Card className="grid gap-5">

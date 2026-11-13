@@ -90,11 +90,12 @@ const CONFIG = {
      */
     packages: [['brons', 'Shufflepartner', 50], ['zilver', 'Danspartner', 150], ['goud', 'Polonaisepartner', 500]],
     /**
-     * Feestpartner: feest op locatie met band. Alleen als de klant hem kiest, nooit vanzelf op aantal. Totaal = feestprijs + de
-     * oliebollen. Vanaf feestGastenGroot gasten de hogere prijs (intern een muzikant extra). Btw over de feestprijs: 21% tot het
-     * definitief is afgestemd. Instellingen: zakelijk_feest_minimum, _prijs, _prijs_groot, _gasten_groot, _btw.
+     * Feestpartner: feest op locatie met band, vanaf 501 oliebollen. Alleen als de klant hem kiest, nooit vanzelf op aantal.
+     * Totaal = feestprijs − € 1 per oliebol (het goede-doelendeel, tot € 0) + de oliebollen. Vanaf largeFrom gasten de hogere
+     * prijs (intern een muzikant extra). Btw over de feestprijs: 21% tot het definitief is afgestemd.
+     * Instellingen: zakelijk_feest_minimum, _prijs, _prijs_groot, _gasten_groot, _korting, _btw.
      */
-    party: { name: 'Feestpartner', minimum: 500, fee: 2500, feeLarge: 3100, largeFrom: 60, vatPercent: 21 },
+    party: { name: 'Feestpartner', minimum: 501, fee: 2500, feeLarge: 3100, largeFrom: 60, credit: 1, vatPercent: 21 },
     /** Bandpartner (een eigen muziekmiddag) staat niet meer op het formulier; oude rijen houden hun naam (readBusiness_). */
     adoptions: [],
     vatPercent: 9,
@@ -1828,7 +1829,8 @@ function businessInfo_() {
     party: {
       key: 'feest', name: b.party.name, oliebollen: number('zakelijk_feest_minimum', b.party.minimum),
       fee: number('zakelijk_feest_prijs', b.party.fee), feeLarge: number('zakelijk_feest_prijs_groot', b.party.feeLarge),
-      largeFrom: number('zakelijk_feest_gasten_groot', b.party.largeFrom), vatRate: number('zakelijk_feest_btw', b.party.vatPercent) / 100
+      largeFrom: number('zakelijk_feest_gasten_groot', b.party.largeFrom), credit: number('zakelijk_feest_korting', b.party.credit),
+      vatRate: number('zakelijk_feest_btw', b.party.vatPercent) / 100
     },
     adoptions: b.adoptions.map(function (a) { return { key: a[0], name: a[1], oliebollen: a[2], ouderen: a[3] }; }),
     email: String(settings.zakelijk_email || b.email),
@@ -1986,7 +1988,7 @@ function businessTotals_(i, info) {
   const delivery = bezorgen && i.area ? info.fees[i.area] : 0;
   const surcharge = bezorgen ? info.surcharges[i.moment] || 0 : 0;
   // Feestpartner: de feestprijs bovenop de oliebollen, met een eigen btw-tarief.
-  const party = i.pakket === 'feest' && oliebollen > 0 ? businessPartyFee_(i.guests, info) : 0;
+  const party = i.pakket === 'feest' && oliebollen > 0 ? businessPartyFee_(i.guests, oliebollen, info) : 0;
   const subtotal = cents(bollen + delivery + surcharge + party);
   const vat = cents((bollen + delivery + surcharge) * info.vatRate + party * info.party.vatRate);
   const total = cents(subtotal + vat);
@@ -2002,9 +2004,19 @@ function businessOuderen_(oliebollen, info) {
   return adopt ? adopt.ouderen : Math.floor(oliebollen / 10);
 }
 
-/** Feestprijs excl. btw: vanaf largeFrom gasten de hogere. Same as partyFee in business.ts. */
-function businessPartyFee_(guests, info) {
+/** Feestprijs excl. btw vóór de korting: vanaf largeFrom gasten de hogere. Same as partyBaseFee in business.ts. */
+function businessPartyBase_(guests, info) {
   return guests >= info.party.largeFrom ? info.party.feeLarge : info.party.fee;
+}
+
+/** Korting op het feest: € 1 per oliebol (het goede-doelendeel), tot de feestprijs op € 0 staat. Same as partyCredit. */
+function businessPartyCredit_(guests, oliebollen, info) {
+  return Math.min(businessPartyBase_(guests, info), Math.max(0, oliebollen) * info.party.credit);
+}
+
+/** Feestprijs excl. btw na de korting. Same as partyFee in business.ts. */
+function businessPartyFee_(guests, oliebollen, info) {
+  return businessPartyBase_(guests, info) - businessPartyCredit_(guests, oliebollen, info);
 }
 
 /** What a package allows: Shufflepartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (and an old music afternoon) 4. Same as packageRank. */
@@ -2180,7 +2192,11 @@ function businessMailData_(id, i, t, info) {
   const band = !only && !!pkg.ouderen;
   const costs = [];
   if (!only) {
-    if (t.party) costs.push(['Feest op locatie, ' + numberNl_(i.guests) + ' gasten', euroNl_(t.party), '']);
+    if (pkg.key === 'feest') {
+      // De feestprijs en de korting apart, zoals op het formulier.
+      costs.push(['Feest op locatie, ' + numberNl_(i.guests) + ' gasten', euroNl_(businessPartyBase_(i.guests, info)), ''],
+        ['Korting: ' + numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.party.credit), '− ' + euroNl_(businessPartyCredit_(i.guests, t.oliebollen, info)), '']);
+    }
     costs.push([numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']);
     costs.push(['Poedersuiker', 'gratis', '']);
     costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], euroNl_(t.delivery), '']);

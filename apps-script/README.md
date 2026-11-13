@@ -135,8 +135,9 @@ in de plaats ervan delen.
     `zakelijk_sluiting` (`2026-12-28 12:00`: daarna is zakelijk bestellen dicht),
     `zakelijk_pakket_brons` (50, Shufflepartner), `zakelijk_pakket_zilver` (150, Danspartner), `zakelijk_pakket_goud` (500,
     Polonaisepartner): vanaf die aantallen geldt het pakket. Feestpartner (alleen als de klant hem kiest):
-    `zakelijk_feest_minimum` (500), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
-    `zakelijk_feest_gasten_groot` (60: vanaf zo veel gasten de hogere prijs) en `zakelijk_feest_btw` (21, nog te bevestigen),
+    `zakelijk_feest_minimum` (501), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
+    `zakelijk_feest_gasten_groot` (60: vanaf zo veel gasten de hogere prijs), `zakelijk_feest_korting` (1: zo veel euro per
+    oliebol gaat van de feestprijs af, tot € 0) en `zakelijk_feest_btw` (21, nog te bevestigen),
     `zakelijk_email`, `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar` (wie bij elke nieuwe
     aanvraag direct een mail krijgt; leeg = info@, meerdere adressen met een komma).
   - de Partypot: `partypot_doel` (3000 euro), `partypot_shopify_vanaf` (standaard 1 september van het seizoen) en

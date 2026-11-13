@@ -19,7 +19,8 @@ import {
   nextTier,
   packageRank,
   packageSplit,
-  partyFee,
+  partyBaseFee,
+  partyCredit,
   previewNow,
   seasonClosed,
   tierFor,
@@ -638,13 +639,14 @@ function TierStatus({ input, info, onSet }: { input: BusinessOrderInput; info: B
 
 /**
  * Feestpartner: het vierde pakket, over de volle breedte onder de drie. Geen medaille maar de Oliebollenbokaal.
- * De prijs is de feestprijs plus de oliebollen tegen de gewone stuksprijs; het is een aanvraag, want de band moet kunnen.
+ * De prijs is de feestprijs min € 1 per oliebol, plus de oliebollen tegen de gewone stuksprijs; het is een aanvraag,
+ * want de band moet kunnen. Gouden rand, verder papier zoals de andere drie.
  */
 function PartyCard({ info, active, onPick }: { info: BusinessInfo; active: boolean; onPick: () => void }) {
   const [play, setPlay] = useState(0);
   const t = useT();
   const party = info.party;
-  const from = party.fee + party.oliebollen * info.price;
+  const from = party.fee - partyCredit(0, party.oliebollen, info) + party.oliebollen * info.price;
   const below = info.packages[info.packages.length - 1];
   return (
     <button
@@ -656,8 +658,8 @@ function PartyCard({ info, active, onPick }: { info: BusinessInfo; active: boole
         if (!active) setPlay((n) => n + 1);
         onPick();
       }}
-      className={`relative mt-2 grid gap-5 rounded-kaart bg-feest-50 p-4 pt-6 text-left transition duration-200 sm:p-6 md:col-span-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,250px)] md:items-center md:gap-8 ${
-        active ? "shadow-zwevend ring-2 ring-krent" : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
+      className={`relative mt-2 grid gap-5 rounded-kaart border-2 border-gouwe bg-papier p-4 pt-6 text-left transition duration-200 sm:p-6 md:col-span-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,250px)] md:items-center md:gap-8 ${
+        active ? "shadow-zwevend ring-2 ring-krent ring-offset-2 ring-offset-meel" : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
       }`}
     >
       <span className="absolute -top-2.5 left-4 -rotate-2 rounded bg-krent px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-meel shadow-zacht">{t.trophy}</span>
@@ -691,9 +693,9 @@ function PartyCard({ info, active, onPick }: { info: BusinessInfo; active: boole
           ))}
         </span>
       </span>
-      <span className="grid gap-3 border-t border-feest/20 pt-4 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+      <span className="grid gap-3 border-t border-gouwe/60 pt-4 md:border-l md:border-t-0 md:pl-8 md:pt-0">
         <span className="grid gap-1">
-          <span className="text-xs text-oliebol">{t.partyPrice(t.euroRound(party.fee))}</span>
+          <span className="text-xs text-oliebol">{t.partyPrice(t.euroRound(party.fee), perBol(t, party.credit))}</span>
           <span className="flex flex-wrap items-baseline gap-x-1.5">
             <span className="text-xs text-oliebol">{t.from}</span>
             <span className="font-serif text-2xl font-bold leading-none tabular-nums text-krent">{t.euroRound(from)}</span>
@@ -736,12 +738,11 @@ function PartyBuilder({ input, totals, info, onCount, onGuests, countError, gues
   const min = info.party.oliebollen;
   const max = info.maximum;
   const total = input.withRaisins + input.withoutRaisins;
-  const fee = partyFee(input.guests, info);
   return (
     <div className="grid gap-5">
       <div>
         <h3 className="font-serif text-lg font-bold leading-tight text-krent">{t.partyCountTitle}</h3>
-        <p className="mt-0.5 text-sm text-oliebol">{t.partyCountSub(min)}</p>
+        <p className="mt-0.5 text-sm text-oliebol">{t.partyCountSub(t.num(min), perBol(t, info.party.credit))}</p>
       </div>
       <div className="grid gap-1">
         <p className="flex flex-wrap items-baseline gap-x-2" aria-hidden="true">
@@ -781,11 +782,11 @@ function PartyBuilder({ input, totals, info, onCount, onGuests, countError, gues
           />
         </Field>
         <dl className="grid gap-1.5 rounded-md bg-vul px-3.5 py-3 text-sm">
-          <Line label={input.guests ? t.partyGuests(t.num(input.guests)) : t.partyLine} value={t.euro(fee)} />
+          <PartyLines input={input} info={info} />
           <Line label={t.bollenLine(t.num(total), t.euro(info.price))} value={t.euro(totals.bollen)} />
           <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-lijn pt-2">
             <dt className="font-bold text-krent">{t.totalExclVat}</dt>
-            <dd className="font-serif text-xl font-bold tabular-nums text-krent">{t.euro(fee + totals.bollen)}</dd>
+            <dd className="font-serif text-xl font-bold tabular-nums text-krent">{t.euro(totals.party + totals.bollen)}</dd>
           </div>
         </dl>
       </div>
@@ -882,6 +883,24 @@ function Line({ label, value, strong = false, muted = false }: { label: ReactNod
   );
 }
 
+/** "€ 1" in een zin, zonder de ",-" van euroRound. */
+function perBol(t: ReturnType<typeof useT>, n: number): string {
+  return t.euroRound(n).replace(/,-$/, "");
+}
+
+/** De feestprijs en de korting van € 1 per oliebol, als twee regels: zo zie je wat meer oliebollen scheelt. */
+function PartyLines({ input, info }: { input: BusinessOrderInput; info: BusinessInfo }) {
+  const t = useT();
+  const total = input.withRaisins + input.withoutRaisins;
+  const credit = partyCredit(input.guests, total, info);
+  return (
+    <>
+      <Line label={input.guests ? t.partyGuests(t.num(input.guests)) : t.partyLine} value={t.euro(partyBaseFee(input.guests, info))} />
+      <Line label={t.partyCreditLine(t.num(total), perBol(t, info.party.credit))} value={`− ${t.euro(credit)}`} />
+    </>
+  );
+}
+
 function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: BusinessTotals; info: BusinessInfo }) {
   const t = useT();
   const only = donationOnly(input);
@@ -915,12 +934,12 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
       <Line label={t.withoutRaisins} value={t.num(input.withoutRaisins)} />
       {totals.oliebollen ? <Line label={t.sugar} value={t.free} /> : null}
       <div className="my-1.5 border-t border-lijn" />
-      {totals.party ? <Line label={input.guests ? t.partyGuests(t.num(input.guests)) : t.partyLine} value={t.euro(totals.party)} /> : null}
+      {pkg?.key === "feest" ? <PartyLines input={input} info={info} /> : null}
       <Line label={t.bollenLine(t.num(totals.oliebollen), t.euro(info.price))} value={t.euro(totals.bollen)} />
       <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={input.area ? t.euro(totals.delivery) : "–"} />
       {totals.surcharge ? <Line label={t.moment[input.moment]} value={t.euro(totals.surcharge)} /> : null}
       <Line label={t.subtotal} value={t.euro(totals.subtotal)} muted />
-      {totals.party ? (
+      {pkg?.key === "feest" ? (
         // Feestpartner: twee btw-tarieven, elk met waarover het gaat.
         <>
           <Line label={t.vatOn(Math.round(info.vatRate * 100), t.vatBollen)} value={t.euro(totals.vat - partyVat)} muted />

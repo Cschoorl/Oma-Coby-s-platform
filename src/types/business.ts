@@ -78,8 +78,8 @@ export interface BusinessInfo {
 }
 
 /**
- * Feestpartner: een feest op locatie met band. Totaal = feestprijs + de oliebollen tegen de gewone stuksprijs.
- * Vanaf largeFrom gasten komt er intern een muzikant bij en geldt feeLarge; de klant ziet alleen het bedrag.
+ * Feestpartner: een feest op locatie met band. Totaal = feestprijs − credit per oliebol + de oliebollen tegen de gewone
+ * stuksprijs. Vanaf largeFrom gasten komt er intern een muzikant bij en geldt feeLarge; de klant ziet alleen het bedrag.
  */
 export interface BusinessParty extends BusinessPackage {
   key: "feest";
@@ -88,6 +88,8 @@ export interface BusinessParty extends BusinessPackage {
   /** Feestprijs excl. btw vanaf largeFrom gasten (€ 3.100). */
   feeLarge: number;
   largeFrom: number;
+  /** Het goede-doelendeel per oliebol (€ 1) dat van de feestprijs afgaat; nooit verder dan € 0. */
+  credit: number;
   /** Btw over de feestprijs; de oliebollen houden vatRate. */
   vatRate: number;
 }

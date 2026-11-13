@@ -61,9 +61,19 @@ export function isParty(input: Pick<BusinessOrderInput, "pakket" | "withRaisins"
   return input.pakket === "feest" && input.withRaisins + input.withoutRaisins > 0;
 }
 
-/** Feestprijs excl. btw bij dit aantal gasten: vanaf largeFrom het hogere bedrag (intern een muzikant extra). */
-export function partyFee(guests: number, info: BusinessInfo): number {
+/** Feestprijs excl. btw vóór de korting: vanaf largeFrom gasten het hogere bedrag (intern een muzikant extra). */
+export function partyBaseFee(guests: number, info: BusinessInfo): number {
   return guests >= info.party.largeFrom ? info.party.feeLarge : info.party.fee;
+}
+
+/** Korting op het feest: het goede-doelendeel van elke oliebol (€ 1), tot de feestprijs op € 0 staat. */
+export function partyCredit(guests: number, oliebollen: number, info: BusinessInfo): number {
+  return Math.min(partyBaseFee(guests, info), Math.max(0, oliebollen) * info.party.credit);
+}
+
+/** Feestprijs excl. btw na de korting: hoe meer oliebollen, hoe lager. */
+export function partyFee(guests: number, oliebollen: number, info: BusinessInfo): number {
+  return partyBaseFee(guests, info) - partyCredit(guests, oliebollen, info);
 }
 
 /** De muziekmiddag bij precies dit aantal, of niets. */
@@ -183,8 +193,8 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const bezorgen = input.fulfilment === "bezorgen" && oliebollen > 0;
   const delivery = bezorgen && input.area ? info.fees[input.area] : 0;
   const surcharge = bezorgen ? info.surcharges[input.moment] ?? 0 : 0;
-  // Feestpartner: de feestprijs komt bovenop de oliebollen, met een eigen btw-tarief.
-  const party = isParty(input) ? partyFee(input.guests, info) : 0;
+  // Feestpartner: de feestprijs (min € 1 per oliebol) komt bovenop de oliebollen, met een eigen btw-tarief.
+  const party = isParty(input) ? partyFee(input.guests, oliebollen, info) : 0;
   const subtotal = cents(bollen + delivery + surcharge + party);
   const vat = cents((bollen + delivery + surcharge) * info.vatRate + party * info.party.vatRate);
   const total = cents(subtotal + vat);

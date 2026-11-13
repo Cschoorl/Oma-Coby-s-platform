@@ -193,9 +193,11 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
     { key: "zilver", name: "Danspartner", oliebollen: 150 },
     { key: "goud", name: "Polonaisepartner", oliebollen: 500 }
   ],
-  // Feestpartner: feest op locatie met band, € 2.500 plus de oliebollen; vanaf 60 gasten € 3.100 (er komt intern een muzikant bij).
-  // Het is een aanvraag: we bevestigen pas als de band kan. Btw over de feestprijs is 21% tot het definitief is afgestemd.
-  party: { key: "feest", name: "Feestpartner", oliebollen: 500, fee: 2500, feeLarge: 3100, largeFrom: 60, vatRate: 0.21 },
+  // Feestpartner: feest op locatie met band vanaf 501 oliebollen. Feestprijs € 2.500, vanaf 60 gasten € 3.100 (er komt intern
+  // een muzikant bij). Het goede-doelendeel van € 1 per oliebol gaat van de feestprijs af: 501 oliebollen maakt € 1.999,
+  // elke oliebol meer weer € 1 eraf. Het is een aanvraag: we bevestigen pas als de band kan. Btw over de feestprijs is 21%
+  // tot het definitief is afgestemd.
+  party: { key: "feest", name: "Feestpartner", oliebollen: 501, fee: 2500, feeLarge: 3100, largeFrom: 60, credit: 1, vatRate: 0.21 },
   // Bandpartner (een eigen muziekmiddag) staat niet meer op het formulier; oude aanvragen houden hun naam via pakketName.
   adoptions: []
 };

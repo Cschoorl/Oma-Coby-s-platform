@@ -15,6 +15,13 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 > 8 januari behalve 25 december en 1 januari, minimaal 3 werkdagen van tevoren en uiterlijk 28 december 12:00.
 > Waar de tekst hieronder iets anders zegt, geldt dit blok.
 
+> **Feestpartner (13 november 2026).** Het vierde pakket, onder de drie, met een gouden rand en de Oliebollenbokaal.
+> Vanaf 501 oliebollen; feest op locatie met band voor € 2.500 excl. btw (vanaf 60 gasten € 3.100, intern een muzikant
+> extra). Van de feestprijs gaat € 1 per oliebol af, tot € 0: 501 oliebollen maakt € 1.999, 800 maakt € 1.700. Formulier,
+> overzicht en mail tonen de feestprijs en de korting als twee regels. Btw: 21% over het feest, 9% over oliebollen en
+> bezorgen. Instellingen: `zakelijk_feest_minimum`, `_prijs`, `_prijs_groot`, `_gasten_groot`, `_korting`, `_btw`.
+> Naar de klant heet het "korting"; we noemen het goede-doelendeel niet (zie het impactverhaal hieronder).
+
 Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon onderaan, met het totaal in een balk).
 
 > **Impactverhaal 2026 (besluiten 12 november).** Wel zeggen: "Met 10 oliebollen laat je één oudere rock'n'rollen",

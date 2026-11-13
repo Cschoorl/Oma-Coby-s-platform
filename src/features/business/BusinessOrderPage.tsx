@@ -1559,8 +1559,11 @@ export function BusinessOrderPage() {
   );
 }
 
-/** Boven zo veel ouderen wordt de discozaal een mierenhoop; dan het rijtje oudjes met het getal. */
-const HALL_MAX_OUDJES = 300;
+/**
+ * Tot zo veel ouderen staat de discozaal op het bedankscherm: dat is het maximum van 10.000 oliebollen, dus
+ * elke bestelling via het formulier krijgt de zaal. Daarboven het rijtje oudjes met het getal.
+ */
+const HALL_MAX_OUDJES = 1000;
 
 function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: BusinessInfo; onAnother: () => void; onRestart: () => void }) {
   const t = useT();

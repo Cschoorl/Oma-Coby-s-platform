@@ -464,9 +464,10 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
   const gold = pkg.key === "goud";
   const ouderen = Math.floor(pkg.oliebollen / 10);
   const next = nextTier(pkg.oliebollen, info);
-  const ink = gold ? "text-meel" : "text-krent";
-  const soft = gold ? "text-meel/70" : "text-oliebol";
-  const check = gold ? "text-gouwe" : "text-kerst-ink";
+  // Feestpartner valt op met de lichte feest-tint, niet met een donker vlak dat alle aandacht trekt.
+  const ink = "text-krent";
+  const soft = "text-oliebol";
+  const check = gold ? "text-feest-ink" : "text-kerst-ink";
   return (
     <button
       type="button"
@@ -477,8 +478,8 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         if (!active) setPlay((n) => n + 1);
         onPick();
       }}
-      className={`relative flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${gold ? "bg-krent" : "bg-papier"} ${
-        active ? `shadow-zwevend ring-2 ${gold ? "ring-gouwe" : "ring-krent"}` : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
+      className={`relative flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${gold ? "bg-feest-50" : "bg-papier"} ${
+        active ? "shadow-zwevend ring-2 ring-krent" : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
       }`}
     >
       {tip ? (
@@ -491,7 +492,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         </span>
         <span className="grid">
           {/* Lange namen (Polonaisepartner) breken af als "Polonaise-partner" wanneer de kaart te smal is. */}
-          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] lg:text-[30px] tracking-wide [hyphens:manual] ${gold ? "text-gouwe" : "text-krent"}`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
+          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] lg:text-[30px] tracking-wide [hyphens:manual] ${gold ? "text-feest-ink" : "text-krent"}`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
           <span className={`text-xs tabular-nums ${soft}`}>{t.rangeShort(pkg, info)}</span>
         </span>
       </span>
@@ -532,7 +533,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         ))}
       </span>
 
-      <span className={`mt-auto grid gap-3 border-t pt-3 ${gold ? "border-meel/15" : "border-lijn"}`}>
+      <span className={`mt-auto grid gap-3 border-t pt-3 ${gold ? "border-feest/20" : "border-lijn"}`}>
         <span className="grid gap-1">
           <span className="flex flex-wrap items-baseline gap-x-1.5">
             <span className={`text-xs ${soft}`}>{t.from}</span>
@@ -543,7 +544,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         </span>
         <span
           className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold transition ${
-            gold ? (active ? "bg-gouwe text-krent" : "bg-meel/10 text-gouwe") : active ? "bg-krent text-meel" : "bg-vul text-krent"
+            active ? "bg-krent text-meel" : gold ? "bg-feest/10 text-feest-ink" : "bg-vul text-krent"
           }`}
         >
           {active ? t.chosen : t.choose(name)}

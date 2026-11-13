@@ -1219,7 +1219,8 @@ function createDemoBackend(notice?: string): Backend {
           area,
           flyers: false,
           certificateName: rest.certificateName.trim() || rest.company,
-          pakket: only ? "" : chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? "zelf"
+          pakket: only ? "" : chosenPackage(rest, BUSINESS_DEFAULTS)?.key ?? "zelf",
+          guests: !only && rest.pakket === "feest" ? rest.guests : 0
         };
         store.business.push({ ...clean, id, createdAt: nowStamp(), status: "nieuw", reason: "", handledBy: "", handledAt: "", totals: businessTotals(clean, BUSINESS_DEFAULTS) });
       });

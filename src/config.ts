@@ -177,7 +177,7 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   // Groot-Amsterdam (10xx en 11xx: ook Diemen en Amstelveen) en Aalsmeer met Kudelstaart (1430–1433).
   regionPostcodes: "1000-1199, 1430-1433",
   // Vóór 10:00 is een aanvraag (besluit 11 november); vóór 9:00 bieden we niet meer aan.
-  surcharges: { regulier: 0, voor10: 15, voor9: 0 },
+  surcharges: { regulier: 0, voor10: 20, voor9: 0 },
   // Minimaal 3 werkdagen van tevoren, en uiterlijk maandag 28 december 12:00.
   leadWorkdays: 3,
   closeAt: `${SEASON_YEAR}-12-28T12:00`,
@@ -186,18 +186,22 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   deliveryDays: weekdays(`${SEASON_YEAR}-12-07`, `${SEASON_YEAR + 1}-01-08`, [`${SEASON_YEAR}-12-25`, `${SEASON_YEAR + 1}-01-01`]),
   email: "info@omacobysoliebollenbar.nl",
   phone: "06 45 44 35 09",
-  // Danspartner 50 tot 149, Polonaisepartner 150 tot 499, Feestpartner vanaf 500. Aantallen te wijzigen via Instellingen.
+  // Herstructurering november: de aantallen blijven, de namen schuiven door. Shufflepartner 50 tot 149, Danspartner 150 tot 499,
+  // Polonaisepartner vanaf 500. Aantallen te wijzigen via Instellingen.
   packages: [
-    { key: "brons", name: "Danspartner", oliebollen: 50 },
-    { key: "zilver", name: "Polonaisepartner", oliebollen: 150 },
-    { key: "goud", name: "Feestpartner", oliebollen: 500 }
+    { key: "brons", name: "Shufflepartner", oliebollen: 50 },
+    { key: "zilver", name: "Danspartner", oliebollen: 150 },
+    { key: "goud", name: "Polonaisepartner", oliebollen: 500 }
   ],
-  // Bandpartner: een eigen muziekmiddag, bij precies dit aantal oliebollen, voor zo veel gasten.
-  adoptions: [
-    { key: "middag60", name: "Bandpartner 60 gasten", oliebollen: 2500, ouderen: 60 },
-    { key: "middag100", name: "Bandpartner 100 gasten", oliebollen: 3100, ouderen: 100 }
-  ]
+  // Feestpartner: feest op locatie met band, € 2.500 plus de oliebollen; vanaf 60 gasten € 3.100 (er komt intern een muzikant bij).
+  // Het is een aanvraag: we bevestigen pas als de band kan. Btw over de feestprijs is 21% tot het definitief is afgestemd.
+  party: { key: "feest", name: "Feestpartner", oliebollen: 500, fee: 2500, feeLarge: 3100, largeFrom: 60, vatRate: 0.21 },
+  // Bandpartner (een eigen muziekmiddag) staat niet meer op het formulier; oude aanvragen houden hun naam via pakketName.
+  adoptions: []
 };
+
+/** Namen van pakketten die niet meer op het formulier staan, voor oude aanvragen in beheer. */
+export const OLD_PACKAGE_NAMES: Record<string, string> = { middag60: "Bandpartner 60 gasten", middag100: "Bandpartner 100 gasten" };
 
 /** Alle maandagen tot en met vrijdagen van `from` tot en met `to`, zonder de dagen in `skip`. */
 function weekdays(from: string, to: string, skip: string[]): string[] {

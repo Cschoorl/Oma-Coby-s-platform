@@ -38,6 +38,7 @@ function flags(b: BusinessOrder): Array<[BadgeTone, string]> {
   if (b.fulfilment === "afhalen") out.push(["aandacht", "~ Afhalen"]);
   if (b.withRaisins > BUSINESS_LARGE || b.withoutRaisins > BUSINESS_LARGE) out.push(["aandacht", `~ Meer dan ${formatNumber(BUSINESS_LARGE)}`]);
   if (b.moment === "voor10") out.push(["aandacht", "~ Vóór 10:00 aangevraagd"]);
+  if (b.pakket === "feest") out.push(["aandacht", "~ Feest: band nog regelen"]);
   if (b.remark) out.push(["zacht", "Opmerking"]);
   return out;
 }
@@ -173,7 +174,10 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const t = b.totals;
-  const vatPercent = Math.round((t.subtotal ? t.vat / t.subtotal : BUSINESS_DEFAULTS.vatRate) * 100);
+  // Bij Feestpartner twee tarieven (oliebollen en feest); dan noemen we ze allebei.
+  const vatLabel = t.party
+    ? `Btw ${Math.round(BUSINESS_DEFAULTS.vatRate * 100)}% en ${Math.round(BUSINESS_DEFAULTS.party.vatRate * 100)}%`
+    : `Btw ${Math.round((t.subtotal ? t.vat / t.subtotal : BUSINESS_DEFAULTS.vatRate) * 100)}%`;
 
   async function setStatus(status: BusinessStatus, why = "") {
     setBusy(true);
@@ -222,6 +226,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
         <Rows
           rows={[
             ["Pakket", pakketName(b.pakket)],
+            ["Gasten", b.pakket === "feest" ? `± ${formatNumber(b.guests)}` : ""],
             ["MET krenten", formatNumber(b.withRaisins)],
             ["ZONDER krenten", formatNumber(b.withoutRaisins)],
             ["TOTAAL", <b>{formatNumber(t.oliebollen)} oliebollen</b>],
@@ -302,8 +307,9 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
               [`${formatNumber(t.oliebollen)} × ${formatEuro(t.oliebollen ? t.bollen / t.oliebollen : 0)}`, t.bollen],
               ["Bezorgkosten", t.delivery],
               ["Toeslag bezorgmoment", t.surcharge],
+              ["Feest op locatie", t.party ?? 0],
               ["Subtotaal excl. btw", t.subtotal],
-              [`Btw ${vatPercent}%`, t.vat]
+              [vatLabel, t.vat]
             ] as Array<[string, number]>
           )
             .filter(([label, v]) => v || label.startsWith("Subtotaal") || label.startsWith("Btw"))

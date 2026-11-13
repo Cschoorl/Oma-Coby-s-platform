@@ -1,6 +1,6 @@
 import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrder, BusinessOrderInput, BusinessPackage, BusinessPackageChoice, BusinessPackageKey, BusinessSource, BusinessTotals } from "../../types/business";
 import type { Order } from "../../types/order";
-import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE } from "../../config";
+import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE, OLD_PACKAGE_NAMES } from "../../config";
 
 /*
  * Rekenen en controleren voor de zakelijke bestelling. Het Apps Script rekent bij het versturen
@@ -31,7 +31,11 @@ export const packageCopy: Record<BusinessPackageKey, { perks: string[] }> = {
   goud: {
     perks: ["Uitnodiging voor een muziekmiddag", "Foto of kort filmpje van de middag die jullie mede mogelijk hebben gemaakt", "Ereplek op de wall of fame", "Bezorging door heel Nederland"]
   },
-  // Bandpartner: alles van Feestpartner, plus wat alleen een eigen middag heeft.
+  // Feestpartner: alles van Polonaisepartner, plus het feest op locatie. Wat de feestprijs precies dekt, wordt nog uitgewerkt.
+  feest: {
+    perks: ["Een live band op jullie eigen locatie", "Wij regelen het feest, jullie de gasten"]
+  },
+  // Bandpartner (oude aanvragen): alles van de ladder, plus wat alleen een eigen middag heeft.
   middag60: {
     perks: ["Jullie naam op de middag", "Jullie kiezen zelf de plek: een zorgcentrum of buurthuis", "Collega's mogen komen (aantal in overleg)", "Een foto of filmpje van de middag"]
   },
@@ -45,11 +49,21 @@ export function isAdoption(p: BusinessPackage | undefined): boolean {
   return Boolean(p && p.ouderen);
 }
 
-/** Rang voor wat een pakket toelaat: Danspartner 1, Polonaisepartner 2, Feestpartner 3, een muziekmiddag 4, geen pakket 0. */
+/** Rang voor wat een pakket toelaat: Shufflepartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (en een oude muziekmiddag) 4, geen pakket 0. */
 export function packageRank(p: BusinessPackage | undefined): number {
   if (!p) return 0;
-  if (isAdoption(p)) return 4;
+  if (isAdoption(p) || p.key === "feest") return 4;
   return { brons: 1, zilver: 2, goud: 3 }[p.key as "brons" | "zilver" | "goud"] ?? 0;
+}
+
+/** Feestpartner gekozen (en er worden oliebollen besteld)? */
+export function isParty(input: Pick<BusinessOrderInput, "pakket" | "withRaisins" | "withoutRaisins">): boolean {
+  return input.pakket === "feest" && input.withRaisins + input.withoutRaisins > 0;
+}
+
+/** Feestprijs excl. btw bij dit aantal gasten: vanaf largeFrom het hogere bedrag (intern een muzikant extra). */
+export function partyFee(guests: number, info: BusinessInfo): number {
+  return guests >= info.party.largeFrom ? info.party.feeLarge : info.party.fee;
 }
 
 /** De muziekmiddag bij precies dit aantal, of niets. */
@@ -74,11 +88,12 @@ export function tierFor(oliebollen: number, info: BusinessInfo): BusinessPackage
 }
 
 /**
- * Het pakket van deze bestelling: precies 2.500 of 3.100 is een muziekmiddag; verder het grootste pakket dat je haalt
- * (meer blijft dat pakket, minder valt een pakket terug).
+ * Het pakket van deze bestelling: Feestpartner als de klant die koos, verder het grootste pakket dat je met het aantal haalt
+ * (meer blijft dat pakket, minder valt een pakket terug). Feestpartner gaat nooit vanzelf in: hij kost een feestprijs.
  */
-export function chosenPackage(input: Pick<BusinessOrderInput, "withRaisins" | "withoutRaisins">, info: BusinessInfo): BusinessPackage | undefined {
+export function chosenPackage(input: Pick<BusinessOrderInput, "pakket" | "withRaisins" | "withoutRaisins">, info: BusinessInfo): BusinessPackage | undefined {
   const total = input.withRaisins + input.withoutRaisins;
+  if (input.pakket === "feest" && total > 0) return info.party;
   return adoptionFor(total, info) ?? tierFor(total, info);
 }
 
@@ -106,7 +121,7 @@ export function nextTier(oliebollen: number, info: BusinessInfo): BusinessPackag
 /** Voor beheer: de pakketnaam zoals de Sheet hem bewaart; leeg bij oudere bestellingen zonder pakket. */
 export function pakketName(choice: BusinessPackageChoice): string {
   if (choice === "zelf") return "Zelf samengesteld";
-  return [...BUSINESS_DEFAULTS.packages, ...BUSINESS_DEFAULTS.adoptions].find((p) => p.key === choice)?.name ?? "";
+  return [...BUSINESS_DEFAULTS.packages, BUSINESS_DEFAULTS.party].find((p) => p.key === choice)?.name ?? OLD_PACKAGE_NAMES[choice] ?? "";
 }
 
 /** "Hoe kwamen jullie bij ons terecht?", in de volgorde van het formulier. Zo staat het ook in de Sheet. */
@@ -126,6 +141,7 @@ export function emptyBusinessInput(): BusinessOrderInput {
     pakket: "",
     withRaisins: 0,
     withoutRaisins: 0,
+    guests: 0,
     occasion: "",
     donation: 0,
     flyers: false,
@@ -167,11 +183,13 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const bezorgen = input.fulfilment === "bezorgen" && oliebollen > 0;
   const delivery = bezorgen && input.area ? info.fees[input.area] : 0;
   const surcharge = bezorgen ? info.surcharges[input.moment] ?? 0 : 0;
-  const subtotal = cents(bollen + delivery + surcharge);
-  const vat = cents(subtotal * info.vatRate);
+  // Feestpartner: de feestprijs komt bovenop de oliebollen, met een eigen btw-tarief.
+  const party = isParty(input) ? partyFee(input.guests, info) : 0;
+  const subtotal = cents(bollen + delivery + surcharge + party);
+  const vat = cents((bollen + delivery + surcharge) * info.vatRate + party * info.party.vatRate);
   const total = cents(subtotal + vat);
   const donation = cents(Math.max(0, input.donation));
-  return { oliebollen, bollen, delivery, surcharge, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info) };
+  return { oliebollen, bollen, delivery, surcharge, party, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info) };
 }
 
 /** "2026-12-07" ± dagen, zonder tijdzonegedoe. */
@@ -269,6 +287,8 @@ export const validationNl = {
   occasion: "Kies waarvoor de oliebollen zijn.",
   min: (n: number) => `Samen minimaal ${n} oliebollen.`,
   max: (n: number) => `Samen hooguit ${n.toLocaleString("nl-NL")} oliebollen. Meer? Mail ons, dan plannen we het samen.`,
+  partyMin: (n: number) => `Feestpartner is vanaf ${n} oliebollen.`,
+  guests: "Vul in hoeveel gasten je verwacht.",
   street: "Vul straat en huisnummer in.",
   postalCode: "Vul een postcode in, zoals 1431 AB.",
   city: "Vul de plaats in.",
@@ -296,6 +316,10 @@ export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, 
   if (total > 0) {
     if (!e.withRaisins && !e.withoutRaisins && total < info.minimum) e.withRaisins = text.min(info.minimum);
     if (!e.withRaisins && !e.withoutRaisins && total > info.maximum) e.withRaisins = text.max(info.maximum);
+    if (input.pakket === "feest") {
+      if (!e.withRaisins && !e.withoutRaisins && total < info.party.oliebollen) e.withRaisins = text.partyMin(info.party.oliebollen);
+      if (!(input.guests > 0)) e.guests = text.guests;
+    }
     if (!input.occasion) e.occasion = text.occasion;
     // Afhalen kan niet: we bezorgen altijd.
     if (!input.street.trim()) e.street = text.street;

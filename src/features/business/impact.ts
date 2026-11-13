@@ -1,6 +1,6 @@
 import type { BusinessOrder } from "../../types/business";
 import { BUSINESS_DEFAULTS, SEASON_YEAR } from "../../config";
-import { adoptionFor, ouderenFor } from "./business";
+import { ouderenFor } from "./business";
 
 /*
  * Het impactcertificaat en de LinkedIn-tekst bij een zakelijke bestelling (impactverhaal 2026).
@@ -21,7 +21,8 @@ export function impactOf(b: BusinessOrder): { ouderen: number; band: boolean; ol
   return {
     oliebollen,
     ouderen: ouderenFor(oliebollen, BUSINESS_DEFAULTS),
-    band: Boolean(adoptionFor(oliebollen, BUSINESS_DEFAULTS)),
+    // Bandpartner staat niet meer op het formulier; oude aanvragen herkennen we aan hun pakket.
+    band: b.pakket === "middag60" || b.pakket === "middag100",
     pot: b.totals.donation
   };
 }

@@ -5,6 +5,7 @@ import { Card, Notice, OLIEBOL_SVG, Segmented, Sticker, fieldLabel, ghostButton,
 import { BUSINESS_DEFAULTS, BUSINESS_PER_COLLEAGUE } from "../../config";
 import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
 import heroUrl from "../../assets/mark-en-oma-coby.jpg";
+import { AddressSearch } from "./AddressSearch";
 import {
   areaFor,
   businessTotals,
@@ -18,6 +19,7 @@ import {
   nextTier,
   packageRank,
   packageSplit,
+  partyFee,
   previewNow,
   seasonClosed,
   tierFor,
@@ -40,7 +42,7 @@ const field = `${inputClass} min-h-[44px]`;
 
 /** Volgorde van de velden op de pagina: daar springen we heen bij versturen met fouten. */
 const FIELD_ORDER: BusinessField[] = [
-  "pakket", "withRaisins", "withoutRaisins", "occasion", "donation", "street", "postalCode", "city", "date",
+  "pakket", "withRaisins", "withoutRaisins", "guests", "occasion", "donation", "street", "postalCode", "city", "date",
   "company", "contact", "phone", "email", "invoiceEmail"
 ];
 
@@ -48,7 +50,7 @@ type StepNr = 1 | 2 | 3;
 
 /** Welke verplichte velden bij welke stap horen: "Volgende" kijkt alleen naar de velden van de stap waar je bent. */
 const STEP_FIELDS: Record<StepNr, BusinessField[]> = {
-  1: ["pakket", "withRaisins", "withoutRaisins", "occasion", "donation"],
+  1: ["pakket", "withRaisins", "withoutRaisins", "guests", "occasion", "donation"],
   2: ["street", "postalCode", "city", "date"],
   3: ["company", "contact", "phone", "email", "invoiceEmail"]
 };
@@ -425,14 +427,50 @@ const MEDAL: Record<BusinessPackageKey, [string, string, string]> = {
   brons: ["#e7b184", "#b8743f", "#83491f"],
   zilver: ["#f4f2ec", "#c9c4b8", "#868072"],
   goud: ["#f7e6a0", "#dcc05d", "#a3842a"],
-  // Een muziekmiddag: goud, want het is meer dan Feestpartner.
+  // Feestpartner tekent de bokaal (Bokaal); een oude muziekmiddag houdt goud.
+  feest: ["#fffaf0", "#e9dfc6", "#a3842a"],
   middag60: ["#f7e6a0", "#dcc05d", "#a3842a"],
   middag100: ["#f7e6a0", "#dcc05d", "#a3842a"]
 };
 
-/** Medaille aan een lint in feest-rood: Brons, Zilver of Goud. */
+/**
+ * De Oliebollenbokaal van Feestpartner: een glanzende beker met een oliebol erin en een feest-rood plaatje.
+ * Lichter en glanzender dan goud, zoals platina, zodat hij boven de medailles uitsteekt maar in dezelfde familie blijft.
+ */
+function Bokaal({ className = "" }: { className?: string }) {
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg viewBox="0 0 44 54" width="44" height="54" aria-hidden="true" className={`shrink-0 ${className}`}>
+      <defs>
+        <linearGradient id={`b${id}`} x1="0" y1="0" x2="1" y2="0.6">
+          <stop offset="0" stopColor="#fffaf0" />
+          <stop offset="0.45" stopColor="#f2e3b0" />
+          <stop offset="1" stopColor="#b8963a" />
+        </linearGradient>
+        <radialGradient id={`o${id}`} cx="0.38" cy="0.32" r="0.75">
+          <stop offset="0" stopColor="#c98a52" />
+          <stop offset="1" stopColor="#7a4422" />
+        </radialGradient>
+      </defs>
+      <circle cx="22" cy="13" r="8.5" fill={`url(#o${id})`} />
+      <circle cx="19" cy="9.5" r="1.1" fill="#fffdf6" />
+      <circle cx="24.5" cy="8.5" r="0.9" fill="#fffdf6" />
+      <circle cx="22" cy="12" r="0.8" fill="#fffdf6" />
+      <path d="M9.5 21c-6 0-6.5 9.5 1.5 10.5M34.5 21c6 0 6.5 9.5-1.5 10.5" fill="none" stroke="#b8963a" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M8 17h28v3c0 9-6.3 15-14 15S8 29 8 20z" fill={`url(#b${id})`} />
+      <path d="M12 20c0 5 2.5 9 6 11" fill="none" stroke="#fffdf6" strokeOpacity="0.8" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M19 35h6l1 5h-8z" fill="#b8963a" />
+      <rect x="12" y="40" width="20" height="5" rx="1.2" fill={`url(#b${id})`} />
+      <rect x="10" y="45" width="24" height="8" rx="1.6" fill="#d05438" />
+      <rect x="15" y="48" width="14" height="2" rx="1" fill="#fffdf6" fillOpacity="0.7" />
+    </svg>
+  );
+}
+
+/** Medaille aan een lint in feest-rood: Brons, Zilver of Goud. Feestpartner krijgt de bokaal. */
 function Medal({ tier, className = "" }: { tier: BusinessPackageKey; className?: string }) {
   const id = useId().replace(/:/g, "");
+  if (tier === "feest") return <Bokaal className={className} />;
   const [light, base, dark] = MEDAL[tier];
   return (
     <svg viewBox="0 0 44 54" width="44" height="54" aria-hidden="true" className={`shrink-0 ${className}`}>
@@ -454,7 +492,7 @@ function Medal({ tier, className = "" }: { tier: BusinessPackageKey; className?:
 
 /**
  * Een pakketkaart, zo rustig mogelijk: naam en bereik, hoeveel ouderen er dansen, drie korte extra's en de prijs met
- * één knop. Geen tussenkopjes; hogere pakketten beginnen met "Alles van Brons". Goud is de donkere kaart.
+ * één knop. Geen tussenkopjes; hogere pakketten beginnen met "Alles van …". De drie zijn gelijk; Feestpartner (PartyCard) valt op.
  */
 function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessPackage; info: BusinessInfo; below?: BusinessPackage; active: boolean; tip: boolean; onPick: () => void }) {
   // Counts the picks, so the little party plays again each time this card is chosen.
@@ -464,10 +502,9 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
   const gold = pkg.key === "goud";
   const ouderen = Math.floor(pkg.oliebollen / 10);
   const next = nextTier(pkg.oliebollen, info);
-  // Feestpartner valt op met de lichte feest-tint, niet met een donker vlak dat alle aandacht trekt.
   const ink = "text-krent";
   const soft = "text-oliebol";
-  const check = gold ? "text-feest-ink" : "text-kerst-ink";
+  const check = "text-kerst-ink";
   return (
     <button
       type="button"
@@ -478,7 +515,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         if (!active) setPlay((n) => n + 1);
         onPick();
       }}
-      className={`relative flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${gold ? "bg-feest-50" : "bg-papier"} ${
+      className={`relative flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 bg-papier ${
         active ? "shadow-zwevend ring-2 ring-krent" : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
       }`}
     >
@@ -492,7 +529,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         </span>
         <span className="grid">
           {/* Lange namen (Polonaisepartner) breken af als "Polonaise-partner" wanneer de kaart te smal is. */}
-          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] lg:text-[30px] tracking-wide [hyphens:manual] ${gold ? "text-feest-ink" : "text-krent"}`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
+          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] lg:text-[30px] tracking-wide [hyphens:manual] text-krent`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
           <span className={`text-xs tabular-nums ${soft}`}>{t.rangeShort(pkg, info)}</span>
         </span>
       </span>
@@ -533,7 +570,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         ))}
       </span>
 
-      <span className={`mt-auto grid gap-3 border-t pt-3 ${gold ? "border-feest/20" : "border-lijn"}`}>
+      <span className={`mt-auto grid gap-3 border-t border-lijn pt-3`}>
         <span className="grid gap-1">
           <span className="flex flex-wrap items-baseline gap-x-1.5">
             <span className={`text-xs ${soft}`}>{t.from}</span>
@@ -544,7 +581,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         </span>
         <span
           className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold transition ${
-            active ? "bg-krent text-meel" : gold ? "bg-feest/10 text-feest-ink" : "bg-vul text-krent"
+            active ? "bg-krent text-meel" : "bg-vul text-krent"
           }`}
         >
           {active ? t.chosen : t.choose(name)}
@@ -600,44 +637,159 @@ function TierStatus({ input, info, onSet }: { input: BusinessOrderInput; info: B
 }
 
 /**
- * Bandpartner: een eigen muziekmiddag, in een eigen blok onder de pakketten (niet als vierde kaart ernaast).
- * Een andere maat dan de pakketten: gasten in plaats van "ouderen op de dansvloer", zonder poppetjes.
- * Voorop wat alleen Bandpartner heeft; de oliebollen staan er als bijzaak onder.
+ * Feestpartner: het vierde pakket, over de volle breedte onder de drie. Geen medaille maar de Oliebollenbokaal.
+ * De prijs is de feestprijs plus de oliebollen tegen de gewone stuksprijs; het is een aanvraag, want de band moet kunnen.
  */
-function AdoptionCard({ pkg, info, active, onPick }: { pkg: BusinessPackage; info: BusinessInfo; active: boolean; onPick: () => void }) {
+function PartyCard({ info, active, onPick }: { info: BusinessInfo; active: boolean; onPick: () => void }) {
+  const [play, setPlay] = useState(0);
   const t = useT();
-  const guests = pkg.ouderen ?? 0;
-  const check = active ? "text-gouwe" : "text-kerst-ink";
+  const party = info.party;
+  const from = party.fee + party.oliebollen * info.price;
+  const below = info.packages[info.packages.length - 1];
   return (
     <button
       type="button"
       role="radio"
       aria-checked={active}
-      aria-label={t.adoptAria(guests, t.num(pkg.oliebollen), t.euro(pkg.oliebollen * info.price))}
-      onClick={onPick}
-      className={`flex flex-col gap-4 rounded-kaart p-4 text-left transition duration-200 sm:p-5 ${active ? "bg-krent shadow-zwevend ring-2 ring-gouwe" : "bg-papier shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"}`}
+      aria-label={t.partyAria(party.oliebollen, t.euro(from))}
+      onClick={() => {
+        if (!active) setPlay((n) => n + 1);
+        onPick();
+      }}
+      className={`relative mt-2 grid gap-5 rounded-kaart bg-feest-50 p-4 pt-6 text-left transition duration-200 sm:p-6 md:col-span-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,250px)] md:items-center md:gap-8 ${
+        active ? "shadow-zwevend ring-2 ring-krent" : "shadow-zacht hover:-translate-y-0.5 hover:shadow-zwevend"
+      }`}
     >
-      <span className={`font-serif text-xl font-bold leading-tight ${active ? "text-gouwe" : "text-krent"}`}>{t.adoptSeniors(guests)}</span>
-      <span className="grid gap-1.5 text-sm leading-snug">
-        {t.perks[pkg.key].map((perk) => (
-          <span key={perk} className={`flex gap-2 ${active ? "text-meel" : "text-krent"}`}>
-            <span aria-hidden="true" className={check}>
-              ✓
-            </span>
-            {perk}
-          </span>
-        ))}
-      </span>
-      <span className={`mt-auto flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t pt-3 ${active ? "border-meel/15" : "border-lijn"}`}>
-        <span className={`text-sm tabular-nums ${active ? "text-meel/80" : "text-oliebol"}`}>{t.adoptIncl(t.num(pkg.oliebollen))}</span>
-        <span className={`font-serif text-xl font-bold tabular-nums ${active ? "text-meel" : "text-krent"}`}>
-          {t.euroRound(pkg.oliebollen * info.price)} <span className={`text-xs font-normal ${active ? "text-meel/70" : "text-oliebol"}`}>{t.exclVatShort}</span>
+      <span className="absolute -top-2.5 left-4 -rotate-2 rounded bg-krent px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-meel shadow-zacht">{t.trophy}</span>
+      <span className="flex items-center gap-4 md:block">
+        <span className="relative block">
+          <Bokaal key={`bokaal-${play}`} className={`h-20 w-16 md:h-32 md:w-[104px] ${play ? "oc-medal" : ""}`} />
+          {play ? <Burst key={`vuurwerk-${play}`} big /> : null}
+        </span>
+        <span className="grid md:hidden">
+          <span className="font-display text-[30px] uppercase leading-[0.95] tracking-wide text-feest-ink">{t.tier.feest}</span>
+          <span className="text-xs tabular-nums text-oliebol">{t.rangeShort(party, info)}</span>
         </span>
       </span>
-      <span className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold ${active ? "bg-gouwe text-krent" : "bg-vul text-krent"}`}>
-        {active ? t.chosen : t.adoptChoose}
+      <span className="grid gap-3">
+        <span className="hidden md:grid">
+          <span className="font-display text-[34px] uppercase leading-[0.95] tracking-wide text-feest-ink">{t.tier.feest}</span>
+          <span className="text-xs tabular-nums text-oliebol">{t.rangeShort(party, info)}</span>
+        </span>
+        <span className="grid gap-1">
+          <span className="font-serif text-xl font-bold leading-tight text-krent">{t.partyTitle}</span>
+          <span className="max-w-xl text-sm leading-relaxed text-oliebol">{t.partySub}</span>
+        </span>
+        <span className="grid gap-1.5 text-sm leading-snug sm:grid-cols-2 sm:gap-x-6">
+          {[t.allOf(t.tier[below.key]), ...t.perksShort.feest].map((perk, i) => (
+            <span key={perk} className={`flex gap-2 ${i ? "text-krent" : "text-oliebol"}`}>
+              <span aria-hidden="true" className="text-feest-ink">
+                ✓
+              </span>
+              {perk}
+            </span>
+          ))}
+        </span>
+      </span>
+      <span className="grid gap-3 border-t border-feest/20 pt-4 md:border-l md:border-t-0 md:pl-8 md:pt-0">
+        <span className="grid gap-1">
+          <span className="text-xs text-oliebol">{t.partyPrice(t.euroRound(party.fee))}</span>
+          <span className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className="text-xs text-oliebol">{t.from}</span>
+            <span className="font-serif text-2xl font-bold leading-none tabular-nums text-krent">{t.euroRound(from)}</span>
+            <span className="text-xs text-oliebol">{t.exclVatShort}</span>
+          </span>
+        </span>
+        <span className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold transition ${active ? "bg-krent text-meel" : "bg-krent/5 text-krent"}`}>
+          {active ? t.chosen : t.choose(t.tier.feest)}
+        </span>
+        <span className="text-xs leading-snug text-oliebol">{t.partyRequest}</span>
       </span>
     </button>
+  );
+}
+
+/** De slider loopt van 0 tot SLIDER_STEPS; het aantal groeit kwadratisch, zodat je rond de 500 fijn kiest en toch tot het maximum kunt. */
+const SLIDER_STEPS = 1000;
+function sliderToCount(pos: number, min: number, max: number): number {
+  const n = min + (max - min) * (pos / SLIDER_STEPS) ** 2;
+  return Math.min(max, Math.max(min, Math.round(n / 10) * 10));
+}
+function countToSlider(n: number, min: number, max: number): number {
+  return Math.round(Math.sqrt(Math.min(1, Math.max(0, (n - min) / (max - min)))) * SLIDER_STEPS);
+}
+
+/**
+ * Onder een gekozen Feestpartner: het aantal oliebollen met een slider (niet onder het minimum), het aantal gasten
+ * en de prijsopbouw, die meteen meerekent. Met of zonder krenten verdeel je daaronder, zoals bij de andere pakketten.
+ */
+function PartyBuilder({ input, totals, info, onCount, onGuests, countError, guestsError }: {
+  input: BusinessOrderInput;
+  totals: BusinessTotals;
+  info: BusinessInfo;
+  onCount: (n: number) => void;
+  onGuests: (n: number) => void;
+  countError?: string;
+  guestsError?: string;
+}) {
+  const t = useT();
+  const min = info.party.oliebollen;
+  const max = info.maximum;
+  const total = input.withRaisins + input.withoutRaisins;
+  const fee = partyFee(input.guests, info);
+  return (
+    <div className="grid gap-5">
+      <div>
+        <h3 className="font-serif text-lg font-bold leading-tight text-krent">{t.partyCountTitle}</h3>
+        <p className="mt-0.5 text-sm text-oliebol">{t.partyCountSub(min)}</p>
+      </div>
+      <div className="grid gap-1">
+        <p className="flex flex-wrap items-baseline gap-x-2" aria-hidden="true">
+          <span className="font-serif text-[40px] font-bold leading-none tabular-nums text-krent">{t.num(total)}</span>
+          <span className="text-sm text-oliebol">
+            oliebollen · {t.num(totals.ouderen)} {t.seniors(totals.ouderen)} {t.onFloor}
+          </span>
+        </p>
+        <input
+          id="f-partyCount"
+          type="range"
+          min={0}
+          max={SLIDER_STEPS}
+          step={1}
+          value={countToSlider(total, min, max)}
+          onChange={(e) => onCount(sliderToCount(Number(e.target.value), min, max))}
+          aria-label={t.partyCount}
+          aria-valuetext={`${t.num(total)} oliebollen`}
+          className="h-11 w-full cursor-pointer accent-krent"
+        />
+        <p className="flex justify-between text-xs tabular-nums text-oliebol" aria-hidden="true">
+          <span>{t.num(min)}</span>
+          <span>{t.num(max)}</span>
+        </p>
+        {countError ? <p className="text-xs font-bold text-feest-ink">! {countError}</p> : null}
+      </div>
+      <div className="grid gap-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)] sm:items-start">
+        <Field id="f-guests" label={t.guests} hint={t.guestsHint} error={guestsError}>
+          <input
+            id="f-guests"
+            inputMode="numeric"
+            className={`${field} text-center font-serif text-lg font-bold tabular-nums`}
+            value={input.guests || ""}
+            onChange={(e) => onGuests(Number(e.target.value.replace(/\D/g, "").slice(0, 5)) || 0)}
+            aria-invalid={guestsError ? true : undefined}
+            aria-describedby={guestsError ? "f-guests-fout" : undefined}
+          />
+        </Field>
+        <dl className="grid gap-1.5 rounded-md bg-vul px-3.5 py-3 text-sm">
+          <Line label={input.guests ? t.partyGuests(t.num(input.guests)) : t.partyLine} value={t.euro(fee)} />
+          <Line label={t.bollenLine(t.num(total), t.euro(info.price))} value={t.euro(totals.bollen)} />
+          <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-lijn pt-2">
+            <dt className="font-bold text-krent">{t.totalExclVat}</dt>
+            <dd className="font-serif text-xl font-bold tabular-nums text-krent">{t.euro(fee + totals.bollen)}</dd>
+          </div>
+        </dl>
+      </div>
+    </div>
   );
 }
 
@@ -735,6 +887,7 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
   const only = donationOnly(input);
   const short = only ? 0 : Math.max(0, info.minimum - totals.oliebollen);
   const pkg = chosenPackage(input, info);
+  const partyVat = Math.round(totals.party * info.party.vatRate * 100) / 100;
   if (only) {
     return (
       <dl className="grid gap-1.5 text-sm">
@@ -762,11 +915,20 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
       <Line label={t.withoutRaisins} value={t.num(input.withoutRaisins)} />
       {totals.oliebollen ? <Line label={t.sugar} value={t.free} /> : null}
       <div className="my-1.5 border-t border-lijn" />
+      {totals.party ? <Line label={input.guests ? t.partyGuests(t.num(input.guests)) : t.partyLine} value={t.euro(totals.party)} /> : null}
       <Line label={t.bollenLine(t.num(totals.oliebollen), t.euro(info.price))} value={t.euro(totals.bollen)} />
       <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={input.area ? t.euro(totals.delivery) : "–"} />
       {totals.surcharge ? <Line label={t.moment[input.moment]} value={t.euro(totals.surcharge)} /> : null}
       <Line label={t.subtotal} value={t.euro(totals.subtotal)} muted />
-      <Line label={t.vat(Math.round(info.vatRate * 100))} value={t.euro(totals.vat)} muted />
+      {totals.party ? (
+        // Feestpartner: twee btw-tarieven, elk met waarover het gaat.
+        <>
+          <Line label={t.vatOn(Math.round(info.vatRate * 100), t.vatBollen)} value={t.euro(totals.vat - partyVat)} muted />
+          <Line label={t.vatOn(Math.round(info.party.vatRate * 100), t.vatParty)} value={t.euro(partyVat)} muted />
+        </>
+      ) : (
+        <Line label={t.vat(Math.round(info.vatRate * 100))} value={t.euro(totals.vat)} muted />
+      )}
       <div className="mt-1 flex items-baseline justify-between gap-3">
         <dt className="font-bold text-krent">{t.total}</dt>
         <dd className="font-serif text-2xl font-bold tabular-nums text-krent">{t.euro(totals.total)}</dd>
@@ -890,7 +1052,14 @@ export function BusinessOrderPage() {
 
   /** Pakket kiezen: het aantal wordt het pakketaantal, verdeeld 70% met en 30% zonder. Zit je er al in, dan blijft je aantal. */
   function pickPackage(p: BusinessPackage) {
-    if (chosenPackage(input, info)?.key === p.key || (isAdoption(p) && input.withRaisins + input.withoutRaisins === p.oliebollen)) {
+    // Feestpartner kiest het aantal met de slider; daaronder is het altijd een evenement.
+    if (p.key === "feest") {
+      const total = input.withRaisins + input.withoutRaisins;
+      setInput((prev) => ({ ...prev, pakket: "feest", occasion: "event", ...(total >= p.oliebollen ? {} : packageSplit(p.oliebollen)) }));
+      window.setTimeout(() => document.getElementById("samenstellen")?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 60);
+      return;
+    }
+    if (chosenPackage({ ...input, pakket: p.key }, info)?.key === p.key) {
       setInput((prev) => ({ ...prev, pakket: p.key }));
       return;
     }
@@ -904,7 +1073,7 @@ export function BusinessOrderPage() {
       const total = prev.withRaisins + prev.withoutRaisins;
       const withRaisins = total ? Math.min(n, Math.round((n * prev.withRaisins) / total / 10) * 10) : packageSplit(n).withRaisins;
       const tier = tierFor(n, info);
-      return { ...prev, pakket: tier?.key ?? prev.pakket, withRaisins, withoutRaisins: n - withRaisins };
+      return { ...prev, pakket: prev.pakket === "feest" ? "feest" : tier?.key ?? prev.pakket, withRaisins, withoutRaisins: n - withRaisins };
     });
   }
 
@@ -970,7 +1139,7 @@ export function BusinessOrderPage() {
     const n = Number(clean);
     if (!n) return;
     const total = Math.min(info.maximum, Math.ceil((n * BUSINESS_PER_COLLEAGUE) / 10) * 10);
-    setInput((prev) => ({ ...prev, pakket: tierFor(total, info)?.key ?? "zelf", ...packageSplit(total) }));
+    setInput((prev) => ({ ...prev, pakket: prev.pakket === "feest" ? "feest" : tierFor(total, info)?.key ?? "zelf", ...packageSplit(total) }));
   }
 
   async function submit() {
@@ -987,6 +1156,7 @@ export function BusinessOrderPage() {
         ...order,
         ...(only ? { street: "", postalCode: "", city: "", date: "" } : { postalCode: formatPostcode(order.postalCode) }),
         pakket: only ? "" : pkg?.key ?? "zelf",
+        guests: pkg?.key === "feest" ? order.guests : 0,
         flyers: false,
         wallOfFame: rank >= 1 && order.wallOfFame,
         certificate: rank >= 1 && order.certificate,
@@ -1005,10 +1175,28 @@ export function BusinessOrderPage() {
     }
   }
 
-  /** Volgend adres: gegevens en aantallen blijven, adres en dag zijn leeg. */
-  function anotherAddress() {
+  /** Volgend adres: gegevens blijven, het aantal is wat de klant voor dat adres opgaf; adres en dag zijn leeg. */
+  function anotherAddress(n: number) {
     if (!done) return;
-    setInput({ ...done.input, street: "", postalCode: "", city: "", area: "", date: "", remark: "" });
+    const prev = done.input;
+    const before = prev.withRaisins + prev.withoutRaisins;
+    // Dezelfde verdeling met/zonder als bij het vorige adres, in tientallen.
+    const withRaisins = before ? Math.min(n, Math.round((n * prev.withRaisins) / before / 10) * 10) : packageSplit(n).withRaisins;
+    setInput({
+      ...prev,
+      pakket: tierFor(n, info)?.key ?? "zelf",
+      guests: 0,
+      occasion: prev.occasion,
+      withRaisins,
+      withoutRaisins: n - withRaisins,
+      donation: 0,
+      street: "",
+      postalCode: "",
+      city: "",
+      area: "",
+      date: "",
+      remark: ""
+    });
     setShowErrors(false);
     setDone(null);
     setStep(2);
@@ -1028,8 +1216,8 @@ export function BusinessOrderPage() {
     ? t.sending
     : only
       ? t.donateN(t.euro(totals.donation))
-      : isAdoption(pkg)
-        ? t.orderBand(t.num(totals.ouderen))
+      : pkg?.key === "feest"
+        ? t.requestParty
       : totals.oliebollen >= info.minimum
         ? t.orderN(t.num(totals.oliebollen), totals.ouderen)
         : t.placeOrder;
@@ -1172,21 +1360,9 @@ export function BusinessOrderPage() {
               {info.packages.map((p, i) => (
                 <PackageCard key={p.key} pkg={p} info={info} below={info.packages[i - 1]} active={pkg?.key === p.key} tip={i === 1} onPick={() => pickPackage(p)} />
               ))}
+              <PartyCard info={info} active={pkg?.key === "feest"} onPick={() => pickPackage(info.party)} />
             </div>
             {shown.pakket ? <p className="text-xs font-bold text-feest-ink">! {shown.pakket}</p> : null}
-            {info.adoptions.length ? (
-              <div className="grid gap-3 rounded-kaart bg-gouwe-50 p-4 sm:p-5">
-                <div>
-                  <h3 className="font-serif text-lg font-bold leading-tight text-krent">{t.adoptTitle}</h3>
-                  <p className="mt-0.5 text-sm text-gouwe-ink">{t.adoptSub}</p>
-                </div>
-                <div role="radiogroup" aria-label={t.adoptTitle} className="grid gap-3 sm:grid-cols-2">
-                  {info.adoptions.map((a) => (
-                    <AdoptionCard key={a.key} pkg={a} info={info} active={pkg?.key === a.key} onPick={() => pickPackage(a)} />
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </section>
           ) : null}
 
@@ -1208,6 +1384,18 @@ export function BusinessOrderPage() {
             {input.pakket ? (
               <Card className="grid gap-5">
                 <div id="samenstellen" className="grid scroll-mt-6 gap-5">
+                  {input.pakket === "feest" ? (
+                    <div className="grid gap-5 border-b border-lijn pb-5">
+                      <PartyBuilder
+                        input={input}
+                        totals={totals}
+                        info={info}
+                        onCount={setTotal}
+                        onGuests={(n) => update("guests", n)}
+                        guestsError={shown.guests}
+                      />
+                    </div>
+                  ) : null}
                   <div>
                     <h3 className="font-serif text-lg font-bold leading-tight text-krent">{pkg && input.pakket !== "zelf" ? t.splitTitle : t.composeTitle}</h3>
                     <p className="mt-0.5 text-sm text-oliebol">
@@ -1239,8 +1427,9 @@ export function BusinessOrderPage() {
                     />
                   </div>
                   <SplitBar met={input.withRaisins} zonder={input.withoutRaisins} />
-                  <TierStatus input={order} info={info} onSet={setTotal} />
+                  {input.pakket === "feest" ? null : <TierStatus input={order} info={info} onSet={setTotal} />}
                 </div>
+                {input.pakket === "feest" ? null : (
                 <div className="grid gap-2 border-t border-lijn pt-5">
                   <p id="f-occasion-label" className={fieldLabel}>
                     {t.occasionLabel}
@@ -1259,6 +1448,7 @@ export function BusinessOrderPage() {
                   </div>
                   {shown.occasion ? <p className="text-xs font-bold text-feest-ink">! {shown.occasion}</p> : null}
                 </div>
+                )}
               </Card>
             ) : null}
 
@@ -1273,8 +1463,22 @@ export function BusinessOrderPage() {
               {only ? null : (
               <>
               <div className="grid gap-3">
-                <Field id="f-street" label={t.street} error={shown.street}>
-                  <input id="f-street" className={field} autoComplete="street-address" value={input.street} onChange={(e) => update("street", e.target.value)} placeholder="Keizersgracht 210" />
+                {input.pakket === "feest" ? (
+                  <div>
+                    <p className="font-bold text-krent">{t.partyWhere}</p>
+                    <p className="text-sm text-oliebol">{t.partyWhereSub}</p>
+                  </div>
+                ) : null}
+                <Field id="f-street" label={t.street} hint={t.streetHint} error={shown.street}>
+                  <AddressSearch
+                    id="f-street"
+                    value={input.street}
+                    onChange={(v) => update("street", v)}
+                    onPick={(a) => setInput((prev) => ({ ...prev, street: a.street, postalCode: a.postalCode, city: a.city }))}
+                    invalid={!!shown.street}
+                    describedBy={shown.street ? "f-street-fout" : undefined}
+                    listLabel={t.addressList}
+                  />
                 </Field>
                 <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
                   <Field id="f-postalCode" label={t.postalCode} error={shown.postalCode}>
@@ -1315,7 +1519,7 @@ export function BusinessOrderPage() {
               </div>
 
               <div className="grid gap-2">
-                <p className={fieldLabel}>{t.whichDay}</p>
+                <p className={fieldLabel}>{input.pakket === "feest" ? t.partyWhen : t.whichDay}</p>
                 <DayPicker days={info.deliveryDays} value={input.date} onChange={(d) => update("date", d)} info={info} now={now} error={shown.date} />
                 <p className="text-xs text-oliebol">
                   {t.deadline(t.lead(info), t.closeText(info))} {t.otherMoment}{" "}
@@ -1396,15 +1600,16 @@ export function BusinessOrderPage() {
                   <input id="f-invoiceEmail" type="email" className={field} value={input.invoiceEmail} onChange={(e) => update("invoiceEmail", e.target.value)} placeholder={t.invoiceEmailPlaceholder} />
                 </Field>
               ) : null}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field id="f-invoiceAddress" label={t.invoiceAddress} optional hint={t.invoiceAddressHint}>
-                  <textarea id="f-invoiceAddress" rows={2} className={inputClass} value={input.invoiceAddress} onChange={(e) => update("invoiceAddress", e.target.value)} />
-                </Field>
+              {/* Factuuradres als groot vak: bedrijven hebben vaak afdeling, postbus en kostenplaats op aparte regels. */}
+              <Field id="f-invoiceAddress" label={t.invoiceAddress} optional hint={t.invoiceAddressHint}>
+                <textarea id="f-invoiceAddress" rows={4} className={`${inputClass} min-h-[112px]`} value={input.invoiceAddress} onChange={(e) => update("invoiceAddress", e.target.value)} />
+              </Field>
+              <div className="sm:max-w-[calc(50%-0.5rem)]">
                 <Field id="f-reference" label={t.reference} optional hint={t.referenceHint}>
                   <input id="f-reference" className={field} value={input.reference} onChange={(e) => update("reference", e.target.value)} />
                 </Field>
               </div>
-              <Field id="f-remark" label={t.remark} optional hint={t.remarkHint}>
+              <Field id="f-remark" label={input.pakket === "feest" ? t.partyRemark : t.remark} optional hint={input.pakket === "feest" ? t.partyRemarkHint : t.remarkHint}>
                 <textarea id="f-remark" rows={3} className={inputClass} value={input.remark} onChange={(e) => update("remark", e.target.value)} />
               </Field>
               {/* Honeypot: invisible for people, bots fill it in. */}
@@ -1584,13 +1789,20 @@ export function BusinessOrderPage() {
  */
 const HALL_MAX_OUDJES = 1000;
 
-function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: BusinessInfo; onAnother: () => void; onRestart: () => void }) {
+function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: BusinessInfo; onAnother: (n: number) => void; onRestart: () => void }) {
   const t = useT();
   const { input, totals } = done;
   const only = donationOnly(input);
   const pkg = only ? undefined : chosenPackage(input, info);
-  // Een muziekmiddag krijgt alles van de pakketten, plus de middag zelf.
-  const perks = pkg ? [...info.packages.filter((p) => isAdoption(pkg) || p.oliebollen <= pkg.oliebollen), ...(isAdoption(pkg) ? [pkg] : [])].flatMap((p) => t.perks[p.key]) : [];
+  const party = pkg?.key === "feest";
+  // Kort: "Alles van <het pakket eronder>" plus de eigen extra's, net als op de kaart; geen lange optelsom van de hele ladder.
+  const ladder = [...info.packages, info.party];
+  const below = pkg ? ladder[ladder.findIndex((p) => p.key === pkg.key) - 1] : undefined;
+  const perks = pkg && t.perksShort[pkg.key] ? [...(below ? [t.allOf(t.tier[below.key])] : []), ...t.perksShort[pkg.key]] : [];
+  // Volgend adres: eerst hoeveel oliebollen daarheen gaan.
+  const [nextCount, setNextCount] = useState(String(totals.oliebollen || info.minimum));
+  const next = Math.round((Number(nextCount) || 0) / 10) * 10;
+  const nextOk = next >= info.minimum && next <= info.maximum;
   const rows: Array<[string, ReactNode]> = [
     ...(only
       ? []
@@ -1598,6 +1810,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
           [t.package, pkg ? <span className="inline-flex items-center gap-1.5 font-bold text-krent"><Medal tier={pkg.key} className="h-6 w-5" />{t.tier[pkg.key]}</span> : t.custom],
           [t.rowOliebollen, t.splitShort(t.num(totals.oliebollen), t.num(input.withRaisins), t.num(input.withoutRaisins))]
         ] as Array<[string, ReactNode]>)),
+    ...(party ? ([[t.rowParty, t.rowPartyValue(t.num(input.guests))]] as Array<[string, ReactNode]>) : []),
     ...(input.donation ? ([[t.rowDonated, t.rowDonatedValue(t.euro(totals.donation))]] as Array<[string, ReactNode]>) : []),
     ...(only ? [] : ([[t.rowVisit, <>{t.longDay(input.date)}, {t.moment[input.moment].toLowerCase()}<br />{input.street}, {input.postalCode} {input.city}</>]] as Array<[string, ReactNode]>)),
     [t.onInvoice, <b className="text-krent">{t.euro(totals.invoice)}</b>]
@@ -1611,7 +1824,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
           </Sticker>
           <div>
             <h1 className="font-serif text-[28px] font-bold leading-tight text-krent">
-              {isAdoption(pkg) ? t.doneGuests(t.num(totals.ouderen)) : totals.ouderen > 0 ? t.doneTitle(t.num(totals.ouderen), totals.ouderen) : only ? t.doneDonationTitle : t.doneTitleEmpty}
+              {party ? t.donePartyTitle : isAdoption(pkg) ? t.doneGuests(t.num(totals.ouderen)) : totals.ouderen > 0 ? t.doneTitle(t.num(totals.ouderen), totals.ouderen) : only ? t.doneDonationTitle : t.doneTitleEmpty}
             </h1>
             <p className="mt-1 text-[15px] leading-relaxed text-oliebol">
               {only ? t.doneDonation(input.company) : t.doneText(input.company)}
@@ -1634,6 +1847,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
             </p>
           </div>
         ) : null}
+        {party ? <Notice tone="info">{t.doneParty}</Notice> : null}
         {totals.surcharge ? <Notice tone="info">{t.doneEarly}</Notice> : null}
         <div className="border-y border-lijn py-4">
           <p className={fieldLabel}>{t.orderNumber}</p>
@@ -1662,12 +1876,28 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
         ) : null}
         {done.warning ? <Notice tone="warning">{done.warning} {t.keepNumber}</Notice> : null}
         {backend.kind === "demo" ? <Notice tone="info">{t.demo}</Notice> : null}
+        {only ? null : (
+          <div className="grid gap-3 rounded-md bg-vul px-3.5 py-3.5">
+            <p className="font-bold text-krent">{t.another}</p>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field id="f-nextCount" label={t.anotherCount}>
+                <input
+                  id="f-nextCount"
+                  inputMode="numeric"
+                  className={`${field} w-40 bg-papier text-center font-serif text-lg font-bold tabular-nums`}
+                  value={nextCount}
+                  onChange={(e) => setNextCount(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                  onBlur={() => next && setNextCount(String(next))}
+                />
+              </Field>
+              <button type="button" className={`${primaryButton} min-h-[44px]`} disabled={!nextOk} onClick={() => onAnother(next)}>
+                {t.anotherGo} <span aria-hidden="true">→</span>
+              </button>
+            </div>
+            {nextCount && !nextOk ? <p className="text-xs font-bold text-feest-ink">! {next < info.minimum ? t.validation.min(info.minimum) : t.validation.max(info.maximum)}</p> : null}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
-          {only ? null : (
-            <button type="button" className={primaryButton} onClick={onAnother}>
-              {t.another}
-            </button>
-          )}
           <button type="button" className={ghostButton} onClick={onRestart}>
             {t.newOrder}
           </button>

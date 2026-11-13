@@ -85,12 +85,18 @@ const CONFIG = {
     /** Per oliebol, excl. 9% btw (€ 2,50 incl.), uit het zakelijk concept 2026. Instellingen kan hem niet overschrijven. */
     price: 2.29,
     /**
-     * Pakketten in stap 1: [sleutel, naam, vanaf zo veel oliebollen]. Een pakket geldt tot het volgende; meer blijft het pakket,
-     * minder valt terug. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud (de sleutels zijn van vóór de nieuwe namen).
+     * De ladder in stap 1: [sleutel (de medaille), naam, vanaf zo veel oliebollen]. Een pakket geldt tot het volgende; meer blijft
+     * het pakket, minder valt terug. Aantal te overschrijven met zakelijk_pakket_brons, …_zilver, …_goud.
      */
-    packages: [['brons', 'Danspartner', 50], ['zilver', 'Polonaisepartner', 150], ['goud', 'Feestpartner', 500]],
-    /** Adopteer een hele muziekmiddag: [sleutel, naam, precies zo veel oliebollen, zo veel ouderen]. */
-    adoptions: [['middag60', 'Bandpartner 60 gasten', 2500, 60], ['middag100', 'Bandpartner 100 gasten', 3100, 100]],
+    packages: [['brons', 'Shufflepartner', 50], ['zilver', 'Danspartner', 150], ['goud', 'Polonaisepartner', 500]],
+    /**
+     * Feestpartner: feest op locatie met band. Alleen als de klant hem kiest, nooit vanzelf op aantal. Totaal = feestprijs + de
+     * oliebollen. Vanaf feestGastenGroot gasten de hogere prijs (intern een muzikant extra). Btw over de feestprijs: 21% tot het
+     * definitief is afgestemd. Instellingen: zakelijk_feest_minimum, _prijs, _prijs_groot, _gasten_groot, _btw.
+     */
+    party: { name: 'Feestpartner', minimum: 500, fee: 2500, feeLarge: 3100, largeFrom: 60, vatPercent: 21 },
+    /** Bandpartner (een eigen muziekmiddag) staat niet meer op het formulier; oude rijen houden hun naam (readBusiness_). */
+    adoptions: [],
     vatPercent: 9,
     minimum: 50,
     /** Hooguit zo veel oliebollen per bestelling; meer gaat via de mail. Instelling: zakelijk_maximum. */
@@ -99,7 +105,7 @@ const CONFIG = {
     /** Postcodes met het lage bezorgtarief: Groot-Amsterdam (10xx, 11xx), Aalsmeer en Kudelstaart. Instelling: zakelijk_postcodes_regio. */
     regionPostcodes: '1000-1199, 1430-1433',
     /** Standaard 9:00–15:00 zonder toeslag; vóór 10:00 is een aanvraag (besluit 11 november). Vóór 9:00 bieden we niet meer aan. */
-    surcharges: { regulier: 0, voor10: 15, voor9: 0 },
+    surcharges: { regulier: 0, voor10: 20, voor9: 0 },
     /** Doel van de Partypot in euro's. Instelling: partypot_doel. */
     partypotGoal: 3000,
     /** Minimaal zo veel werkdagen van tevoren bestellen. Instelling: zakelijk_werkdagen_vooraf. */
@@ -216,7 +222,8 @@ const TABS = {
     'factuur_email', 'factuuradres', 'referentie', 'met_krenten', 'zonder_krenten', 'donatie_oliebollen', 'flyers', 'afhalen_bezorgen',
     'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op',
-    'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link', 'aanleiding']],
+    'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link', 'aanleiding',
+    'gasten', 'feest_bedrag']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
@@ -1695,6 +1702,7 @@ Object.assign(HANDLERS, {
         opmerking: input.remark, oliebollen: totals.oliebollen, bedrag_excl_btw: totals.subtotal, btw: totals.vat,
         bedrag_incl_btw: totals.total, donatie_bedrag: totals.donation, factuurbedrag: totals.invoice, ouderen: totals.ouderen,
         pakket: only ? '' : businessPackage_(input, info).name,
+        gasten: input.guests || '', feest_bedrag: totals.party || '',
         wall_of_fame: yes(input.wallOfFame), certificaat: yes(input.certificate), naam_certificaat: input.certificateName,
         linkedin_badge: yes(input.linkedin), herkomst: BUSINESS_SOURCES[input.source] || '', ambassadeur: input.ambassador, via_link: input.via,
         aanleiding: BUSINESS_OCCASIONS[input.occasion] || ''
@@ -1817,6 +1825,11 @@ function businessInfo_() {
     // An emptied tab means: no days yet, use the defaults.
     deliveryDays: days.length ? delivery : b.deliveryDays,
     packages: b.packages.map(function (p) { return { key: p[0], name: p[1], oliebollen: number('zakelijk_pakket_' + p[0], p[2]) }; }),
+    party: {
+      key: 'feest', name: b.party.name, oliebollen: number('zakelijk_feest_minimum', b.party.minimum),
+      fee: number('zakelijk_feest_prijs', b.party.fee), feeLarge: number('zakelijk_feest_prijs_groot', b.party.feeLarge),
+      largeFrom: number('zakelijk_feest_gasten_groot', b.party.largeFrom), vatRate: number('zakelijk_feest_btw', b.party.vatPercent) / 100
+    },
     adoptions: b.adoptions.map(function (a) { return { key: a[0], name: a[1], oliebollen: a[2], ouderen: a[3] }; }),
     email: String(settings.zakelijk_email || b.email),
     phone: String(settings.zakelijk_telefoon || b.phone)
@@ -1902,6 +1915,10 @@ function businessInput_(body, info) {
     occasion: !only && BUSINESS_OCCASIONS[body.occasion] ? body.occasion : ''
   };
   input.ambassador = input.source === 'ambassadeur' ? text(body.ambassador, 100) : '';
+  // Feestpartner kiest de klant zelf; dan telt ook het aantal gasten (voor de feestprijs). Het is altijd een evenement.
+  input.pakket = !only && body.pakket === 'feest' ? 'feest' : '';
+  input.guests = input.pakket === 'feest' ? count(body.guests) : 0;
+  if (input.pakket === 'feest') input.occasion = 'event';
   // Delivery costs follow from the address; what the browser chose does not count.
   input.area = fulfilment === 'bezorgen' ? areaFor_(input.postalCode, input.city, info.regionPostcodes) : '';
   // The package follows from the number (businessPackage_); what it does not allow is left out.
@@ -1946,6 +1963,8 @@ function validateBusiness_(i, info) {
   if (total > 0) {
     if (total < info.minimum) return 'Bestel samen minimaal ' + info.minimum + ' oliebollen.';
     if (total > info.maximum) return 'Bestel samen hooguit ' + numberNl_(info.maximum) + ' oliebollen. Meer? Mail naar ' + info.email + '.';
+    if (i.pakket === 'feest' && total < info.party.oliebollen) return 'Feestpartner is vanaf ' + info.party.oliebollen + ' oliebollen.';
+    if (i.pakket === 'feest' && !(i.guests > 0)) return 'Vul in hoeveel gasten je verwacht.';
     if (!i.street || !i.city || !/^\d{4}\s?[A-Z]{2}$/.test(i.postalCode)) return 'Vul het bezorgadres helemaal in.';
     if (info.deliveryDays.indexOf(i.date) === -1) return 'Op deze dag komen we niet langs. Kies een andere dag.';
     if (!businessDayOpen_(i.date, info)) return 'Deze dag is te snel: bestel minimaal ' + info.leadWorkdays + ' werkdagen van tevoren.';
@@ -1966,12 +1985,14 @@ function businessTotals_(i, info) {
   const bezorgen = i.fulfilment === 'bezorgen' && oliebollen > 0;
   const delivery = bezorgen && i.area ? info.fees[i.area] : 0;
   const surcharge = bezorgen ? info.surcharges[i.moment] || 0 : 0;
-  const subtotal = cents(bollen + delivery + surcharge);
-  const vat = cents(subtotal * info.vatRate);
+  // Feestpartner: de feestprijs bovenop de oliebollen, met een eigen btw-tarief.
+  const party = i.pakket === 'feest' && oliebollen > 0 ? businessPartyFee_(i.guests, info) : 0;
+  const subtotal = cents(bollen + delivery + surcharge + party);
+  const vat = cents((bollen + delivery + surcharge) * info.vatRate + party * info.party.vatRate);
   const total = cents(subtotal + vat);
   // De Partypot: hele euro's, geen btw.
   const donation = cents(Math.max(0, i.donation));
-  return { oliebollen: oliebollen, bollen: bollen, delivery: delivery, surcharge: surcharge, subtotal: subtotal, vat: vat, total: total,
+  return { oliebollen: oliebollen, bollen: bollen, delivery: delivery, surcharge: surcharge, party: party, subtotal: subtotal, vat: vat, total: total,
     donation: donation, invoice: cents(total + donation), ouderen: businessOuderen_(oliebollen, info) };
 }
 
@@ -1981,9 +2002,14 @@ function businessOuderen_(oliebollen, info) {
   return adopt ? adopt.ouderen : Math.floor(oliebollen / 10);
 }
 
-/** What a package allows: Danspartner 1, Polonaisepartner 2, Feestpartner 3, a music afternoon 4. Same as packageRank. */
+/** Feestprijs excl. btw: vanaf largeFrom gasten de hogere. Same as partyFee in business.ts. */
+function businessPartyFee_(guests, info) {
+  return guests >= info.party.largeFrom ? info.party.feeLarge : info.party.fee;
+}
+
+/** What a package allows: Shufflepartner 1, Danspartner 2, Polonaisepartner 3, Feestpartner (and an old music afternoon) 4. Same as packageRank. */
 function businessRank_(pkg) {
-  if (pkg.ouderen) return 4;
+  if (pkg.ouderen || pkg.key === 'feest') return 4;
   return ({ brons: 1, zilver: 2, goud: 3 })[pkg.key] || 0;
 }
 
@@ -1993,6 +2019,7 @@ function businessRank_(pkg) {
  */
 function businessPackage_(i, info) {
   const total = i.withRaisins + i.withoutRaisins;
+  if (i.pakket === 'feest' && total > 0) return info.party;
   // Precies 2.500 of 3.100: een muziekmiddag.
   const adopt = (info.adoptions || []).filter(function (a) { return a.oliebollen === total; })[0];
   if (adopt) return adopt;
@@ -2005,17 +2032,18 @@ const BUSINESS_PERKS = {
   brons: ['Impactcertificaat met jullie aantal ouderen', 'Jullie naam op de wall of fame', 'Kaartje met het verhaal bij de oliebollen'],
   zilver: ['LinkedIn-badge met een kant-en-klare post', 'Jullie logo op de wall of fame', 'Oma Coby\'s Oliebal (limited edition) voor in de kerstboom'],
   goud: ['Uitnodiging voor een muziekmiddag', 'Foto of kort filmpje van de middag die jullie mede mogelijk hebben gemaakt', 'Ereplek op de wall of fame', 'Bezorging door heel Nederland'],
+  feest: ['Een live band op jullie eigen locatie', 'Wij regelen het feest, jullie de gasten'],
   middag60: ['Jullie naam op de middag', 'Jullie kiezen zelf de plek: een zorgcentrum of buurthuis', 'Collega\'s mogen komen (aantal in overleg)', 'Een foto of filmpje van de middag'],
   middag100: ['Jullie naam op de middag', 'Jullie kiezen zelf de plek: een zorgcentrum of buurthuis', 'Collega\'s mogen komen (aantal in overleg)', 'Een foto of filmpje van de middag']
 };
 
-/** Everything that comes with this package: its own perks and those of every package below. */
+/** What comes with this package, short: "Alles van <the package below>" and its own perks. Same as the confirmation page. */
 function businessPerks_(pkg, info) {
   if (pkg.key === 'zelf' || pkg.key === 'donatie') return [];
-  // A music afternoon gets everything of the packages, plus the afternoon itself.
-  return info.packages.filter(function (p) { return pkg.ouderen || p.oliebollen <= pkg.oliebollen; })
-    .concat(pkg.ouderen ? [pkg] : [])
-    .reduce(function (all, p) { return all.concat(BUSINESS_PERKS[p.key] || []); }, []);
+  if (pkg.ouderen) return BUSINESS_PERKS[pkg.key] || [];
+  const ladder = info.packages.concat([info.party]);
+  const at = ladder.map(function (p) { return p.key; }).indexOf(pkg.key);
+  return (at > 0 ? ['Alles van ' + ladder[at - 1].name] : []).concat(BUSINESS_PERKS[pkg.key] || []);
 }
 
 /** "Z26-0001", "Z26-0002", … per seizoen. Call inside withLock_. */
@@ -2054,8 +2082,10 @@ function readBusiness_() {
     return {
       id: String(r.ordernummer), createdAt: String(r.ingediend_op || ''), status: String(r.status || 'nieuw').toLowerCase(),
       // Older rows have no package: "".
+      // Namen sinds de herstructurering van november; rijen van daarvoor met Danspartner of Polonaisepartner schuiven één trede op.
       pakket: ({
-        brons: 'brons', zilver: 'zilver', goud: 'goud', danspartner: 'brons', polonaisepartner: 'zilver', feestpartner: 'goud',
+        brons: 'brons', zilver: 'zilver', goud: 'goud', feest: 'feest',
+        shufflepartner: 'brons', danspartner: 'zilver', polonaisepartner: 'goud', feestpartner: 'feest',
         'muziekmiddag voor 60 ouderen': 'middag60', 'muziekmiddag voor 100 ouderen': 'middag100', 'zelf samengesteld': 'zelf',
         'bandpartner 60 gasten': 'middag60', 'bandpartner 100 gasten': 'middag100'
       })[String(r.pakket || '').trim().toLowerCase()] || '',
@@ -2071,9 +2101,9 @@ function readBusiness_() {
       wallOfFame: truthy_(r.wall_of_fame), certificate: truthy_(r.certificaat), certificateName: String(r.naam_certificaat || ''),
       linkedin: truthy_(r.linkedin_badge), source: Object.keys(BUSINESS_SOURCES).filter(function (k) { return BUSINESS_SOURCES[k] === String(r.herkomst || ''); })[0] || '',
       ambassador: String(r.ambassadeur || ''), via: String(r.via_link || ''),
-      occasion: key(BUSINESS_OCCASIONS, String(r.aanleiding || '')),
+      occasion: key(BUSINESS_OCCASIONS, String(r.aanleiding || '')), guests: num_(r.gasten),
       totals: {
-        oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, subtotal: subtotal, vat: num_(r.btw), total: total,
+        oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, party: num_(r.feest_bedrag), subtotal: subtotal, vat: num_(r.btw), total: total,
         donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen)
       }
     };
@@ -2150,11 +2180,20 @@ function businessMailData_(id, i, t, info) {
   const band = !only && !!pkg.ouderen;
   const costs = [];
   if (!only) {
+    if (t.party) costs.push(['Feest op locatie, ' + numberNl_(i.guests) + ' gasten', euroNl_(t.party), '']);
     costs.push([numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']);
     costs.push(['Poedersuiker', 'gratis', '']);
     costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], euroNl_(t.delivery), '']);
     if (t.surcharge) costs.push([BUSINESS_MOMENTS[i.moment], euroNl_(t.surcharge), '']);
-    costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted'], ['Btw ' + Math.round(info.vatRate * 100) + '%', euroNl_(t.vat), 'muted']);
+    costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted']);
+    if (t.party) {
+      // Twee tarieven: over de oliebollen en het bezorgen, en over het feest.
+      const partyVat = Math.round(t.party * info.party.vatRate * 100) / 100;
+      costs.push(['Btw ' + Math.round(info.vatRate * 100) + '% over oliebollen en bezorgen', euroNl_(t.vat - partyVat), 'muted'],
+        ['Btw ' + Math.round(info.party.vatRate * 100) + '% over het feest', euroNl_(partyVat), 'muted']);
+    } else {
+      costs.push(['Btw ' + Math.round(info.vatRate * 100) + '%', euroNl_(t.vat), 'muted']);
+    }
     costs.push(['Totaal incl. btw', euroNl_(t.total), 'total']);
   }
   if (t.donation) costs.push(['Bijdrage aan de Partypot (geen btw)', euroNl_(t.donation), ''], ['Op je factuur', euroNl_(t.invoice), 'total']);
@@ -2163,6 +2202,8 @@ function businessMailData_(id, i, t, info) {
   if (i.wallOfFame) extras.push(['Wall of fame', 'Ja, met jullie naam' + (businessRank_(pkg) >= 2 ? ' en logo' : '') + ' en het aantal ouderen']);
   if (i.certificate) extras.push(['Impactcertificaat', 'Op naam van ' + i.certificateName]);
   if (i.linkedin) extras.push(['LinkedIn-badge', 'Ja, met een kant-en-klare post']);
+  const party = !only && pkg.key === 'feest';
+  if (party) extras.unshift(['Feest', 'Op locatie, met live band, voor ± ' + numberNl_(i.guests) + ' gasten']);
   return {
     id: id, only: only, company: i.company, firstName: i.contact.split(' ')[0], email: i.email, contactEmail: info.email, contactPhone: info.phone,
     ouderen: t.ouderen, oliebollen: t.oliebollen, donation: t.donation, band: band, early: !only && i.moment === 'voor10', pkg: pkg, perks: businessPerks_(pkg, info),
@@ -2182,7 +2223,9 @@ function businessMailData_(id, i, t, info) {
     steps: only
       ? [['We kijken je bijdrage aan de Partypot na', 'en bevestigen hem per mail.'], ['De factuur volgt per mail', 'naar ' + i.invoiceEmail + '. Je betaalt achteraf.']]
       : [
-          i.moment === 'voor10'
+          party
+            ? ['We kijken of de band kan', 'en laten het binnen 2 werkdagen weten. Daarna stemmen we het feest met je af.']
+            : i.moment === 'voor10'
             ? ['We kijken je bestelling na', 'en laten binnen 2 werkdagen weten of vóór 10:00 lukt. Lukt het niet, dan bezorgen we tussen 9:00 en 15:00 en vervalt de toeslag.']
             : ['We kijken je bestelling na', 'en bevestigen hem per mail.'],
           ['Op ' + when + ' bakken we vers', 'en komen we ' + moment + ' langs op ' + i.street + '. Met gratis poedersuiker en een kaartje met ons verhaal.'],

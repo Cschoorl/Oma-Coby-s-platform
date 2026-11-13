@@ -31,8 +31,8 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
 > - **Telregel** overal (overzicht, bedankpagina, mail, certificaat, LinkedIn): ouderen = oliebollen ÷ 10, Bandpartner
 >   60 of 100; een bijdrage staat er los onder ("+ € 25 in de Partypot") en heet "bijdrage aan de Partypot".
 > - **Bezorgtijd** (besluit 11 november): standaard tussen 9:00 en 15:00 zonder toeslag, al gekozen. Dichtgeklapt
->   *Andere tijd nodig?* met alleen vóór 10:00 (+ € 15 excl. btw) als aanvraag: "We laten binnen 2 werkdagen weten of het
->   lukt." De € 15 staat in het totaal met "op aanvraag"; lukt het niet, dan haalt beheer hem eraf. Vóór 9:00 en
+>   *Andere tijd nodig?* met alleen vóór 10:00 (+ € 20 excl. btw) als aanvraag: "We laten binnen 2 werkdagen weten of het
+>   lukt." De € 20 staat in het totaal met "op aanvraag"; lukt het niet, dan haalt beheer hem eraf. Vóór 9:00 en
 >   "tussen 9:00 en 12:30" vervallen. Nog te doen uit dat besluit: verplicht vinkje "iemand aanwezig vanaf 9:00", tekst
 >   over vers en opwarmen, "Waar moeten we zijn?" en de contactpersoon op het bezorgadres.
 > - **Certificaat en LinkedIn-tekst** maakt beheer in de lade van een aanvraag op **Zakelijk** (`impact.ts`): het

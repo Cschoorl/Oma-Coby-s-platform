@@ -18,12 +18,14 @@ export type BusinessMoment = "regulier" | "voor10" | "voor9";
 export type BusinessStatus = "nieuw" | "bevestigd" | "afgewezen";
 
 /**
- * De drie zakelijke pakketten (Danspartner, Polonaisepartner, Feestpartner; de sleutels zijn van vóór de nieuwe namen)
- * en de twee muziekmiddagen om te adopteren. "zelf" = zelf samengesteld, "" = nog niets gekozen.
+ * De ladder van drie pakketten op aantal (brons Shufflepartner, zilver Danspartner, goud Polonaisepartner; de sleutel is de medaille)
+ * en daarboven Feestpartner ("feest"): een feest op locatie met een vaste feestprijs plus de oliebollen, dat je bewust kiest.
+ * De muziekmiddagen (Bandpartner) staan niet meer op het formulier; ze staan alleen nog in oude aanvragen.
+ * "zelf" = zelf samengesteld, "" = nog niets gekozen.
  */
 export type BusinessTierKey = "brons" | "zilver" | "goud";
 export type BusinessAdoptKey = "middag60" | "middag100";
-export type BusinessPackageKey = BusinessTierKey | BusinessAdoptKey;
+export type BusinessPackageKey = BusinessTierKey | "feest" | BusinessAdoptKey;
 export type BusinessPackageChoice = BusinessPackageKey | "zelf" | "";
 
 export interface BusinessPackage {
@@ -67,10 +69,27 @@ export interface BusinessInfo {
   email: string;
   /** Telefoonnummer van de stichting, voor vragen. */
   phone: string;
-  /** Danspartner, Polonaisepartner en Feestpartner, van klein naar groot. Elk pakket geldt vanaf zijn aantal tot het volgende. */
+  /** Shufflepartner, Danspartner en Polonaisepartner, van klein naar groot. Elk pakket geldt vanaf zijn aantal tot het volgende. */
   packages: BusinessPackage[];
-  /** Adopteer een hele muziekmiddag: bij precies dit aantal oliebollen, met een eigen aantal ouderen. */
+  /** Feestpartner: alleen als de klant hem kiest, nooit vanzelf op aantal. */
+  party: BusinessParty;
+  /** Adopteer een hele muziekmiddag. Staat niet meer op het formulier (leeg); alleen nog voor oude aanvragen. */
   adoptions: BusinessPackage[];
+}
+
+/**
+ * Feestpartner: een feest op locatie met band. Totaal = feestprijs + de oliebollen tegen de gewone stuksprijs.
+ * Vanaf largeFrom gasten komt er intern een muzikant bij en geldt feeLarge; de klant ziet alleen het bedrag.
+ */
+export interface BusinessParty extends BusinessPackage {
+  key: "feest";
+  /** Feestprijs excl. btw onder largeFrom gasten (€ 2.500). */
+  fee: number;
+  /** Feestprijs excl. btw vanaf largeFrom gasten (€ 3.100). */
+  feeLarge: number;
+  largeFrom: number;
+  /** Btw over de feestprijs; de oliebollen houden vatRate. */
+  vatRate: number;
 }
 
 /** Wat de klant invult. */
@@ -79,6 +98,8 @@ export interface BusinessOrderInput {
   pakket: BusinessPackageChoice;
   withRaisins: number;
   withoutRaisins: number;
+  /** Alleen bij Feestpartner: het geschatte aantal gasten; bepaalt de feestprijs. 0 bij de andere pakketten. */
+  guests: number;
   /** Waarvoor het is: borrel, event of relatiegeschenk. Verplicht als je oliebollen bestelt. */
   occasion: BusinessOccasion;
   /** Bijdrage aan de Partypot in hele euro's (geen btw). Kan ook zonder oliebollen te bestellen; telt niet mee in het aantal ouderen. */
@@ -122,6 +143,8 @@ export interface BusinessTotals {
   bollen: number;
   delivery: number;
   surcharge: number;
+  /** Feestprijs excl. btw bij Feestpartner, anders 0. */
+  party: number;
   subtotal: number;
   vat: number;
   total: number;

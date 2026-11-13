@@ -20,13 +20,14 @@ export const SEASON_YEAR = 2026;
 const SEASON_DAYS = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31].map((d) => dayLabel(SEASON_YEAR, 12, d));
 
 /*
- * Orders are delivered before twelve, so there is one morning shift for everyone. Inpakkers start earlier.
- * Fietskoerier no longer takes part: no options, also not when the agenda still lists it.
+ * Business orders are delivered between 9:00 and 15:00 (BUSINESS_DELIVERY_WINDOW), so autokoeriers get a
+ * morning shift (9:00–12:00, which also covers the "vóór 10:00" requests) and an afternoon shift (12:00–15:00).
+ * Inpakkers start earlier. Fietskoerier no longer takes part: no options, also not when the agenda still lists it.
  */
 const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
   inpakken: SEASON_DAYS,
   fietskoerier: [],
-  autokoerier: SEASON_DAYS.map((d) => `${d}: ochtend`),
+  autokoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
   /** Events with location, e.g. "Zaterdag 26 december (Pick-up Schaatsbaan)". */
   oliebollenbar: SEASON_DAYS
 };
@@ -48,7 +49,7 @@ export function optionKeyFor(role: VolunteerRole, option: string): string {
 /** Shift times until the agenda gives its own. */
 const DEFAULT_TIMES: Record<string, string> = Object.fromEntries([
   ...DEFAULT_OPTIONS.inpakken.map((o) => [optionKeyFor("inpakken", o), "6:30–12:00"]),
-  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), "9:00–12:00"])
+  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), o.endsWith("middag") ? "12:00–15:00" : "9:00–12:00"])
 ]);
 
 /** Time per task and option ("6:30–12:00"), keyed by optionKeyFor. Use optionTime to read it. */
@@ -98,7 +99,7 @@ export function applyAgenda(slots: AgendaSlot[]): void {
 export const SIGNUP_HINTS = {
   inpakken: "Inpakken van 6:30 tot 12:00 in Aalsmeer.",
   fietskoerier: "Ochtendsessie start om 9:00 uur in Amsterdam (max. 3 uurtjes). Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
-  autokoerier: "Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
+  autokoerier: "We bezorgen tussen 9:00 en 15:00: 's ochtends van 9:00 tot 12:00, 's middags van 12:00 tot 15:00. Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
   oliebollenbar: "Op welke dag(en) wil je helpen in de Oliebollenbar?"
 };
 
@@ -139,7 +140,7 @@ export const PLANNING = {
   /** Minutes per stop: parking, a chat, handing over. */
   minutesPerStop: 15,
   /** Working window per dagdeel when the Agenda tab gives no time ("09:00–12:00"). */
-  partWindows: { ochtend: ["09:00", "12:30"], middag: ["12:30", "17:00"], avond: ["17:00", "20:00"], "": ["09:00", "17:00"] } as Record<string, [string, string]>,
+  partWindows: { ochtend: ["09:00", "12:00"], middag: ["12:00", "15:00"], avond: ["17:00", "20:00"], "": ["09:00", "15:00"] } as Record<string, [string, string]>,
   /** Oliebollen per trip. */
   capacity: { fiets: BIKE_MAX_PIECES, bakfiets: 600, auto: 1500 },
   /** Bikes stay within this distance (km, straight line) of the loods. */

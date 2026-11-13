@@ -148,7 +148,7 @@ export function OrderEditCard({ order, state, session, run, onClose }: OrderEdit
                 </select>
               ) : (
                 <>
-                  <input className={`${inputClass} ${mark("deliveryMoment")}`} list="bezorgmomenten" value={draft.deliveryMoment} onChange={(e) => set("deliveryMoment")(e.target.value)} placeholder="bijv. tussen 9:00 en 12:30 uur" />
+                  <input className={`${inputClass} ${mark("deliveryMoment")}`} list="bezorgmomenten" value={draft.deliveryMoment} onChange={(e) => set("deliveryMoment")(e.target.value)} placeholder="bijv. tussen 9:00 en 15:00 uur" />
                   <datalist id="bezorgmomenten">
                     {moments.map((m) => (
                       <option key={m} value={m} />

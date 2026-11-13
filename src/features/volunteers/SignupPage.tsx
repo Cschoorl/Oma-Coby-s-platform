@@ -5,7 +5,10 @@ import type { ReminderChannel, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
-import { CONTACT_EMAIL, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
+import { BUSINESS_DELIVERY_WINDOW, CONTACT_EMAIL, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
+
+/** "tussen 9:00 en 15:00": the same window as the business order form promises. */
+const deliveryWindow = `tussen ${BUSINESS_DELIVERY_WINDOW.replace("–", " en ")}`;
 import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
 
 /*
@@ -46,7 +49,7 @@ function sharedTime(role: VolunteerRole): string {
 function roleBlurb(role: VolunteerRole): string {
   const time = sharedTime(role).replace("–", " tot ");
   if (role === "inpakken") return time ? `Van ${time} in Aalsmeer, met koffie.` : "Oliebollen in zakken en dozen in Aalsmeer.";
-  if (role === "autokoerier") return time ? `Rondbrengen met je eigen auto, van ${time}.` : "Rondbrengen met je eigen auto.";
+  if (role === "autokoerier") return time ? `Rondbrengen met je eigen auto, van ${time}.` : `Rondbrengen met je eigen auto, ${deliveryWindow}.`;
   return "Achter de bar bij een evenement.";
 }
 
@@ -222,7 +225,7 @@ export function SignupPage() {
           r === "inpakken"
             ? `${time ? `Inpakken doen we van ${time} in Aalsmeer. ` : ""}Welke dagen kun je?`
             : r === "autokoerier"
-              ? `${time ? `Bezorgen is 's ochtends, van ${time}. ` : ""}Welke dagen kun je rijden?`
+              ? `${time ? `Bezorgen is van ${time}. ` : `We bezorgen ${deliveryWindow}, in een ochtend- en een middagdienst. `}Welke dagen kun je rijden?`
               : "Op welke dagen kun je in de Oliebollenbar staan?";
         return [
           `picks-${r}`,

@@ -4,6 +4,7 @@ import type { BusinessInfo, BusinessOrderInput, BusinessPackage, BusinessPackage
 import { Card, Notice, OLIEBOL_SVG, Segmented, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, quickButton, rollOliebol, secondaryButton } from "../../components/ui";
 import { BUSINESS_DEFAULTS, BUSINESS_PER_COLLEAGUE } from "../../config";
 import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
+import heroUrl from "../../assets/mark-en-oma-coby.jpg";
 import {
   areaFor,
   businessTotals,
@@ -116,7 +117,7 @@ function StepHead({ n, title, sub, done }: { n: number; title: string; sub: Reac
           <span className="sr-only">{t.step(n)}</span>
           {title}
         </h2>
-        <p className="mt-0.5 text-sm text-muted">{sub}</p>
+        <p className="mt-0.5 text-sm text-oliebol">{sub}</p>
       </div>
     </header>
   );
@@ -137,7 +138,7 @@ function Field({ id, label, optional, hint, error, children }: { id: string; lab
     <div className="grid content-start gap-1.5">
       <label htmlFor={id} className={fieldLabel}>
         {label}
-        {optional ? <span className="ml-1 normal-case tracking-normal text-muted/80">{t.optional}</span> : null}
+        {optional ? <span className="ml-1 normal-case tracking-normal text-oliebol/80">{t.optional}</span> : null}
       </label>
       {children}
       {error ? (
@@ -145,7 +146,7 @@ function Field({ id, label, optional, hint, error, children }: { id: string; lab
           ! {error}
         </p>
       ) : hint ? (
-        <p className="text-xs text-muted">{hint}</p>
+        <p className="text-xs text-oliebol">{hint}</p>
       ) : null}
     </div>
   );
@@ -247,7 +248,7 @@ function Counter({
         <label htmlFor={id} className="font-bold text-krent">
           {label}
         </label>
-        {sub ? <p className="text-sm text-muted">{sub}</p> : null}
+        {sub ? <p className="text-sm text-oliebol">{sub}</p> : null}
       </div>
       {stepper}
       {fout}
@@ -266,7 +267,7 @@ function SplitBar({ met, zonder }: { met: number; zonder: number }) {
       <div className="flex h-2.5 overflow-hidden rounded-full bg-gouwe-100">
         <div className="bg-oliebol transition-[width] duration-300" style={{ width: `${pct}%` }} />
       </div>
-      <div className="flex justify-between text-xs text-muted">
+      <div className="flex justify-between text-xs text-oliebol">
         <span className="flex items-center gap-1.5">
           <Bol krenten className="h-4 w-4" />
           {t.pctWith(pct)}
@@ -294,7 +295,7 @@ function Choice({ active, onClick, title, sub, aside }: { active: boolean; onCli
     >
       <span className="grid">
         <span className="text-sm font-bold">{title}</span>
-        {sub ? <span className={`text-xs ${active ? "text-meel/75" : "text-muted"}`}>{sub}</span> : null}
+        {sub ? <span className={`text-xs ${active ? "text-meel/75" : "text-oliebol"}`}>{sub}</span> : null}
       </span>
       {aside ? <span className={`shrink-0 text-xs font-bold tabular-nums ${active ? "text-gouwe" : "text-oliebol"}`}>{aside}</span> : null}
     </button>
@@ -354,7 +355,7 @@ function DayPicker({ days, value, onChange, info, now, error }: { days: string[]
                       active ? "bg-krent text-meel shadow-zacht" : "bg-vul text-krent hover:bg-vul-2"
                     }`}
                   >
-                    <span className={`text-[10px] font-bold uppercase tracking-[0.12em] ${active ? "text-meel/75" : "text-muted"}`}>
+                    <span className={`text-[10px] font-bold uppercase tracking-[0.12em] ${active ? "text-meel/75" : "text-oliebol"}`}>
                       {date.toLocaleDateString(t.locale, { weekday: "short" }).replace(".", "")}
                     </span>
                     <span className="font-serif text-lg font-bold tabular-nums">{date.getDate()}</span>
@@ -365,7 +366,7 @@ function DayPicker({ days, value, onChange, info, now, error }: { days: string[]
           </div>
         );
       })}
-      {anyClosed ? <p className="text-xs text-muted">{t.crossedOut(t.lead(info))}</p> : null}
+      {anyClosed ? <p className="text-xs text-oliebol">{t.crossedOut(t.lead(info))}</p> : null}
       {error ? <p className="text-xs font-bold text-feest-ink">! {error}</p> : null}
     </div>
   );
@@ -464,7 +465,7 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
   const ouderen = Math.floor(pkg.oliebollen / 10);
   const next = nextTier(pkg.oliebollen, info);
   const ink = gold ? "text-meel" : "text-krent";
-  const soft = gold ? "text-meel/70" : "text-muted";
+  const soft = gold ? "text-meel/70" : "text-oliebol";
   const check = gold ? "text-gouwe" : "text-kerst-ink";
   return (
     <button
@@ -490,14 +491,14 @@ function PackageCard({ pkg, info, below, active, tip, onPick }: { pkg: BusinessP
         </span>
         <span className="grid">
           {/* Lange namen (Polonaisepartner) breken af als "Polonaise-partner" wanneer de kaart te smal is. */}
-          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] xl:text-[30px] tracking-wide [hyphens:manual] ${gold ? "text-gouwe" : "text-krent"}`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
+          <span className={`font-display text-[30px] uppercase leading-[0.95] md:text-[24px] lg:text-[30px] tracking-wide [hyphens:manual] ${gold ? "text-gouwe" : "text-krent"}`}>{name.replace(/partner$/, "\u00ADpartner")}</span>
           <span className={`text-xs tabular-nums ${soft}`}>{t.rangeShort(pkg, info)}</span>
         </span>
       </span>
 
       <span className="grid gap-1">
         <span className="flex items-end gap-2">
-          <span className={`font-serif text-[40px] font-bold leading-none tabular-nums md:text-[32px] xl:text-[40px] ${ink}`}>
+          <span className={`font-serif text-[40px] font-bold leading-none tabular-nums md:text-[32px] lg:text-[40px] ${ink}`}>
             {ouderen}
             {next ? "" : "+"}
           </span>
@@ -627,9 +628,9 @@ function AdoptionCard({ pkg, info, active, onPick }: { pkg: BusinessPackage; inf
         ))}
       </span>
       <span className={`mt-auto flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t pt-3 ${active ? "border-meel/15" : "border-lijn"}`}>
-        <span className={`text-sm tabular-nums ${active ? "text-meel/80" : "text-muted"}`}>{t.adoptIncl(t.num(pkg.oliebollen))}</span>
+        <span className={`text-sm tabular-nums ${active ? "text-meel/80" : "text-oliebol"}`}>{t.adoptIncl(t.num(pkg.oliebollen))}</span>
         <span className={`font-serif text-xl font-bold tabular-nums ${active ? "text-meel" : "text-krent"}`}>
-          {t.euroRound(pkg.oliebollen * info.price)} <span className={`text-xs font-normal ${active ? "text-meel/70" : "text-muted"}`}>{t.exclVatShort}</span>
+          {t.euroRound(pkg.oliebollen * info.price)} <span className={`text-xs font-normal ${active ? "text-meel/70" : "text-oliebol"}`}>{t.exclVatShort}</span>
         </span>
       </span>
       <span className={`inline-flex min-h-[44px] items-center justify-center rounded-md px-4 text-sm font-bold ${active ? "bg-gouwe text-krent" : "bg-vul text-krent"}`}>
@@ -660,7 +661,7 @@ function DonationBlock({ value, pot, onChange, error }: { value: number; pot: Pa
     <Card className="grid gap-4">
       <div>
         <h3 className="font-serif text-lg font-bold leading-tight text-krent">{t.donate}</h3>
-        <p className="mt-0.5 text-sm text-muted">{t.donateSub}</p>
+        <p className="mt-0.5 text-sm text-oliebol">{t.donateSub}</p>
       </div>
       {pot && pot.goal > 0 ? (
         <div className="grid gap-1.5">
@@ -676,7 +677,7 @@ function DonationBlock({ value, pot, onChange, error }: { value: number; pot: Pa
             <div className="bg-feest transition-[width] duration-300" style={{ width: `${pct}%` }} />
             <div className="bg-gouwe transition-[width] duration-300" style={{ width: `${mine}%` }} />
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-oliebol">
             <b className="tabular-nums text-krent">{t.potStand(t.euroRound(pot.raised), t.euroRound(pot.goal))}</b>
           </p>
         </div>
@@ -741,7 +742,7 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
           <dt className="font-bold text-krent">{t.onInvoice}</dt>
           <dd className="font-serif text-2xl font-bold tabular-nums text-krent">{t.euro(totals.invoice)}</dd>
         </div>
-        <p className="text-xs text-muted">{t.donationNoVat}</p>
+        <p className="text-xs text-oliebol">{t.donationNoVat}</p>
       </dl>
     );
   }
@@ -783,7 +784,7 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
           {t.short(t.num(short), info.minimum)}
         </p>
       ) : null}
-      {totals.oliebollen ? <p className="mt-1 text-xs text-muted">{t.cardNote}</p> : null}
+      {totals.oliebollen ? <p className="mt-1 text-xs text-oliebol">{t.cardNote}</p> : null}
     </dl>
   );
 }
@@ -1059,18 +1060,26 @@ export function BusinessOrderPage() {
   }
 
   return (
-    <div className={`grid gap-6 pb-24 lg:pb-0 ${jost ? "oc-jost" : ""}`}>
-      <section className="grid gap-4 pt-2">
-        <div className="grid gap-2">
+    <div className={`grid gap-12 pb-24 sm:gap-16 lg:pb-0 ${jost ? "oc-jost" : ""}`}>
+      {/* Hero: tekst links, Mark en Oma Coby rechts. Op telefoon staat de foto tussen de intro en de cijfers. */}
+      <section className="grid gap-8 pt-2 sm:pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-center lg:gap-x-14 lg:gap-y-10">
+        <div className="grid gap-4 lg:self-end">
           <h1 className="max-w-3xl font-display text-[40px] uppercase leading-[0.95] tracking-wide text-krent sm:text-[56px]">
             {t.title}
           </h1>
-          <p className="max-w-2xl text-[15px] leading-relaxed text-oliebol">
+          <p className="max-w-xl text-base leading-relaxed text-oliebol">
             {t.intro}
           </p>
         </div>
-        {/* Prijs, minimum en de ruil: 10 oliebollen = 1 oudere, met het oudje ernaast op eigen benen, niet over de tekst. */}
-        <dl className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.3fr)] gap-3 py-1 sm:max-w-2xl sm:grid-cols-3 sm:gap-6">
+        <img
+          src={heroUrl}
+          alt={t.heroAlt}
+          width={900}
+          height={1125}
+          className="aspect-[4/3] w-full rounded-kaart object-cover object-[50%_62%] shadow-zacht lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:aspect-[4/5] lg:object-center"
+        />
+        {/* Prijs, minimum en de ruil: 10 oliebollen = 1 oudje, met het oudje ernaast op eigen benen, niet over de tekst. */}
+        <dl className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.3fr)] gap-x-3 gap-y-6 sm:max-w-2xl sm:grid-cols-3 sm:gap-x-8 lg:self-start">
           {(
             [
               [t.euro(info.price), t.perOliebol(Math.round(info.vatRate * 100), t.euro(inclPrice))],
@@ -1080,7 +1089,7 @@ export function BusinessOrderPage() {
             <div key={label}>
               <dt className="sr-only">{label}</dt>
               <dd className="font-serif text-2xl font-bold leading-tight tabular-nums text-krent sm:text-[28px]">{value}</dd>
-              <dd className="text-xs leading-snug text-muted">{label}</dd>
+              <dd className="text-xs leading-snug text-oliebol">{label}</dd>
             </div>
           ))}
           <div className="flex items-end gap-1.5 sm:gap-2.5">
@@ -1089,23 +1098,23 @@ export function BusinessOrderPage() {
               <dd aria-hidden="true" className="flex items-center gap-1 font-serif text-2xl font-bold leading-tight tabular-nums text-krent sm:text-[28px]">
                 10
                 <Bol krenten className="h-5 w-5 sm:h-6 sm:w-6" />
-                <span className="font-normal text-muted">=</span>1
+                <span className="font-normal text-oliebol">=</span>1
               </dd>
-              <dd className="text-xs leading-snug text-muted">{t.seniorOnFloor}</dd>
+              <dd className="text-xs leading-snug text-oliebol">{t.seniorOnFloor}</dd>
             </div>
             <DiscoOudje className="h-12 sm:h-14" />
           </div>
           {/* Hoort bij 10 = 1: hoe de opbrengst bij de middagen komt. Geen bedragen of percentages. */}
-          <div className="col-span-3 border-t border-lijn pt-3">
+          <div className="col-span-3 border-t border-lijn pt-5">
             <dt className="inline font-bold text-krent">{t.howItWorks}</dt>{" "}
             <dd className="inline text-sm leading-relaxed text-oliebol">{t.howItWorksText}</dd>
           </div>
         </dl>
       </section>
 
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <form
-          className="grid gap-5"
+      {/* Stappen en pakketten over de volle breedte; daaronder de rest van de stap met het overzicht ernaast. */}
+      <form
+          className="grid gap-8"
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
@@ -1122,7 +1131,7 @@ export function BusinessOrderPage() {
           </div>
 
           {step === 1 ? (
-          <section className="grid gap-4" aria-labelledby="stap-1-titel">
+          <section className="grid gap-5" aria-labelledby="stap-1-titel">
             <div id="stap-1" tabIndex={-1} className="focus:outline-none">
               <div id="stap-1-titel">
                 <StepHead
@@ -1139,7 +1148,7 @@ export function BusinessOrderPage() {
                 <label htmlFor="f-colleagues" className="font-bold text-krent">
                   {t.colleaguesTitle}
                 </label>
-                <p className="text-sm text-muted">
+                <p className="text-sm text-oliebol">
                   {Number(colleagues) > 0
                     ? t.colleaguesHint(BUSINESS_PER_COLLEAGUE, t.num(Math.min(info.maximum, Math.ceil((Number(colleagues) * BUSINESS_PER_COLLEAGUE) / 10) * 10)))
                     : t.colleaguesEmpty(BUSINESS_PER_COLLEAGUE)}
@@ -1156,7 +1165,7 @@ export function BusinessOrderPage() {
               />
             </div>
 
-            <div id="f-pakket" tabIndex={-1} role="radiogroup" aria-label={t.packages} className="grid gap-4 pt-1 focus:outline-none md:grid-cols-3 md:gap-3 xl:gap-4">
+            <div id="f-pakket" tabIndex={-1} role="radiogroup" aria-label={t.packages} className="grid gap-4 pt-2 focus:outline-none md:grid-cols-3 md:gap-4 lg:gap-6">
               {info.packages.map((p, i) => (
                 <PackageCard key={p.key} pkg={p} info={info} below={info.packages[i - 1]} active={pkg?.key === p.key} tip={i === 1} onPick={() => pickPackage(p)} />
               ))}
@@ -1175,7 +1184,14 @@ export function BusinessOrderPage() {
                 </div>
               </div>
             ) : null}
-            <p className="text-center text-sm text-muted">
+          </section>
+          ) : null}
+
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
+          <div className="grid gap-6">
+          {step === 1 ? (
+          <div className="grid gap-5">
+            <p className="text-center text-sm text-oliebol">
               {t.otherAmount}{" "}
               <button
                 type="button"
@@ -1192,7 +1208,7 @@ export function BusinessOrderPage() {
                 <div id="samenstellen" className="grid scroll-mt-6 gap-5">
                   <div>
                     <h3 className="font-serif text-lg font-bold leading-tight text-krent">{pkg && input.pakket !== "zelf" ? t.splitTitle : t.composeTitle}</h3>
-                    <p className="mt-0.5 text-sm text-muted">
+                    <p className="mt-0.5 text-sm text-oliebol">
                       {pkg && input.pakket !== "zelf"
                         ? t.splitSub
                         : t.composeSub(info.minimum, t.num(info.maximum))}
@@ -1246,7 +1262,7 @@ export function BusinessOrderPage() {
 
             {/* Doneren staat altijd in beeld, ook voor wie geen oliebollen bestelt. */}
             <DonationBlock value={input.donation} pot={pot} onChange={(n) => update("donation", n)} error={shown.donation} />
-          </section>
+          </div>
           ) : null}
 
           {step === 2 ? (
@@ -1283,23 +1299,23 @@ export function BusinessOrderPage() {
                     <>
                       <span className="grid">
                         <span className="text-sm font-bold">{t.area[area]}</span>
-                        <span className="text-xs text-muted">
+                        <span className="text-xs text-oliebol">
                           {/^\d{4}/.test(input.postalCode.trim()) ? t.postcodeShort(input.postalCode.trim().slice(0, 4)) : input.city.trim()} · {t.areaSub[area]}
                         </span>
                       </span>
                       <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{t.euro(info.fees[area])}</span>
                     </>
                   ) : (
-                    <span className="text-sm text-muted">{t.areaEmpty}</span>
+                    <span className="text-sm text-oliebol">{t.areaEmpty}</span>
                   )}
                 </div>
-                <p className="text-xs text-muted">{t.areaHint}</p>
+                <p className="text-xs text-oliebol">{t.areaHint}</p>
               </div>
 
               <div className="grid gap-2">
                 <p className={fieldLabel}>{t.whichDay}</p>
                 <DayPicker days={info.deliveryDays} value={input.date} onChange={(d) => update("date", d)} info={info} now={now} error={shown.date} />
-                <p className="text-xs text-muted">
+                <p className="text-xs text-oliebol">
                   {t.deadline(t.lead(info), t.closeText(info))} {t.otherMoment}{" "}
                   <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent" href={mailLink}>
                     {t.mailUs}
@@ -1326,7 +1342,7 @@ export function BusinessOrderPage() {
                         title={t.moment.voor10}
                         sub={t.surcharge(t.euro(info.surcharges.voor10))}
                       />
-                      <p className="px-1 text-xs text-muted">{t.earlyRequest}</p>
+                      <p className="px-1 text-xs text-oliebol">{t.earlyRequest}</p>
                     </div>
                   ) : null}
                 </div>
@@ -1402,7 +1418,7 @@ export function BusinessOrderPage() {
                   <Check id="f-wallOfFame" checked={input.wallOfFame} onChange={(v) => update("wallOfFame", v)}>
                     {t.wallOfFame(rank >= 2)}
                   </Check>
-                  {input.wallOfFame && rank >= 2 ? <p className="-mt-1 px-1 text-xs text-muted">{t.logoHint}</p> : null}
+                  {input.wallOfFame && rank >= 2 ? <p className="-mt-1 px-1 text-xs text-oliebol">{t.logoHint}</p> : null}
                   <Check id="f-certificate" checked={input.certificate} onChange={(v) => update("certificate", v)}>
                     {t.certificate}
                   </Check>
@@ -1442,7 +1458,7 @@ export function BusinessOrderPage() {
                 ) : null}
               </div>
             </div>
-            <p className="text-xs leading-relaxed text-muted">
+            <p className="text-xs leading-relaxed text-oliebol">
               {t.privacy}
             </p>
           </Step>
@@ -1468,7 +1484,7 @@ export function BusinessOrderPage() {
               </button>
             )}
           </div>
-        </form>
+          </div>
 
         <aside ref={summaryRef} id="overzicht" className="grid scroll-mt-6 gap-4 lg:sticky lg:top-6">
           <Card className="grid gap-4">
@@ -1489,7 +1505,7 @@ export function BusinessOrderPage() {
                   </p>
                 </>
               ) : totals.donation ? null : (
-                <p className="text-sm text-muted">{t.emptyOverview}</p>
+                <p className="text-sm text-oliebol">{t.emptyOverview}</p>
               )}
               {totals.donation ? <p className="text-sm font-bold text-oliebol">{t.inPot(t.euro(totals.donation))}</p> : null}
             </div>
@@ -1523,11 +1539,11 @@ export function BusinessOrderPage() {
             >
               {nextStep ? t.nextTo(stepTitles[nextStep]) : sendLabel}
             </button>
-            <p className="text-center text-xs leading-relaxed text-muted">
+            <p className="text-center text-xs leading-relaxed text-oliebol">
               {t.payLater}
             </p>
           </Card>
-          <p className="px-1 text-xs leading-relaxed text-muted">
+          <p className="px-1 text-xs leading-relaxed text-oliebol">
             {t.forYourself}{" "}
             <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4 hover:text-krent" href="https://www.omacobysoliebollenbar.nl" target="_blank" rel="noreferrer">
               omacobysoliebollenbar.nl
@@ -1535,7 +1551,8 @@ export function BusinessOrderPage() {
             .
           </p>
         </aside>
-      </div>
+          </div>
+      </form>
 
       {/* Telefoon: het totaal blijft onderin in beeld tot het overzicht zelf in beeld is. */}
       <div
@@ -1545,7 +1562,7 @@ export function BusinessOrderPage() {
       >
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-xs text-muted">
+            <p className="truncate text-xs text-oliebol">
               {only ? t.inPot(t.euro(totals.donation)) : `${t.num(totals.oliebollen)} oliebollen · ${isAdoption(pkg) ? t.adoptGuests(totals.ouderen) : t.barSeniors(t.num(totals.ouderen))}`}
             </p>
             <p className="font-serif text-lg font-bold tabular-nums text-krent">{t.euro(totals.invoice)}</p>
@@ -1610,7 +1627,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
                 <span className="font-serif text-2xl font-bold tabular-nums text-krent">{t.num(totals.ouderen)}</span>
               </div>
             )}
-            <p className="text-xs text-muted">
+            <p className="text-xs text-oliebol">
               {t.hallCaption(totals.ouderen, input.company, isAdoption(pkg))}
             </p>
           </div>
@@ -1623,7 +1640,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
         <dl className="grid gap-2.5 text-sm">
           {rows.map(([label, value]) => (
             <div key={label} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3">
-              <dt className="text-muted">{label}</dt>
+              <dt className="text-oliebol">{label}</dt>
               <dd className="text-oliebol">{value}</dd>
             </div>
           ))}
@@ -1654,7 +1671,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
           </button>
         </div>
       </Card>
-      <p className="text-center text-xs text-muted">
+      <p className="text-center text-xs text-oliebol">
         {t.questions}{" "}
         <a className="font-bold text-oliebol underline decoration-lijn-2 underline-offset-4" href={`mailto:${info.email}`}>
           {info.email}

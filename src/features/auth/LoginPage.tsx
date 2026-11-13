@@ -31,7 +31,7 @@ export function LoginPage({ onLogin }: { onLogin: (session: Session) => void }) 
   return (
     <form onSubmit={submit} className="mx-auto grid w-full max-w-md gap-4 pt-2">
       <h1 className="text-center font-display text-[38px] uppercase leading-none tracking-wide text-krent">
-        Wie staat er <span className="text-feest">achter de pan</span>?
+        Wie helpt <span className="text-feest">Oma Coby</span> vandaag?
       </h1>
       <Card>
         <div className="grid gap-3">

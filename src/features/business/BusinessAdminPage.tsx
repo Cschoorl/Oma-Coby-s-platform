@@ -396,7 +396,7 @@ function ImpactBlock({ order: b }: { order: BusinessOrder }) {
   return (
     <Block title="Certificaat en LinkedIn">
       <p className="text-sm text-oliebol">
-        {band ? `Een eigen middag voor ${formatNumber(ouderen)} gasten.` : `${formatNumber(ouderen)} ${ouderen === 1 ? "oudere" : "ouderen"} op de dansvloer.`}
+        {band ? `Een eigen middag voor ${formatNumber(ouderen)} gasten.` : `${formatNumber(ouderen)} ${ouderen === 1 ? "oudje" : "oudjes"} op de dansvloer.`}
       </p>
       {b.certificate ? (
         <button type="button" className={`${secondaryButton} justify-self-start`} onClick={() => setBlocked(!openCertificate(b))}>

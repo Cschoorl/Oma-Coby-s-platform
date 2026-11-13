@@ -68,8 +68,8 @@ const CONFIG = {
       '2026-12-23', '2026-12-24', '2026-12-27', '2026-12-28', '2026-12-29', '2026-12-30', '2026-12-31'],
     slots: [
       ['inpakken', '', '07:30'],
-      ['fietskoerier', 'ochtend', '09:00–12:00'], ['fietskoerier', 'middag', '12:00–16:00'],
-      ['autokoerier', 'ochtend', '09:00–12:00'], ['autokoerier', 'middag', '12:00–16:00'],
+      ['fietskoerier', 'ochtend', '09:00–12:00'], ['fietskoerier', 'middag', '12:00–15:00'],
+      ['autokoerier', 'ochtend', '09:00–12:00'], ['autokoerier', 'middag', '12:00–15:00'],
       ['oliebollenbar', '', '']
     ],
     needed: 4
@@ -1876,7 +1876,7 @@ function businessTime_(local) {
 
 function defaultBusinessDays_() {
   const b = CONFIG.BUSINESS;
-  return b.deliveryDays.map(function (d) { return [d, 'bezorgen', '9:00–12:30', 'ja']; });
+  return b.deliveryDays.map(function (d) { return [d, 'bezorgen', '9:00–15:00', 'ja']; });
 }
 
 function businessInput_(body, info) {

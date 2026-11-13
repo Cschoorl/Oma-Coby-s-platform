@@ -49,6 +49,8 @@ Het script:
    | `CODE_INPAKKER` | code voor inpakkers |
    | `CODE_BEZORGER` | code voor bezorgers |
    | `ANTHROPIC_API_KEY` | API-sleutel van console.anthropic.com (alleen nodig voor het uitlezen van bonnen) |
+   | `SHOPIFY_SHOP` | `oma-cobys-olliebollenbar.myshopify.com` (voor de stand van de Partypot) |
+   | `SHOPIFY_TOKEN` | Admin API-token: Shopify-beheer → Instellingen → Apps → Apps ontwikkelen → eigen app met alleen `read_orders` |
    | `VOLUNTEERS_SPREADSHEET_ID` | Alleen nodig als de formulierantwoorden in een **ander** bestand staan. Het ID is het lange stuk in de URL tussen `/d/` en `/edit`. Zet het hier en niet in de code: de repo is openbaar. |
 
 5. Kies bovenin de editor de functie **`installeer`** en klik **Uitvoeren** (één keer; geef toestemming).
@@ -128,12 +130,15 @@ in de plaats ervan delen.
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
   - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_btw` (9),
-    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1199, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (10),
-    `zakelijk_toeslag_voor_9` (15), `zakelijk_donatie` (2,50 per gedoneerde oliebol), `zakelijk_werkdagen_vooraf` (3 werkdagen van tevoren bestellen),
+    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1199, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (15: vóór 10:00 is een aanvraag;
+    let op: staat hier nog 10 uit vorig jaar, maak het dan 15 of maak het vak leeg), `zakelijk_werkdagen_vooraf` (3 werkdagen van tevoren bestellen),
     `zakelijk_sluiting` (`2026-12-28 12:00`: daarna is zakelijk bestellen dicht),
     `zakelijk_pakket_brons` (50), `zakelijk_pakket_zilver` (150), `zakelijk_pakket_goud` (500): vanaf die aantallen geldt
     het pakket, `zakelijk_email`, `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar` (wie bij elke nieuwe
     aanvraag direct een mail krijgt; leeg = info@, meerdere adressen met een komma).
+  - de Partypot: `partypot_doel` (3000 euro), `partypot_shopify_vanaf` (standaard 1 september van het seizoen) en
+    `partypot_shopify_product` (`Doneer`: elke Shopify-regel waarvan de naam zo begint telt mee). Zonder `SHOPIFY_SHOP`
+    en `SHOPIFY_TOKEN` telt de stand alleen het zakelijke formulier.
     De prijs per oliebol (€ 2,29 excl. btw, uit het zakelijk concept 2026) staat vast in `CONFIG.BUSINESS.price`; een regel `zakelijk_prijs` in
     Instellingen telt niet meer mee. De oude `zakelijk_uren_vooraf` en `zakelijk_dagen_vooraf` ook niet.
   - De bevestigingsmail van een zakelijke bestelling is opgemaakt (HTML, met een tekstversie erbij). De plaatjes komen uit

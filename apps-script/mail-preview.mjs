@@ -1,5 +1,5 @@
 // Voorbeeld van de zakelijke bevestigingsmail, met de echte template uit Code.gs.
-// Draaien: node apps-script/mail-preview.mjs  →  docs/mail-zakelijke-bevestiging*.html (Polonaisepartner, Feestpartner, muziekmiddag, donatie)
+// Draaien: node apps-script/mail-preview.mjs  →  docs/mail-zakelijke-bevestiging*.html (Polonaisepartner, Feestpartner, Bandpartner, Partypot)
 import { readFileSync, writeFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 
@@ -11,9 +11,9 @@ context.readTab_ = () => [];
 
 const extra = { wallOfFame: false, certificate: false, certificateName: "", linkedin: false, source: "", ambassador: "", via: "" };
 const examples = {
-  // Polonaisepartner, bezorgen in Amsterdam vóór 10:00, met donatie en alle vinkjes.
+  // Polonaisepartner, bezorgen in Amsterdam vóór 10:00, met € 25 in de Partypot en alle vinkjes.
   "mail-zakelijke-bevestiging": {
-    ...extra, pakket: "zilver", withRaisins: 110, withoutRaisins: 40, donation: 20, flyers: false, fulfilment: "bezorgen", area: "regio",
+    ...extra, pakket: "zilver", withRaisins: 110, withoutRaisins: 40, donation: 25, flyers: false, fulfilment: "bezorgen", area: "regio",
     moment: "voor10", date: "2026-12-14", pickupAgreed: false, street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam",
     company: "Studio Grachtengordel", contact: "Sanne de Vries", phone: "06 12345678", email: "sanne@studiograchtengordel.nl",
     invoiceEmail: "facturen@studiograchtengordel.nl", invoiceAddress: "", reference: "PO-2026-118", remark: "Graag bij de receptie afgeven, 2e verdieping.",
@@ -25,16 +25,16 @@ const examples = {
     date: "2026-12-17", pickupAgreed: false, street: "Stationsplein 1", postalCode: "2011 LR", city: "Haarlem", company: "Bakkerij & Zn", contact: "Joost",
     phone: "020 1234567", email: "joost@example.nl", invoiceEmail: "joost@example.nl", invoiceAddress: "", reference: "", remark: ""
   },
-  // Een hele muziekmiddag adopteren.
+  // Bandpartner: een eigen middag voor 60 gasten.
   "mail-zakelijke-bevestiging-muziekmiddag": {
     ...extra, pakket: "middag60", withRaisins: 1750, withoutRaisins: 750, donation: 0, flyers: false, fulfilment: "bezorgen", area: "regio", moment: "regulier",
     date: "2026-12-18", pickupAgreed: false, street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", company: "Bloemenveiling Noord",
     contact: "Petra Jansen", phone: "06 87654321", email: "petra@example.nl", invoiceEmail: "petra@example.nl", invoiceAddress: "", reference: "", remark: "",
     wallOfFame: true, certificate: true, certificateName: "Bloemenveiling Noord", linkedin: true
   },
-  // Alleen een donatie, zonder oliebollen.
+  // Alleen een bijdrage aan de Partypot, zonder oliebollen.
   "mail-zakelijke-bevestiging-donatie": {
-    ...extra, pakket: "", withRaisins: 0, withoutRaisins: 0, donation: 40, flyers: false, fulfilment: "donatie", area: "", moment: "regulier",
+    ...extra, pakket: "", withRaisins: 0, withoutRaisins: 0, donation: 100, flyers: false, fulfilment: "donatie", area: "", moment: "regulier",
     date: "", pickupAgreed: false, street: "", postalCode: "", city: "", company: "Advocatenkantoor Vondel", contact: "Mark Bakker",
     phone: "06 11223344", email: "mark@example.nl", invoiceEmail: "mark@example.nl", invoiceAddress: "", reference: "", remark: ""
   }

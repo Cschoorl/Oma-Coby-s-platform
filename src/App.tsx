@@ -137,10 +137,13 @@ function App() {
   }
 
   // Pages without login (signup, login) get a simple centred layout.
-  const simpleShell = (content: React.ReactNode, wide = false, extra?: React.ReactNode) => (
+  const simpleShell = (content: React.ReactNode, wide: boolean | "xl" = false, extra?: React.ReactNode) => {
+    // The order form is wider ("xl"), so its summary fits beside the packages.
+    const width = wide === "xl" ? "max-w-[1360px]" : wide ? "max-w-6xl" : "max-w-3xl";
+    return (
     <div className="min-h-screen bg-meel">
       <header className="border-b border-lijn bg-papier">
-        <div className={`mx-auto flex h-16 items-center justify-between px-4 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
+        <div className={`mx-auto flex h-16 items-center justify-between px-4 ${width}`}>
           <Brand />
           <div className="flex items-center gap-2">
             <DemoPill />
@@ -148,13 +151,14 @@ function App() {
           </div>
         </div>
       </header>
-      <main className={`mx-auto grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>{content}</main>
+      <main className={`mx-auto grid grid-cols-[minmax(0,1fr)] gap-4 px-4 py-6 ${width}`}>{content}</main>
       <Toaster />
     </div>
-  );
+    );
+  };
 
   if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
-  if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, true, <LangSwitch />);
+  if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, "xl", <LangSwitch />);
   if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
   const { state, error, lastSync, saving, run } = dashboard;

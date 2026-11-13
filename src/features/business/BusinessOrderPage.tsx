@@ -1060,9 +1060,9 @@ export function BusinessOrderPage() {
   }
 
   return (
-    <div className={`grid gap-12 pb-24 sm:gap-16 lg:pb-0 ${jost ? "oc-jost" : ""}`}>
+    <div className={`grid gap-12 pb-24 sm:gap-16 xl:pb-0 ${jost ? "oc-jost" : ""}`}>
       {/* Hero: tekst links, Mark en Oma Coby rechts. Op telefoon staat de foto tussen de intro en de cijfers. */}
-      <section className="grid gap-8 pt-2 sm:pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-center lg:gap-x-14 lg:gap-y-10">
+      <section className="grid gap-8 pt-2 sm:pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:items-center lg:gap-x-14 lg:gap-y-10">
         <div className="grid gap-4 lg:self-end">
           <h1 className="max-w-3xl font-display text-[40px] uppercase leading-[0.95] tracking-wide text-krent sm:text-[56px]">
             {t.title}
@@ -1112,9 +1112,10 @@ export function BusinessOrderPage() {
         </dl>
       </section>
 
-      {/* Stappen en pakketten over de volle breedte; daaronder de rest van de stap met het overzicht ernaast. */}
+      {/* Vanaf 1280px staat het overzicht rechts naast de hele stap; de pagina is daarvoor breder, zodat de pakketten ruimte houden.
+          Smaller blijft het overzicht onder het formulier, met het totaal onderin beeld. */}
       <form
-          className="grid gap-8"
+          className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:gap-10"
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
@@ -1123,6 +1124,7 @@ export function BusinessOrderPage() {
             else goNext();
           }}
         >
+          <div className="grid gap-8">
           <div id="stappen" className="grid scroll-mt-6 gap-2">
             <p className="text-xs font-bold text-oliebol" aria-live="polite">
               {t.stepOf(steps.indexOf(step) + 1, steps.length)}
@@ -1187,7 +1189,6 @@ export function BusinessOrderPage() {
           </section>
           ) : null}
 
-          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-10">
           <div className="grid gap-6">
           {step === 1 ? (
           <div className="grid gap-5">
@@ -1485,8 +1486,9 @@ export function BusinessOrderPage() {
             )}
           </div>
           </div>
+          </div>
 
-        <aside ref={summaryRef} id="overzicht" className="grid scroll-mt-6 gap-4 lg:sticky lg:top-6">
+        <aside ref={summaryRef} id="overzicht" className="grid w-full max-w-xl scroll-mt-6 gap-4 xl:sticky xl:top-6">
           <Card className="grid gap-4">
             <div className="flex items-baseline justify-between">
               <h2 className="font-serif text-xl font-bold text-krent">{t.yourOrder}</h2>
@@ -1551,16 +1553,15 @@ export function BusinessOrderPage() {
             .
           </p>
         </aside>
-          </div>
       </form>
 
       {/* Telefoon: het totaal blijft onderin in beeld tot het overzicht zelf in beeld is. */}
       <div
-        className={`fixed inset-x-0 bottom-0 z-30 border-t border-lijn bg-papier/95 px-4 py-2.5 backdrop-blur transition duration-200 lg:hidden ${
+        className={`fixed inset-x-0 bottom-0 z-30 border-t border-lijn bg-papier/95 px-4 py-2.5 backdrop-blur transition duration-200 xl:hidden ${
           summaryVisible ? "pointer-events-none translate-y-full opacity-0" : ""
         }`}
       >
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+        <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-3">
           <div className="min-w-0 leading-tight">
             <p className="truncate text-xs text-oliebol">
               {only ? t.inPot(t.euro(totals.donation)) : `${t.num(totals.oliebollen)} oliebollen · ${isAdoption(pkg) ? t.adoptGuests(totals.ouderen) : t.barSeniors(t.num(totals.ouderen))}`}

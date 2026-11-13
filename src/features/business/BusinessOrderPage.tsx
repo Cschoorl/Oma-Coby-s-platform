@@ -40,9 +40,67 @@ const field = `${inputClass} min-h-[44px]`;
 
 /** Volgorde van de velden op de pagina: daar springen we heen bij versturen met fouten. */
 const FIELD_ORDER: BusinessField[] = [
-  "pakket", "withRaisins", "withoutRaisins", "donation", "street", "postalCode", "city", "date",
+  "pakket", "withRaisins", "withoutRaisins", "occasion", "donation", "street", "postalCode", "city", "date",
   "company", "contact", "phone", "email", "invoiceEmail"
 ];
+
+type StepNr = 1 | 2 | 3;
+
+/** Welke verplichte velden bij welke stap horen: "Volgende" kijkt alleen naar de velden van de stap waar je bent. */
+const STEP_FIELDS: Record<StepNr, BusinessField[]> = {
+  1: ["pakket", "withRaisins", "withoutRaisins", "occasion", "donation"],
+  2: ["street", "postalCode", "city", "date"],
+  3: ["company", "contact", "phone", "email", "invoiceEmail"]
+};
+
+function stepOf(f: BusinessField): StepNr {
+  return STEP_FIELDS[2].includes(f) ? 2 : STEP_FIELDS[3].includes(f) ? 3 : 1;
+}
+
+/** De drie stappen bovenaan. Een stap kies je pas als de stappen ervoor kloppen; terug kan altijd. */
+function Stepper({ step, titles, steps, ready, onGo }: { step: StepNr; titles: Record<StepNr, string>; steps: StepNr[]; ready: (n: StepNr) => boolean; onGo: (n: StepNr) => void }) {
+  const t = useT();
+  return (
+    <nav aria-label={t.steps}>
+      <ol className="grid grid-cols-3 gap-1.5 sm:gap-2">
+        {([1, 2, 3] as StepNr[]).map((n) => {
+          const skipped = !steps.includes(n);
+          const current = n === step;
+          const done = !current && !skipped && n < step;
+          // Vooruit springen mag alleen als alle stappen ervoor in orde zijn.
+          const reachable = !skipped && (n < step || steps.filter((s) => s < n).every(ready));
+          return (
+            <li key={n}>
+              <button
+                type="button"
+                aria-current={current ? "step" : undefined}
+                disabled={!reachable || current}
+                title={skipped ? t.skipped : undefined}
+                onClick={() => onGo(n)}
+                className={`flex min-h-[48px] w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition sm:px-3 ${
+                  current ? "bg-krent text-meel shadow-zacht" : "bg-vul text-krent hover:bg-vul-2 disabled:hover:bg-vul"
+                } ${skipped ? "opacity-40" : ""} disabled:cursor-default`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full font-serif text-sm font-bold tabular-nums ${
+                    current ? "bg-meel text-krent" : done ? "bg-kerst-50 text-kerst-ink" : "bg-papier text-krent"
+                  }`}
+                >
+                  {done ? "✓" : n}
+                </span>
+                <span className="min-w-0">
+                  <span className="sr-only">{t.stepOf(n, 3)}: </span>
+                  <span className={`block text-xs font-bold leading-tight sm:text-sm ${skipped ? "line-through" : ""}`}>{titles[n]}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
 
 function StepHead({ n, title, sub, done }: { n: number; title: string; sub: ReactNode; done: boolean }) {
   const t = useT();
@@ -724,6 +782,8 @@ export function BusinessOrderPage() {
   const [done, setDone] = useState<Done | null>(null);
   const [website, setWebsite] = useState("");
   const [summaryVisible, setSummaryVisible] = useState(false);
+  const [step, setStep] = useState<StepNr>(1);
+  const [colleagues, setColleagues] = useState("");
   const summaryRef = useRef<HTMLDivElement>(null);
 
   // Via een ambassadeur (?via=naam in de link): alvast ingevuld bij "Hoe kwamen jullie bij ons terecht?".
@@ -777,6 +837,7 @@ export function BusinessOrderPage() {
       return;
     }
     setInput((prev) => ({ ...prev, pakket: p.key, ...packageSplit(p.oliebollen) }));
+    setColleagues("");
   }
 
   /** Naar een pakketaantal (het duwtje of terug naar je pakket): de verdeling blijft ongeveer gelijk. */
@@ -798,17 +859,67 @@ export function BusinessOrderPage() {
 
   const pkg = chosenPackage(order, info);
   const rank = packageRank(pkg);
-  const step1 = !errors.pakket && !errors.withRaisins && !errors.withoutRaisins && !errors.donation;
-  const step2 = !(["street", "postalCode", "city", "date"] as BusinessField[]).some((f) => errors[f]);
-  const step3 = !(["company", "contact", "phone", "email", "invoiceEmail"] as BusinessField[]).some((f) => errors[f]);
+  const stepReady = (n: StepNr) => !STEP_FIELDS[n].some((f) => errors[f]);
+  const step1 = stepReady(1);
+  const step2 = stepReady(2);
+  const step3 = stepReady(3);
+  // Alleen een donatie: er valt niets te bezorgen, dus stap 2 slaan we over.
+  const steps: StepNr[] = only ? [1, 3] : [1, 2, 3];
+  const stepTitles: Record<StepNr, string> = { 1: t.step1, 2: t.step2, 3: t.step3 };
+  const nextStep = steps[steps.indexOf(step) + 1] as StepNr | undefined;
+  const prevStep = steps[steps.indexOf(step) - 1] as StepNr | undefined;
+  const stepMissing = STEP_FIELDS[step].filter((f) => errors[f]);
+  // Fouten in beeld: na "Volgende" die van deze stap, na versturen alles wat nog mist.
+  const listed = step === 3 ? missing : stepMissing;
+
+  /** Naar een veld springen, ook als het op een andere stap staat. De waarden blijven gewoon staan. */
+  function focusField(f: BusinessField) {
+    const target = stepOf(f);
+    if (target !== step) setStep(target);
+    window.setTimeout(() => {
+      const el = document.getElementById(`f-${f}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.focus({ preventScroll: true });
+    }, target !== step ? 60 : 0);
+  }
+
+  /** Naar een andere stap: bovenaan de stap beginnen, met de focus op de kop voor wie met het toetsenbord of een schermlezer werkt. */
+  function goTo(n: StepNr) {
+    setShowErrors(false);
+    setError("");
+    setStep(n);
+    window.setTimeout(() => {
+      const head = document.getElementById(`stap-${n}`);
+      document.getElementById("stappen")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      head?.focus({ preventScroll: true });
+    }, 30);
+  }
+
+  /** Volgende: eerst deze stap nakijken. Klopt er iets niet, dan blijf je hier en springen we naar het eerste veld. */
+  function goNext() {
+    if (stepMissing.length) {
+      setShowErrors(true);
+      focusField(stepMissing[0]);
+      return;
+    }
+    if (nextStep) goTo(nextStep);
+  }
+
+  /** Bij het aantal collega's: 2 oliebollen per collega, afgerond op tientallen, en het pakket dat daarbij hoort. */
+  function fromColleagues(raw: string) {
+    const clean = raw.replace(/\D/g, "").slice(0, 5);
+    setColleagues(clean);
+    const n = Number(clean);
+    if (!n) return;
+    const total = Math.min(info.maximum, Math.ceil((n * BUSINESS_PER_COLLEAGUE) / 10) * 10);
+    setInput((prev) => ({ ...prev, pakket: tierFor(total, info)?.key ?? "zelf", ...packageSplit(total) }));
+  }
 
   async function submit() {
     setShowErrors(true);
     setError("");
     if (missing.length) {
-      const el = document.getElementById(`f-${missing[0]}`);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      el?.focus({ preventScroll: true });
+      focusField(missing[0]);
       return;
     }
     setBusy(true);
@@ -842,6 +953,7 @@ export function BusinessOrderPage() {
     setInput({ ...done.input, street: "", postalCode: "", city: "", area: "", date: "", remark: "" });
     setShowErrors(false);
     setDone(null);
+    setStep(2);
     window.setTimeout(() => document.getElementById("stap-2")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
 
@@ -849,8 +961,18 @@ export function BusinessOrderPage() {
     setInput(emptyBusinessInput());
     setSameInvoice(true);
     setShowErrors(false);
+    setColleagues("");
+    setStep(1);
     setDone(null);
   }
+
+  const sendLabel = busy
+    ? t.sending
+    : only
+      ? t.donateN(t.euro(totals.donation), totals.ouderen)
+      : totals.oliebollen >= info.minimum
+        ? t.orderN(t.num(totals.oliebollen), totals.ouderen)
+        : t.placeOrder;
 
   const mailLink = `mailto:${info.email}?subject=${encodeURIComponent(t.mailSubject)}`;
 
@@ -924,17 +1046,29 @@ export function BusinessOrderPage() {
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            void submit();
+            // Enter in een veld: op stap 1 en 2 is dat "Volgende", pas op stap 3 versturen we.
+            if (step === 3) void submit();
+            else goNext();
           }}
         >
+          <div id="stappen" className="grid scroll-mt-6 gap-2">
+            <p className="text-xs font-bold text-oliebol" aria-live="polite">
+              {t.stepOf(steps.indexOf(step) + 1, steps.length)}
+            </p>
+            <Stepper step={step} titles={stepTitles} steps={steps} ready={stepReady} onGo={goTo} />
+          </div>
+
+          {step === 1 ? (
           <section className="grid gap-4" aria-labelledby="stap-1-titel">
-            <div id="stap-1-titel">
-              <StepHead
-                n={1}
-                title={t.step1}
-                sub={t.step1Sub(BUSINESS_PER_COLLEAGUE)}
-                done={step1 && totals.oliebollen > 0}
-              />
+            <div id="stap-1" tabIndex={-1} className="focus:outline-none">
+              <div id="stap-1-titel">
+                <StepHead
+                  n={1}
+                  title={t.step1}
+                  sub={t.step1Sub(BUSINESS_PER_COLLEAGUE)}
+                  done={step1 && totals.oliebollen > 0}
+                />
+              </div>
             </div>
             <div id="f-pakket" tabIndex={-1} role="radiogroup" aria-label={t.packages} className="grid gap-4 pt-1 focus:outline-none md:grid-cols-3 md:gap-3 xl:gap-4">
               {info.packages.map((p, i) => (
@@ -966,6 +1100,29 @@ export function BusinessOrderPage() {
                 {t.composeButton}
               </button>
             </p>
+
+            {/* Liever rekenen met het team: het aantal collega's zet het aantal oliebollen en het pakket dat erbij hoort. */}
+            <div className="grid gap-3 rounded-md bg-vul px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-x-6">
+              <div>
+                <label htmlFor="f-colleagues" className="font-bold text-krent">
+                  {t.colleaguesTitle}
+                </label>
+                <p className="text-sm text-muted">
+                  {Number(colleagues) > 0
+                    ? t.colleaguesHint(BUSINESS_PER_COLLEAGUE, t.num(Math.min(info.maximum, Math.ceil((Number(colleagues) * BUSINESS_PER_COLLEAGUE) / 10) * 10)))
+                    : t.colleaguesEmpty(BUSINESS_PER_COLLEAGUE)}
+                </p>
+              </div>
+              <input
+                id="f-colleagues"
+                inputMode="numeric"
+                aria-label={t.colleagues}
+                placeholder={t.colleagues}
+                value={colleagues}
+                onChange={(e) => fromColleagues(e.target.value)}
+                className={`${field} w-full bg-papier text-center font-serif text-lg font-bold tabular-nums sm:w-44`}
+              />
+            </div>
 
             {input.pakket ? (
               <Card className="grid gap-5">
@@ -1003,14 +1160,34 @@ export function BusinessOrderPage() {
                   <SplitBar met={input.withRaisins} zonder={input.withoutRaisins} />
                   <TierStatus input={order} info={info} onSet={setTotal} />
                 </div>
+                <div className="grid gap-2 border-t border-lijn pt-5">
+                  <p id="f-occasion-label" className={fieldLabel}>
+                    {t.occasionLabel}
+                  </p>
+                  <div
+                    id="f-occasion"
+                    tabIndex={-1}
+                    role="radiogroup"
+                    aria-labelledby="f-occasion-label"
+                    aria-invalid={shown.occasion ? true : undefined}
+                    className="grid gap-2 focus:outline-none sm:grid-cols-3"
+                  >
+                    {(["borrel", "event", "relatiegeschenk"] as const).map((o) => (
+                      <Choice key={o} active={input.occasion === o} onClick={() => update("occasion", o)} title={t.occasion[o]} sub={t.occasionSub[o]} />
+                    ))}
+                  </div>
+                  {shown.occasion ? <p className="text-xs font-bold text-feest-ink">! {shown.occasion}</p> : null}
+                </div>
               </Card>
             ) : null}
 
             {/* Doneren staat altijd in beeld, ook voor wie geen oliebollen bestelt. */}
             <DonationBlock value={input.donation} info={info} onChange={(n) => update("donation", n)} error={shown.donation} />
           </section>
+          ) : null}
 
-          <div id="stap-2" className="scroll-mt-6">
+          {step === 2 ? (
+          <div id="stap-2" tabIndex={-1} className="scroll-mt-6 focus:outline-none">
             <Step n={2} title={t.step2} sub={only ? t.step2Donation : t.step2Sub} done={only || (step2 && !!input.date)}>
               {only ? null : (
               <>
@@ -1090,7 +1267,10 @@ export function BusinessOrderPage() {
               )}
             </Step>
           </div>
+          ) : null}
 
+          {step === 3 ? (
+          <div id="stap-3" tabIndex={-1} className="scroll-mt-6 focus:outline-none">
           <Step n={3} title={t.step3} sub={t.step3Sub} done={step3}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field id="f-company" label={t.company} error={shown.company}>
@@ -1184,6 +1364,28 @@ export function BusinessOrderPage() {
               {t.privacy}
             </p>
           </Step>
+          </div>
+          ) : null}
+
+          {/* Vorige en Volgende onder elke stap; op de laatste stap wordt Volgende de verstuurknop. */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {prevStep ? (
+              <button type="button" className={`${secondaryButton} min-h-[48px]`} onClick={() => goTo(prevStep)}>
+                <span aria-hidden="true">←</span> {t.back}
+              </button>
+            ) : (
+              <span />
+            )}
+            {nextStep ? (
+              <button type="submit" className={`${primaryButton} min-h-[48px]`}>
+                {t.nextTo(stepTitles[nextStep])} <span aria-hidden="true">→</span>
+              </button>
+            ) : (
+              <button type="submit" className={`${primaryButton} min-h-[48px]`} disabled={busy}>
+                {sendLabel}
+              </button>
+            )}
+          </div>
         </form>
 
         <aside ref={summaryRef} id="overzicht" className="grid scroll-mt-6 gap-4 lg:sticky lg:top-6">
@@ -1207,10 +1409,10 @@ export function BusinessOrderPage() {
               )}
             </div>
             {error ? <Notice tone="error">{error}</Notice> : null}
-            {showErrors && missing.length ? (
+            {showErrors && listed.length ? (
               <Notice tone="warning">
-                {t.missing(missing.length)}
-                {missing.map((f, i) => (
+                {step === 3 ? t.missing(listed.length) : t.stepMissing(listed.length)}
+                {listed.map((f, i) => (
                   <span key={f}>
                     {i ? ", " : ""}
                     <a
@@ -1218,8 +1420,7 @@ export function BusinessOrderPage() {
                       href={`#f-${f}`}
                       onClick={(e) => {
                         e.preventDefault();
-                        document.getElementById(`f-${f}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                        document.getElementById(`f-${f}`)?.focus({ preventScroll: true });
+                        focusField(f);
                       }}
                     >
                       {t.fields[f]}
@@ -1229,14 +1430,13 @@ export function BusinessOrderPage() {
                 .
               </Notice>
             ) : null}
-            <button type="button" className={`${primaryButton} min-h-[48px] w-full text-[15px]`} disabled={busy} onClick={() => void submit()}>
-              {busy
-                ? t.sending
-                : only
-                  ? t.donateN(t.euro(totals.donation), totals.ouderen)
-                  : totals.oliebollen >= info.minimum
-                    ? t.orderN(t.num(totals.oliebollen), totals.ouderen)
-                    : t.placeOrder}
+            <button
+              type="button"
+              className={`${primaryButton} min-h-[48px] w-full text-[15px]`}
+              disabled={busy}
+              onClick={() => (nextStep ? goNext() : void submit())}
+            >
+              {nextStep ? t.nextTo(stepTitles[nextStep]) : sendLabel}
             </button>
             <p className="text-center text-xs leading-relaxed text-muted">
               {t.payLater}

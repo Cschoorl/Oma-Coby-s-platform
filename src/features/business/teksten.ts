@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessPackage, BusinessPackageKey, BusinessSource } from "../../types/business";
+import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessPackage, BusinessOccasion, BusinessPackageKey, BusinessSource } from "../../types/business";
 import { BUSINESS_DELIVERY_WINDOW } from "../../config";
 import { nextTier, packageCopy, validationNl, type BusinessField, type ValidationText } from "./business";
 
@@ -94,6 +94,13 @@ const nl = {
 
   switchLabel: "Taal",
   step: (n: number) => `Stap ${n}: `,
+  steps: "Stappen",
+  stepOf: (n: number, total: number) => `Stap ${n} van ${total}`,
+  next: "Volgende",
+  nextTo: (title: string) => `Volgende: ${title.toLowerCase()}`,
+  back: "Vorige",
+  skipped: "niet nodig bij alleen een donatie",
+  stepMissing: (n: number) => `Nog ${n === 1 ? "één ding" : `${n} dingen`} invullen in deze stap: `,
   optional: "(optioneel)",
   less10: "10 minder",
   more10: "10 meer",
@@ -124,8 +131,8 @@ const nl = {
   seniorOnFloor: "oudere op de dansvloer",
 
   // Stap 1
-  step1: "Hoeveel ouderen laat je dansen?",
-  step1Sub: (perColleague: number) => `Kies een pakket. Reken ${perColleague} oliebollen per collega. Gratis poedersuiker erbij.`,
+  step1: "Jullie bestelling",
+  step1Sub: (perColleague: number) => `Kies een pakket of reken met je collega's (${perColleague} oliebollen per collega). Gratis poedersuiker erbij.`,
   packages: "Pakket",
   tip: "Tip van Oma",
   cardAria: (name: string, range: string, ouderen: number, price: string) => `${name}: ${range}, vanaf ${ouderen} ouderen op de dansvloer, vanaf ${price} excl. btw`,
@@ -150,6 +157,13 @@ const nl = {
   chosen: "✓ Gekozen",
   choose: (name: string) => `Kies ${name}`,
   otherAmount: "Ander aantal?",
+  colleaguesTitle: "Of reken met het aantal collega's",
+  colleagues: "Aantal collega's",
+  colleaguesHint: (per: number, n: string) => `${per} oliebollen per collega: dat zijn er ${n}.`,
+  colleaguesEmpty: (per: number) => `We rekenen ${per} oliebollen per collega en ronden af op tientallen.`,
+  occasionLabel: "Waarvoor is het?",
+  occasion: { borrel: "Borrel", event: "Event", relatiegeschenk: "Relatiegeschenk" } as Record<Exclude<BusinessOccasion, "">, string>,
+  occasionSub: { borrel: "Met het team of de afdeling", event: "Klanten, open dag of feest", relatiegeschenk: "Om weg te geven" } as Record<Exclude<BusinessOccasion, "">, string>,
   composeButton: "Stel zelf samen",
   splitTitle: "Met of zonder krenten?",
   composeTitle: "Stel zelf samen",
@@ -181,7 +195,7 @@ const nl = {
   adoptAria: (n: string, ouderen: number, price: string) => `Adopteer een muziekmiddag: ${n} oliebollen, zo'n ${ouderen} ouderen, ${price} excl. btw`,
 
   // Stap 2
-  step2: "Waar en wanneer bezorgen we?",
+  step2: "Waar en wanneer",
   step2Sub: "Alle doordeweekse dagen in december en de eerste week van januari.",
   step2Donation: "Alleen een donatie: er valt niets te bezorgen. Ga door naar je gegevens.",
   street: "Straat en huisnummer",
@@ -210,7 +224,7 @@ const nl = {
   moreAddressesText: "Bestel per adres. Na het versturen voeg je met één klik het volgende toe.",
 
   // Stap 3
-  step3: "Je gegevens",
+  step3: "Gegevens en factuur",
   step3Sub: "Voor de bezorger en de factuur.",
   company: "Naam onderneming",
   contact: "Contactpersoon",
@@ -282,6 +296,7 @@ const nl = {
     pakket: "pakket",
     withRaisins: "aantal oliebollen",
     withoutRaisins: "aantal zonder krenten",
+    occasion: "waarvoor het is",
     donation: "donatie",
     flyers: "flyers",
     wallOfFame: "wall of fame",
@@ -354,6 +369,13 @@ const en: Teksten = {
 
   switchLabel: "Language",
   step: (n) => `Step ${n}: `,
+  steps: "Steps",
+  stepOf: (n, total) => `Step ${n} of ${total}`,
+  next: "Next",
+  nextTo: (title) => `Next: ${title.toLowerCase()}`,
+  back: "Back",
+  skipped: "not needed for a donation only",
+  stepMissing: (n) => (n === 1 ? "One thing left to fill in on this step: " : `${n} things left to fill in on this step: `),
   optional: "(optional)",
   less10: "10 fewer",
   more10: "10 more",
@@ -382,8 +404,8 @@ const en: Teksten = {
   tenIsOne: "10 oliebollen is 1 senior",
   seniorOnFloor: "senior on the dance floor",
 
-  step1: "How many seniors will you get dancing?",
-  step1Sub: (perColleague) => `Pick a package. Count on ${perColleague} oliebollen per colleague. Free powdered sugar included.`,
+  step1: "Your order",
+  step1Sub: (perColleague) => `Pick a package or count by colleagues (${perColleague} oliebollen each). Free powdered sugar included.`,
   packages: "Package",
   tip: "Oma's tip",
   cardAria: (name, range, ouderen, price) => `${name}: ${range}, from ${ouderen} seniors on the dance floor, from ${price} excl. VAT`,
@@ -407,6 +429,13 @@ const en: Teksten = {
   chosen: "✓ Chosen",
   choose: (name) => `Choose ${name}`,
   otherAmount: "A different number?",
+  colleaguesTitle: "Or count by colleagues",
+  colleagues: "Number of colleagues",
+  colleaguesHint: (per, n) => `${per} oliebollen per colleague: that makes ${n}.`,
+  colleaguesEmpty: (per) => `We count ${per} oliebollen per colleague, rounded up to tens.`,
+  occasionLabel: "What is it for?",
+  occasion: { borrel: "Drinks", event: "Event", relatiegeschenk: "Business gift" },
+  occasionSub: { borrel: "With the team or department", event: "Clients, open day or party", relatiegeschenk: "To give away" },
   composeButton: "Build your own",
   splitTitle: "With or without raisins?",
   composeTitle: "Build your own",
@@ -437,7 +466,7 @@ const en: Teksten = {
   adoptBack: (n, name) => `A ${name.charAt(0).toLowerCase() + name.slice(1)} is exactly ${n} oliebollen. Set the number back to adopt it.`,
   adoptAria: (n, ouderen, price) => `Adopt a music afternoon: ${n} oliebollen, about ${ouderen} seniors, ${price} excl. VAT`,
 
-  step2: "Where and when do we deliver?",
+  step2: "Where and when",
   step2Sub: "Every weekday in December and the first week of January.",
   step2Donation: "Just a donation: nothing to deliver. Go on to your details.",
   street: "Street and number",
@@ -465,7 +494,7 @@ const en: Teksten = {
   moreAddresses: "Several addresses?",
   moreAddressesText: "Order per address. Once sent, add the next one in one click.",
 
-  step3: "Your details",
+  step3: "Details and invoice",
   step3Sub: "For the courier and the invoice.",
   company: "Company name",
   contact: "Contact person",
@@ -536,6 +565,7 @@ const en: Teksten = {
     pakket: "package",
     withRaisins: "number of oliebollen",
     withoutRaisins: "number without raisins",
+    occasion: "what it is for",
     donation: "donation",
     flyers: "flyers",
     wallOfFame: "wall of fame",
@@ -566,6 +596,7 @@ const en: Teksten = {
     pakket: "Pick a package, build your own, or donate.",
     tens: "Choose a number in tens.",
     donation: "Donate € 2.50 or a multiple of € 25.",
+    occasion: "Choose what the oliebollen are for.",
     min: (n) => `At least ${n} oliebollen in total.`,
     max: (n) => `At most ${n.toLocaleString("en-GB")} oliebollen in total. More? Email us and we'll plan it together.`,
     street: "Fill in street and number.",

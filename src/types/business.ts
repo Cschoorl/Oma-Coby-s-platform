@@ -33,6 +33,9 @@ export interface BusinessPackage {
   ouderen?: number;
 }
 
+/** Waarvoor zijn de oliebollen? "" = nog niet gekozen (en bij alleen een donatie). */
+export type BusinessOccasion = "" | "borrel" | "event" | "relatiegeschenk";
+
 /** "Hoe kwamen jullie bij ons terecht?" */
 export type BusinessSource = "" | "ambassadeur" | "collega" | "klant" | "linkedin" | "instagram" | "pers" | "google" | "anders";
 
@@ -75,6 +78,8 @@ export interface BusinessOrderInput {
   pakket: BusinessPackageChoice;
   withRaisins: number;
   withoutRaisins: number;
+  /** Waarvoor het is: borrel, event of relatiegeschenk. Verplicht als je oliebollen bestelt. */
+  occasion: BusinessOccasion;
   /** Gedoneerde oliebollen: 1 (€ 2,50) of een tiental (€ 25 = 1 oudere). Kan ook zonder te bestellen. */
   donation: number;
   /** Niet meer gevraagd: er gaat altijd een kaartje met het verhaal mee. Alleen nog in oude aanvragen. */

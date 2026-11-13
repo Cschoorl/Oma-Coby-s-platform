@@ -213,7 +213,7 @@ const TABS = {
     'factuur_email', 'factuuradres', 'referentie', 'met_krenten', 'zonder_krenten', 'donatie_oliebollen', 'flyers', 'afhalen_bezorgen',
     'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op',
-    'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link']],
+    'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link', 'aanleiding']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
@@ -1641,6 +1641,9 @@ const BUSINESS_TEXT_COLUMNS = ['ordernummer', 'telefoon', 'postcode', 'leverdatu
 /** In de kolom afhalen_bezorgen bij een donatie zonder oliebollen. */
 const BUSINESS_DONATION_ONLY = 'Alleen donatie';
 /** "Hoe kwamen jullie bij ons terecht?": sleutel → wat er in de Sheet komt. Zelfde als sourceLabel in business.ts. */
+// Waarvoor de oliebollen zijn (stap 1 van het formulier). Oude pagina's sturen niets mee: dan blijft het leeg.
+const BUSINESS_OCCASIONS = { borrel: 'Borrel', event: 'Event', relatiegeschenk: 'Relatiegeschenk' };
+
 const BUSINESS_SOURCES = {
   ambassadeur: 'Via een ambassadeur', collega: 'Via een collega of kennis', klant: 'Vorig jaar al klant', linkedin: 'LinkedIn',
   instagram: 'Instagram', pers: 'Pers of nieuws', google: 'Google', anders: 'Anders'
@@ -1678,7 +1681,8 @@ Object.assign(HANDLERS, {
         bedrag_incl_btw: totals.total, donatie_bedrag: totals.donation, factuurbedrag: totals.invoice, ouderen: totals.ouderen,
         pakket: only ? '' : businessPackage_(input, info).name,
         wall_of_fame: yes(input.wallOfFame), certificaat: yes(input.certificate), naam_certificaat: input.certificateName,
-        linkedin_badge: yes(input.linkedin), herkomst: BUSINESS_SOURCES[input.source] || '', ambassadeur: input.ambassador, via_link: input.via
+        linkedin_badge: yes(input.linkedin), herkomst: BUSINESS_SOURCES[input.source] || '', ambassadeur: input.ambassador, via_link: input.via,
+        aanleiding: BUSINESS_OCCASIONS[input.occasion] || ''
       });
       bump_();
       return id;
@@ -1819,7 +1823,8 @@ function businessInput_(body, info) {
     company: text(body.company), contact: text(body.contact), phone: text(body.phone, 30), email: text(body.email),
     invoiceEmail: text(body.invoiceEmail), invoiceAddress: text(body.invoiceAddress, 400), reference: text(body.reference),
     remark: text(body.remark, 1000),
-    source: BUSINESS_SOURCES[body.source] ? body.source : '', via: text(body.via, 100)
+    source: BUSINESS_SOURCES[body.source] ? body.source : '', via: text(body.via, 100),
+    occasion: !only && BUSINESS_OCCASIONS[body.occasion] ? body.occasion : ''
   };
   input.ambassador = input.source === 'ambassadeur' ? text(body.ambassador, 100) : '';
   // Delivery costs follow from the address; what the browser chose does not count.
@@ -1988,6 +1993,7 @@ function readBusiness_() {
       wallOfFame: truthy_(r.wall_of_fame), certificate: truthy_(r.certificaat), certificateName: String(r.naam_certificaat || ''),
       linkedin: truthy_(r.linkedin_badge), source: Object.keys(BUSINESS_SOURCES).filter(function (k) { return BUSINESS_SOURCES[k] === String(r.herkomst || ''); })[0] || '',
       ambassador: String(r.ambassadeur || ''), via: String(r.via_link || ''),
+      occasion: key(BUSINESS_OCCASIONS, String(r.aanleiding || '')),
       totals: {
         oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, subtotal: subtotal, vat: num_(r.btw), total: total,
         donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen)

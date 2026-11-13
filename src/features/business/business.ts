@@ -127,6 +127,7 @@ export function emptyBusinessInput(): BusinessOrderInput {
     pakket: "",
     withRaisins: 0,
     withoutRaisins: 0,
+    occasion: "",
     donation: 0,
     flyers: false,
     fulfilment: "bezorgen",
@@ -266,6 +267,7 @@ export const validationNl = {
   pakket: "Kies een pakket, stel zelf je aantal samen, of doneer.",
   tens: "Kies een aantal in tientallen.",
   donation: "Doneer € 2,50 of een veelvoud van € 25.",
+  occasion: "Kies waarvoor de oliebollen zijn.",
   min: (n: number) => `Samen minimaal ${n} oliebollen.`,
   max: (n: number) => `Samen hooguit ${n.toLocaleString("nl-NL")} oliebollen. Meer? Mail ons, dan plannen we het samen.`,
   street: "Vul straat en huisnummer in.",
@@ -295,6 +297,7 @@ export function validateBusiness(input: BusinessOrderInput, info: BusinessInfo, 
   if (total > 0) {
     if (!e.withRaisins && !e.withoutRaisins && total < info.minimum) e.withRaisins = text.min(info.minimum);
     if (!e.withRaisins && !e.withoutRaisins && total > info.maximum) e.withRaisins = text.max(info.maximum);
+    if (!input.occasion) e.occasion = text.occasion;
     // Afhalen kan niet: we bezorgen altijd.
     if (!input.street.trim()) e.street = text.street;
     if (!POSTCODE.test(input.postalCode.trim())) e.postalCode = text.postalCode;

@@ -17,6 +17,14 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 
 Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon onderaan, met het totaal in een balk).
 
+> **Drie stappen (13 november 2026).** Het formulier toont één stap tegelijk, met bovenaan de stappenbalk
+> **1 Jullie bestelling · 2 Waar en wanneer · 3 Gegevens en factuur** en onderaan **Vorige** en **Volgende**.
+> *Volgende* kijkt alleen de velden van die stap na (`STEP_FIELDS`); klopt er iets niet, dan blijf je staan en springt de
+> pagina naar het eerste veld. Terug gaan houdt alles wat je invulde. Stap 1 vraagt naast pakket en met/zonder krenten
+> ook **Waarvoor is het?** (Borrel, Event, Relatiegeschenk; verplicht als je oliebollen bestelt, kolom `aanleiding`) en
+> kan rekenen met het **aantal collega's** (2 oliebollen per collega, afgerond op tientallen). Alleen een donatie slaat
+> stap 2 over. Enter in een veld is *Volgende*; pas op stap 3 wordt het versturen.
+
 1. **Hoeveel ouderen laat je dansen?** Drie pakketkaarten, de ladder uit het bouwplan: **Brons** (50 tot 149 oliebollen),
    **Zilver** (150 tot 499, "Tip van Oma") en **Goud** (500 of meer, de donkere kaart). Elke kaart is zo kaal mogelijk,
    zoals Coolblue zijn keuzes toont: naam en bereik, het aantal ouderen met de oudjes, drie korte extra's met een vinkje

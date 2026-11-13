@@ -9,7 +9,10 @@ export type BusinessFulfilment = "bezorgen" | "afhalen" | "donatie";
 /** Binnen Amsterdam/Aalsmeer (fietsafstand) of daarbuiten: dat bepaalt de bezorgkosten. */
 export type BusinessArea = "regio" | "buiten";
 
-/** Bezorgmoment: tussen 9:00 en 12:30 (regulier), of eerder tegen een toeslag. */
+/**
+ * Bezorgmoment: standaard tussen 9:00 en 15:00 (regulier, zonder toeslag), of op aanvraag vóór 10:00 tegen een toeslag.
+ * "voor9" bieden we niet meer aan; het staat alleen nog in oude aanvragen.
+ */
 export type BusinessMoment = "regulier" | "voor10" | "voor9";
 
 export type BusinessStatus = "nieuw" | "bevestigd" | "afgewezen";
@@ -53,8 +56,6 @@ export interface BusinessInfo {
   /** Postcodes met het lage bezorgtarief, bijv. "1000-1109, 1430-1433" (Amsterdam, Aalsmeer en Kudelstaart). */
   regionPostcodes: string;
   surcharges: Record<BusinessMoment, number>;
-  /** Euro per gedoneerde oliebol (incl. alles: een donatie heeft geen btw). */
-  donationPrice: number;
   /** Bestellen kan tot en met zo veel werkdagen vóór de leverdag (3: maandag bestellen, donderdag bezorgd). */
   leadWorkdays: number;
   /** Daarna is zakelijk bestellen dicht voor dit seizoen: "2026-12-28T12:00". */
@@ -80,7 +81,7 @@ export interface BusinessOrderInput {
   withoutRaisins: number;
   /** Waarvoor het is: borrel, event of relatiegeschenk. Verplicht als je oliebollen bestelt. */
   occasion: BusinessOccasion;
-  /** Gedoneerde oliebollen: 1 (€ 2,50) of een tiental (€ 25 = 1 oudere). Kan ook zonder te bestellen. */
+  /** Bijdrage aan de Partypot in hele euro's (geen btw). Kan ook zonder oliebollen te bestellen; telt niet mee in het aantal ouderen. */
   donation: number;
   /** Niet meer gevraagd: er gaat altijd een kaartje met het verhaal mee. Alleen nog in oude aanvragen. */
   flyers: boolean;
@@ -125,9 +126,9 @@ export interface BusinessTotals {
   vat: number;
   total: number;
   donation: number;
-  /** Totaal incl. btw plus de donatie: wat er op de factuur komt. */
+  /** Totaal incl. btw plus de bijdrage aan de Partypot: wat er op de factuur komt. */
   invoice: number;
-  /** Per 10 oliebollen (besteld of gedoneerd) één oudere een middag op de dansvloer; een muziekmiddag heeft een eigen aantal. */
+  /** Per 10 bestelde oliebollen één oudere een middag op de dansvloer; Bandpartner telt zijn eigen aantal gasten (60 of 100). Een donatie telt niet mee. */
   ouderen: number;
 }
 
@@ -141,4 +142,10 @@ export interface BusinessOrder extends BusinessOrderInput {
   handledBy: string;
   handledAt: string;
   totals: BusinessTotals;
+}
+
+/** De stand van de Partypot: bijdragen uit het zakelijke formulier en uit Shopify samen, in euro's. */
+export interface Partypot {
+  raised: number;
+  goal: number;
 }

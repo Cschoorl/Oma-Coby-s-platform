@@ -23,8 +23,8 @@ import type {
 } from "../types/dashboard";
 import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
-import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus } from "../types/business";
-import { BUSINESS_DEFAULTS } from "../config";
+import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus, Partypot } from "../types/business";
+import { BUSINESS_DEFAULTS, PARTYPOT_GOAL } from "../config";
 import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { loadOrders } from "./ordersSource";
@@ -234,6 +234,8 @@ export interface Backend {
   getBusinessInfo(): Promise<BusinessInfo>;
   /** Public: saves the request, mails a copy and returns the order number ("Z26-0001"). */
   submitBusinessOrder(input: BusinessOrderInput & { website?: string }): Promise<{ id: string; warning?: string }>;
+  /** Public: the Partypot so far, form and Shopify contributions together, and its goal (euros). */
+  getPartypot(): Promise<Partypot>;
   setBusinessStatus(session: Session, id: string, status: BusinessStatus, reason: string): Promise<void>;
 }
 
@@ -407,6 +409,9 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async submitBusinessOrder(input) {
       return call<{ id: string; warning?: string }>("submitBusinessOrder", { ...input });
+    },
+    async getPartypot() {
+      return call<Partypot>("partypot", {});
     },
     async setBusinessStatus(session, id, status, reason) {
       await call("setBusinessStatus", withSession(session, { id, status, reason }));
@@ -1187,6 +1192,12 @@ function createDemoBackend(notice?: string): Backend {
     async getBusinessInfo() {
       await delay(150);
       return BUSINESS_DEFAULTS;
+    },
+    async getPartypot() {
+      await delay(150);
+      // Demo: a made-up Shopify total plus what was given through the form in this browser.
+      const form = readStore().business.filter((b) => b.status !== "afgewezen").reduce((sum, b) => sum + (b.totals.donation || 0), 0);
+      return { raised: 1250 + form, goal: PARTYPOT_GOAL };
     },
     async submitBusinessOrder(input) {
       await delay(500);

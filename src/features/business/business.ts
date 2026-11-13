@@ -11,7 +11,7 @@ export const areaLabel: Record<BusinessArea, string> = { regio: "Amsterdam of Aa
 
 export const momentLabel: Record<BusinessMoment, string> = {
   regulier: `Tussen ${BUSINESS_DELIVERY_WINDOW.replace("–", " en ")}`,
-  voor10: "Vóór 10:00",
+  voor10: "Vóór 10:00 (op aanvraag)",
   voor9: "Vóór 9:00"
 };
 
@@ -31,12 +31,12 @@ export const packageCopy: Record<BusinessPackageKey, { perks: string[] }> = {
   goud: {
     perks: ["Uitnodiging voor een muziekmiddag", "Foto of kort filmpje van de middag die jullie mede mogelijk hebben gemaakt", "Ereplek op de wall of fame", "Bezorging door heel Nederland"]
   },
-  // Een muziekmiddag adopteren: alles van Feestpartner, plus de middag zelf.
+  // Bandpartner: alles van Feestpartner, plus wat alleen een eigen middag heeft.
   middag60: {
-    perks: ["Een hele muziekmiddag met livemuziek", "Jullie naam op de middag", "Jullie kiezen het zorgcentrum of buurthuis"]
+    perks: ["Jullie naam op de middag", "Jullie kiezen zelf de plek: een zorgcentrum of buurthuis", "Collega's mogen komen (aantal in overleg)", "Een foto of filmpje van de middag"]
   },
   middag100: {
-    perks: ["Een hele muziekmiddag met livemuziek", "Jullie naam op de middag", "Jullie kiezen het zorgcentrum of buurthuis"]
+    perks: ["Jullie naam op de middag", "Jullie kiezen zelf de plek: een zorgcentrum of buurthuis", "Collega's mogen komen (aantal in overleg)", "Een foto of filmpje van de middag"]
   }
 };
 
@@ -82,21 +82,20 @@ export function chosenPackage(input: Pick<BusinessOrderInput, "withRaisins" | "w
   return adoptionFor(total, info) ?? tierFor(total, info);
 }
 
-/** Ouderen: 1 per 10 oliebollen, besteld en gedoneerd samen. Een muziekmiddag heeft zijn eigen aantal, plus wat er gedoneerd is. */
-export function ouderenFor(oliebollen: number, donation: number, info: BusinessInfo): number {
-  const adopt = adoptionFor(oliebollen, info);
-  return adopt?.ouderen ? adopt.ouderen + Math.floor(Math.max(0, donation) / 10) : Math.floor((oliebollen + Math.max(0, donation)) / 10);
+/**
+ * Ouderen: 1 per 10 bestelde oliebollen, naar beneden afgerond. Bandpartner telt zijn eigen aantal gasten (60 of 100),
+ * niet 250 of 310. Een bijdrage aan de Partypot telt hier niet mee; die staat er los onder.
+ */
+export function ouderenFor(oliebollen: number, info: BusinessInfo): number {
+  return adoptionFor(oliebollen, info)?.ouderen ?? Math.floor(oliebollen / 10);
 }
 
-/** Doneren gaat per 1 oliebol (€ 2,50), dan per 10 (€ 25, één oudere). */
-export function donationStep(n: number, up: boolean): number {
-  if (up) return n <= 0 ? 1 : n < 10 ? 10 : n + 10;
-  return n <= 1 ? 0 : n <= 10 ? 1 : n - 10;
-}
+/** Hoogste bijdrage aan de Partypot via het formulier; meer stemmen we per mail af. */
+export const PARTYPOT_MAX = 100000;
 
-/** 0, 1 of een tiental. */
+/** Een bijdrage aan de Partypot: hele euro's, van 0 tot PARTYPOT_MAX. */
 export function validDonation(n: number): boolean {
-  return n === 0 || n === 1 || (n > 0 && n % 10 === 0);
+  return Number.isInteger(n) && n >= 0 && n <= PARTYPOT_MAX;
 }
 
 /** Het volgende pakket boven dit aantal, of niets bij Goud. */
@@ -171,8 +170,8 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const subtotal = cents(bollen + delivery + surcharge);
   const vat = cents(subtotal * info.vatRate);
   const total = cents(subtotal + vat);
-  const donation = cents(Math.max(0, input.donation) * info.donationPrice);
-  return { oliebollen, bollen, delivery, surcharge, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, input.donation, info) };
+  const donation = cents(Math.max(0, input.donation));
+  return { oliebollen, bollen, delivery, surcharge, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info) };
 }
 
 /** "2026-12-07" ± dagen, zonder tijdzonegedoe. */
@@ -266,7 +265,7 @@ export type BusinessField = keyof BusinessOrderInput;
 export const validationNl = {
   pakket: "Kies een pakket, stel zelf je aantal samen, of doneer.",
   tens: "Kies een aantal in tientallen.",
-  donation: "Doneer € 2,50 of een veelvoud van € 25.",
+  donation: "Vul een bedrag in hele euro's in.",
   occasion: "Kies waarvoor de oliebollen zijn.",
   min: (n: number) => `Samen minimaal ${n} oliebollen.`,
   max: (n: number) => `Samen hooguit ${n.toLocaleString("nl-NL")} oliebollen. Meer? Mail ons, dan plannen we het samen.`,

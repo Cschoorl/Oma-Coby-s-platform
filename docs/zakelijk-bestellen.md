@@ -17,6 +17,27 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 
 Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon onderaan, met het totaal in een balk).
 
+> **Impactverhaal 2026 (besluiten 12 november).** Wel zeggen: "Met 10 oliebollen laat je één oudere rock'n'rollen",
+> "de opbrengst" gaat naar "speciaal georganiseerde muziekmiddagen, zoals Gouwe Ouwe", "de 100-jarige Oma Coby",
+> feestelijk (dansen, herinneringen). Niet: "de helft van elke bol", "€1 per bol", bedragen per middag of percentages,
+> "vaak alleen" of medelijden. Seizoensdoel 40.000 oliebollen = 4.000 ouderen (`GOAL_OLIEBOLLEN`; nog checken bij Gouwe Ouwe).
+> - **Intro** opent met wat er gebeurt (de kantine wordt de dancing van vroeger), onder 10 = 1 staat **Hoe werkt dat?**
+> - **Bandpartner** (was: Adopteer een hele muziekmiddag): eigen blok onder de pakketten, kop *Of realiseer jullie eigen
+>   muziekmiddag*, "Een eigen middag voor 60/100 gasten", zonder poppetjes; voorop naam op de middag, zelf de plek kiezen,
+>   collega's mogen komen, foto of filmpje; de bollen als bijzaak ("inclusief 2.500 oliebollen"); knop *Kies deze middag*.
+> - **De Partypot** (was: Doneren): € 10 · € 25 · € 50 · € 100 of een eigen bedrag in hele euro's, ook zonder oliebollen.
+>   Telt niet in ouderen. Een balkje toont de stand ("€ 1.250 van € 3.000"): formulier en Shopify (producten "Doneer …")
+>   samen, via `partypot` in het Apps Script. Het veld `donation` is nu in euro's (kolom `donatie_bedrag`).
+> - **Telregel** overal (overzicht, bedankpagina, mail, certificaat, LinkedIn): ouderen = oliebollen ÷ 10, Bandpartner
+>   60 of 100; een bijdrage staat er los onder ("+ € 25 in de Partypot") en heet "bijdrage aan de Partypot".
+> - **Bezorgtijd** (besluit 11 november): standaard tussen 9:00 en 15:00 zonder toeslag, al gekozen. Dichtgeklapt
+>   *Andere tijd nodig?* met alleen vóór 10:00 (+ € 15 excl. btw) als aanvraag: "We laten binnen 2 werkdagen weten of het
+>   lukt." De € 15 staat in het totaal met "op aanvraag"; lukt het niet, dan haalt beheer hem eraf. Vóór 9:00 en
+>   "tussen 9:00 en 12:30" vervallen. Nog te doen uit dat besluit: verplicht vinkje "iemand aanwezig vanaf 9:00", tekst
+>   over vers en opwarmen, "Waar moeten we zijn?" en de contactpersoon op het bezorgadres.
+> - **Certificaat en LinkedIn-tekst** maakt beheer in de lade van een aanvraag op **Zakelijk** (`impact.ts`): het
+>   certificaat opent als A4 om te printen of als PDF te bewaren; de LinkedIn-tekst opent met de slogan.
+
 > **Drie stappen (13 november 2026).** Het formulier toont één stap tegelijk, met bovenaan de stappenbalk
 > **1 Jullie bestelling · 2 Waar en wanneer · 3 Gegevens en factuur** en onderaan **Vorige** en **Volgende**.
 > *Volgende* kijkt alleen de velden van die stap na (`STEP_FIELDS`); klopt er iets niet, dan blijf je staan en springt de

@@ -7,6 +7,9 @@ import { Drawer } from "../../components/Drawer";
 import { BUSINESS_DEFAULTS, BUSINESS_LARGE } from "../../config";
 import { appLink } from "../../lib/router";
 import { areaLabel, longDay, momentLabel, pakketName, sourceLabel } from "./business";
+import { impactOf, linkedinText, openCertificate } from "./impact";
+
+const occasionLabel = { borrel: "Borrel", event: "Event", relatiegeschenk: "Relatiegeschenk" } as const;
 
 /*
  * Beheer: de zakelijke aanvragen van het bestelformulier. Elke aanvraag nakijken en bevestigen
@@ -29,11 +32,12 @@ function daysUntil(date: string): number {
 /** Wat beheer moet weten voordat ze bevestigen. Altijd met woord, nooit alleen kleur. */
 function flags(b: BusinessOrder): Array<[BadgeTone, string]> {
   const out: Array<[BadgeTone, string]> = [];
-  if (b.fulfilment === "donatie") return [["zacht", "Alleen donatie"]];
+  if (b.fulfilment === "donatie") return [["zacht", "Alleen Partypot"]];
   const days = daysUntil(b.date);
   if (b.status === "nieuw" && days <= 3) out.push(["probleem", days <= 0 ? "! Dag is voorbij" : `! Over ${days} ${days === 1 ? "dag" : "dagen"}`]);
   if (b.fulfilment === "afhalen") out.push(["aandacht", "~ Afhalen"]);
   if (b.withRaisins > BUSINESS_LARGE || b.withoutRaisins > BUSINESS_LARGE) out.push(["aandacht", `~ Meer dan ${formatNumber(BUSINESS_LARGE)}`]);
+  if (b.moment === "voor10") out.push(["aandacht", "~ Vóór 10:00 aangevraagd"]);
   if (b.remark) out.push(["zacht", "Opmerking"]);
   return out;
 }
@@ -108,7 +112,7 @@ export function BusinessAdminPage({ state, session, run }: { state: DashboardSta
                       <span className="block font-bold text-krent">{b.date ? longDay(b.date) : "Geen bezorging"}</span>
                       <span className="block tabular-nums text-oliebol">
                         {b.fulfilment === "donatie" ? (
-                          `${formatNumber(b.donation)} oliebollen gedoneerd`
+                          `${formatEuro(b.totals.donation)} in de Partypot`
                         ) : (
                           <>
                             {b.pakket ? `${pakketName(b.pakket)} · ` : ""}
@@ -221,7 +225,8 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
             ["MET krenten", formatNumber(b.withRaisins)],
             ["ZONDER krenten", formatNumber(b.withoutRaisins)],
             ["TOTAAL", <b>{formatNumber(t.oliebollen)} oliebollen</b>],
-            ["Gedoneerd", b.donation ? `${formatNumber(b.donation)} ${b.donation === 1 ? "oliebol" : "oliebollen"} (${formatEuro(t.donation)})` : ""],
+            ["Waarvoor", b.occasion ? occasionLabel[b.occasion] : ""],
+            ["Partypot", t.donation ? `${formatEuro(t.donation)} bijdrage aan de Partypot` : ""],
             // Flyers vragen we niet meer; alleen oude aanvragen hebben ze nog.
             ["Flyers", b.flyers ? "Ja, graag" : ""]
           ]}
@@ -248,7 +253,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
             b.fulfilment === "bezorgen"
               ? [
                   ["Dag", longDay(b.date)],
-                  ["Moment", momentLabel[b.moment]],
+                  ["Moment", b.moment === "voor10" ? <>{momentLabel[b.moment]}<br /><span className="text-xs text-muted">Laat binnen 2 werkdagen weten of het lukt. Lukt het niet? Haal de toeslag eraf.</span></> : momentLabel[b.moment]],
                   ["Adres", <>{b.street}<br />{b.postalCode} {b.city}</>],
                   ["Bezorgkosten", b.area ? areaLabel[b.area] : ""]
                 ]
@@ -288,6 +293,8 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
 
       {b.remark ? <Note>{b.remark}</Note> : null}
 
+      {b.certificate || b.linkedin ? <ImpactBlock order={b} /> : null}
+
       <Block title="Bedragen">
         <dl className="grid gap-1.5 text-sm">
           {(
@@ -313,7 +320,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
           {t.donation ? (
             <>
               <div className="flex justify-between gap-3 text-oliebol">
-                <dt>Extra donatie</dt>
+                <dt>Bijdrage aan de Partypot</dt>
                 <dd className="tabular-nums">{formatEuro(t.donation)}</dd>
               </div>
               <div className="flex justify-between gap-3 font-bold text-krent">
@@ -378,5 +385,31 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
         ) : null}
       </div>
     </Drawer>
+  );
+}
+
+/** Certificaat en LinkedIn-tekst, volgens de telregel: oliebollen ÷ 10, Bandpartner zijn gasten. */
+function ImpactBlock({ order: b }: { order: BusinessOrder }) {
+  const { ouderen, band } = impactOf(b);
+  const post = linkedinText(b);
+  const [blocked, setBlocked] = useState(false);
+  return (
+    <Block title="Certificaat en LinkedIn">
+      <p className="text-sm text-oliebol">
+        {band ? `Een eigen middag voor ${formatNumber(ouderen)} gasten.` : `${formatNumber(ouderen)} ${ouderen === 1 ? "oudere" : "ouderen"} op de dansvloer.`}
+      </p>
+      {b.certificate ? (
+        <button type="button" className={`${secondaryButton} justify-self-start`} onClick={() => setBlocked(!openCertificate(b))}>
+          Impactcertificaat openen
+        </button>
+      ) : null}
+      {blocked ? <Notice tone="warning">Je browser hield het nieuwe tabblad tegen. Sta pop-ups toe voor het platform en probeer het opnieuw.</Notice> : null}
+      {b.linkedin ? (
+        <div className="grid gap-2">
+          <textarea readOnly rows={8} className={`${inputClass} text-sm`} value={post} aria-label="LinkedIn-tekst" />
+          <CopyButton text={post} label="Kopieer LinkedIn-tekst" />
+        </div>
+      ) : null}
+    </Block>
   );
 }

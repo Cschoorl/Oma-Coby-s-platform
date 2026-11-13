@@ -16,7 +16,7 @@ function dayLabel(year: number, month: number, day: number): string {
 }
 
 /** Season days, same pattern as 2025: 15-24 December and 27-31 December. */
-const SEASON_YEAR = 2026;
+export const SEASON_YEAR = 2026;
 const SEASON_DAYS = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31].map((d) => dayLabel(SEASON_YEAR, 12, d));
 
 /*
@@ -103,12 +103,13 @@ export const SIGNUP_HINTS = {
 };
 
 /**
- * Goal of the action (omacobysoliebollenbar.nl): 25.000 oliebollen pay for 2.500 free entries to a Gouwe Ouwe-avond.
+ * Goal of the season (impactverhaal 2026): 40.000 oliebollen = 4.000 ouderen op de dansvloer. Was 25.000;
+ * Gouwe Ouwe still has to confirm 40.000 is feasible.
  * Shown as the goal meter on Tussenstand; every 10 oliebollen is one "oudje".
  */
-export const GOAL_OLIEBOLLEN = 25000;
+export const GOAL_OLIEBOLLEN = 40000;
 export const OLIEBOLLEN_PER_OUDJE = 10;
-export const GOAL_MILESTONES = [5000, 10000, 25000];
+export const GOAL_MILESTONES = [10000, 25000, 40000];
 
 /**
  * How many volunteers are needed per role on each day (per dagdeel for couriers).
@@ -174,9 +175,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   fees: { regio: 10, buiten: 25 },
   // Groot-Amsterdam (10xx en 11xx: ook Diemen en Amstelveen) en Aalsmeer met Kudelstaart (1430–1433).
   regionPostcodes: "1000-1199, 1430-1433",
-  surcharges: { regulier: 0, voor10: 10, voor9: 15 },
-  // € 2,50 per gedoneerde oliebol: € 25 is 10 oliebollen, één oudere.
-  donationPrice: 2.5,
+  // Vóór 10:00 is een aanvraag (besluit 11 november); vóór 9:00 bieden we niet meer aan.
+  surcharges: { regulier: 0, voor10: 15, voor9: 0 },
   // Minimaal 3 werkdagen van tevoren, en uiterlijk maandag 28 december 12:00.
   leadWorkdays: 3,
   closeAt: `${SEASON_YEAR}-12-28T12:00`,
@@ -191,10 +191,10 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
     { key: "zilver", name: "Polonaisepartner", oliebollen: 150 },
     { key: "goud", name: "Feestpartner", oliebollen: 500 }
   ],
-  // Adopteer een hele muziekmiddag: bij precies dit aantal, met livemuziek en jullie naam op de middag.
+  // Bandpartner: een eigen muziekmiddag, bij precies dit aantal oliebollen, voor zo veel gasten.
   adoptions: [
-    { key: "middag60", name: "Muziekmiddag voor 60 ouderen", oliebollen: 2500, ouderen: 60 },
-    { key: "middag100", name: "Muziekmiddag voor 100 ouderen", oliebollen: 3100, ouderen: 100 }
+    { key: "middag60", name: "Bandpartner 60 gasten", oliebollen: 2500, ouderen: 60 },
+    { key: "middag100", name: "Bandpartner 100 gasten", oliebollen: 3100, ouderen: 100 }
   ]
 };
 
@@ -213,8 +213,11 @@ function weekdays(from: string, to: string, skip: string[]): string[] {
 /** Oliebollen per collega als richtlijn bij de pakketten (3 als ze er een mee naar huis nemen). */
 export const BUSINESS_PER_COLLEAGUE = 2;
 
-/** Bezorgen gebeurt tussen deze tijden; de toeslagen zijn voor eerder. */
-export const BUSINESS_DELIVERY_WINDOW = "9:00–12:30";
+/** Standaard bezorgen we tussen deze tijden, zonder toeslag (besluit 11 november). Vóór 10:00 is een aanvraag met toeslag. */
+export const BUSINESS_DELIVERY_WINDOW = "9:00–15:00";
+
+/** Doel van de Partypot als de Sheet niets zegt (Instellingen: partypot_doel). */
+export const PARTYPOT_GOAL = 3000;
 
 /** Boven dit aantal per soort kijkt beheer extra mee (het formulier had "> 1500"). */
 export const BUSINESS_LARGE = 1500;

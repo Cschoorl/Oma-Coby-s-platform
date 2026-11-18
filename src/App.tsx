@@ -59,6 +59,9 @@ const NAV: NavItem[] = [
 /** Pages without login; a logged-in visitor can open them too. */
 const PUBLIC = ["/aanmelden", "/bestellen"];
 
+/** On the zakelijk.… domain only the business order form is reachable; the dashboard stays on the other domains. */
+const ORDER_FORM_ONLY = window.location.hostname.startsWith("zakelijk.");
+
 const HOME: Record<Role, string> = { beheer: "/orders", inpakker: "/inpakken", bezorger: "/bezorger" };
 
 const roleLabel: Record<Role, string> = { beheer: "Beheer", inpakker: "Inpakker", bezorger: "Bezorger" };
@@ -120,6 +123,7 @@ function App() {
   const current = allowed.find((item) => item.path === route.path);
 
   useEffect(() => {
+    if (ORDER_FORM_ONLY) return;
     if (session && !PUBLIC.includes(route.path) && !current) navigate(HOME[session.role]);
   }, [session, route.path, current]);
 
@@ -157,6 +161,7 @@ function App() {
     );
   };
 
+  if (ORDER_FORM_ONLY) return simpleShell(<BusinessOrderPage />, "xl", <LangSwitch />);
   if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
   if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, "xl", <LangSwitch />);
   if (!session) return simpleShell(<LoginPage onLogin={login} />);

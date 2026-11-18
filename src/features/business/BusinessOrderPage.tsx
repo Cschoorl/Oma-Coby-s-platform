@@ -5,6 +5,7 @@ import { Card, Notice, OLIEBOL_SVG, Segmented, Sticker, fieldLabel, ghostButton,
 import { BUSINESS_DEFAULTS, BUSINESS_PER_COLLEAGUE } from "../../config";
 import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
 import heroUrl from "../../assets/mark-en-oma-coby.jpg";
+import { LogoBanner, WaaromMuziek } from "./Voorgangers";
 import { AddressSearch } from "./AddressSearch";
 import {
   areaFor,
@@ -1317,7 +1318,13 @@ export function BusinessOrderPage() {
             <dt className="inline font-bold text-krent">{t.howItWorks}</dt>{" "}
             <dd className="inline text-sm leading-relaxed text-oliebol">{t.howItWorksText}</dd>
           </div>
+          {/* Hoort bij "Hoe werkt dat?": waarom juist muziek, in de woorden van Erik Scherder, uitklapbaar. */}
+          <WaaromMuziek />
         </dl>
+        {/* Over de volle breedte onder de kop: de logo's van wie ons voorging. */}
+        <div className="min-w-0 lg:col-span-2">
+          <LogoBanner />
+        </div>
       </section>
 
       {/* Vanaf 1280px staat het overzicht rechts naast de hele stap; de pagina is daarvoor breder, zodat de pakketten ruimte houden.

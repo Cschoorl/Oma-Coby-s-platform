@@ -133,3 +133,21 @@ body {
 
 /* Proef: het bestelformulier in Jost in plaats van Arvo (koppen en getallen blijven VTC SuperMarket en Vollkorn). */
 .oc-jost { font-family: Jost, "Futura", "Century Gothic", sans-serif; font-weight: 450; }
+
+/* Logo's van bedrijven die voorgingen (#/bestellen): een rij die eindeloos van rechts naar links schuift.
+   De rij staat er twee keer in, dus -50% is precies één rij. Stil bij aanwijzen of toetsenbordfocus; bij "minder beweging" gewoon naast elkaar. */
+.oc-marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
+}
+.oc-marquee-track { display: flex; width: max-content; animation: oc-marquee var(--duur, 40s) linear infinite; }
+.oc-marquee:hover .oc-marquee-track,
+.oc-marquee:focus-within .oc-marquee-track { animation-play-state: paused; }
+@keyframes oc-marquee { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .oc-marquee { -webkit-mask-image: none; mask-image: none; }
+  .oc-marquee-track { animation: none; width: auto; flex-wrap: wrap; justify-content: center; }
+  .oc-marquee-track > ul { flex-wrap: wrap; justify-content: center; }
+  .oc-marquee-track > [aria-hidden="true"] { display: none; }
+}

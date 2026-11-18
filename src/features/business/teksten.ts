@@ -220,6 +220,13 @@ const nl = {
   partyLine: "Feest op locatie",
   partyGuests: (n: string) => `Feest op locatie, ${n} gasten`,
   partyCreditLine: (n: string, credit: string) => `Korting: ${n} oliebollen × ${credit}`,
+  voorgangersTitle: "Zij gingen jullie voor",
+  whyMusic: "Waarom muziek?",
+  scherderQuote:
+    "Het deel van het brein waar muziekherinneringen worden opgeslagen, blijft het langst intact. Dus wanneer ze bij Gouwe Ouwe muziek uit uw jeugd spelen, dan krijgt u meteen die herinneringen weer én dat geweldige gevoel, de nostalgie uit die tijd. Juist omdat dit gebied nog heel lang uitstekend functioneert. Mooi he?",
+  logoLink: (name: string) => `${name} (opent hun website)`,
+  scherderRole: "Hoogleraar neuropsychologie",
+  scherderCredit: "Foto: DWDD, CC BY 3.0",
   totalExclVat: "Totaal excl. btw",
 
   // Stap 2
@@ -543,6 +550,13 @@ const en: Teksten = {
   partyLine: "Party at your venue",
   partyGuests: (n) => `Party at your venue, ${n} guests`,
   partyCreditLine: (n, credit) => `Discount: ${n} oliebollen × ${credit}`,
+  voorgangersTitle: "They went before you",
+  whyMusic: "Why music?",
+  scherderQuote:
+    "The part of the brain where musical memories are stored stays intact the longest. So when Gouwe Ouwe plays the music of your youth, the memories come straight back, along with that wonderful feeling, the nostalgia of that time. Precisely because this area keeps working perfectly for a very long time. Lovely, isn't it?",
+  logoLink: (name) => `${name} (opens their website)`,
+  scherderRole: "Professor of neuropsychology",
+  scherderCredit: "Photo: DWDD, CC BY 3.0",
   totalExclVat: "Total excl. VAT",
 
   step2: "Where and when",

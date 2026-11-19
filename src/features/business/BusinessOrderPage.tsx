@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { setConsent, startAnalytics, storedConsent, track, type Consent } from "../../lib/analytics";
 import { backend } from "../../data/backend";
 import type { BusinessInfo, BusinessOrderInput, BusinessPackage, BusinessPackageKey, BusinessSource, BusinessTotals, Partypot } from "../../types/business";
 import { Card, Notice, OLIEBOL_SVG, Segmented, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, quickButton, rollOliebol, secondaryButton } from "../../components/ui";
@@ -996,6 +997,35 @@ interface Done {
   totals: BusinessTotals;
 }
 
+/**
+ * Vraag om toestemming voor analytics-cookies, onderin. Zonder keuze meet GA4 alleen cookieloos (Consent Mode).
+ * Boven de totaalbalk op telefoon, zodat die er niet onder verdwijnt.
+ */
+function ConsentBar() {
+  const t = useT();
+  const [choice, setChoice] = useState<Consent | null>(() => storedConsent());
+  if (choice) return null;
+  const pick = (c: Consent) => {
+    setConsent(c);
+    setChoice(c);
+  };
+  return (
+    <div role="region" aria-label={t.consentLabel} className="fixed inset-x-0 bottom-0 z-40 border-t border-lijn bg-papier px-4 py-3 shadow-zacht">
+      <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-3">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-oliebol sm:text-sm">{t.consentText}</p>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" className={`${secondaryButton} min-h-[44px]`} onClick={() => pick("denied")}>
+            {t.consentNo}
+          </button>
+          <button type="button" className={`${primaryButton} min-h-[44px]`} onClick={() => pick("granted")}>
+            {t.consentYes}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BusinessOrderPage() {
   const t = useT();
   const lang = useLang();
@@ -1020,6 +1050,12 @@ export function BusinessOrderPage() {
   const [otherTime, setOtherTime] = useState(false);
   const [pot, setPot] = useState<Partypot | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+
+  // GA4: alleen op het bestelformulier. Per stap een gebeurtenis, zodat je ziet waar mensen afhaken.
+  useEffect(() => startAnalytics(), []);
+  useEffect(() => {
+    if (!done) track("form_step", { step });
+  }, [step, done]);
 
   // Via een ambassadeur (?via=naam in de link): alvast ingevuld bij "Hoe kwamen jullie bij ons terecht?".
   useEffect(() => {
@@ -1188,6 +1224,16 @@ export function BusinessOrderPage() {
       };
       const { id, warning } = await backend.submitBusinessOrder({ ...clean, website });
       setDone({ id, warning, input: clean, totals });
+      // Conversie in GA4: geen namen of adressen, alleen wat er besteld is.
+      track("generate_lead", {
+        currency: "EUR",
+        value: totals.invoice,
+        package: only ? "partypot" : pkg?.key ?? "zelf",
+        oliebollen: totals.oliebollen,
+        donation: totals.donation,
+        area: order.area || undefined,
+        via: order.via || undefined
+      });
       window.scrollTo({ top: 0, behavior: "smooth" });
       rollOliebol();
     } catch (err) {
@@ -1819,6 +1865,7 @@ export function BusinessOrderPage() {
           </button>
         </div>
       </div>
+      <ConsentBar />
     </div>
   );
 }

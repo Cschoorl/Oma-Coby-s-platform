@@ -937,7 +937,7 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
       <div className="my-1.5 border-t border-lijn" />
       {pkg?.key === "feest" ? <PartyLines input={input} info={info} /> : null}
       <Line label={t.bollenLine(t.num(totals.oliebollen), t.euro(info.price))} value={t.euro(totals.bollen)} />
-      <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={input.area ? t.euro(totals.delivery) : "–"} />
+      <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={!input.area ? "–" : totals.deliveryLater ? t.deliveryLater : t.euro(totals.delivery)} />
       {totals.surcharge ? <Line label={t.moment[input.moment]} value={t.euro(totals.surcharge)} /> : null}
       <Line label={t.subtotal} value={t.euro(totals.subtotal)} muted />
       {pkg?.key === "feest" ? (
@@ -1182,6 +1182,8 @@ export function BusinessOrderPage() {
         certificate: rank >= 1 && order.certificate,
         certificateName: rank >= 1 && order.certificate ? order.certificateName.trim() || order.company.trim() : "",
         linkedin: rank >= 2 && order.linkedin,
+        multiYear: !only && order.multiYear,
+        remindNextYear: !only && order.remindNextYear,
         ambassador: order.source === "ambassadeur" ? order.ambassador.trim() : ""
       };
       const { id, warning } = await backend.submitBusinessOrder({ ...clean, website });
@@ -1535,13 +1537,13 @@ export function BusinessOrderPage() {
                           {/^\d{4}/.test(input.postalCode.trim()) ? t.postcodeShort(input.postalCode.trim().slice(0, 4)) : input.city.trim()} · {t.areaSub[area]}
                         </span>
                       </span>
-                      <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{t.euro(info.fees[area])}</span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{totals.deliveryLater ? t.deliveryLater : t.euro(totals.delivery)}</span>
                     </>
                   ) : (
                     <span className="text-sm text-oliebol">{t.areaEmpty}</span>
                   )}
                 </div>
-                <p className="text-xs text-oliebol">{t.areaHint}</p>
+                <p className="text-xs text-oliebol">{totals.deliveryLater ? t.deliveryLaterHint(t.num(info.fixedDeliveryFrom), t.euro(info.fees.buiten)) : t.areaHint}</p>
               </div>
 
               <div className="grid gap-2">
@@ -1673,6 +1675,17 @@ export function BusinessOrderPage() {
                   ) : null}
                 </>
               ) : null}
+              {only ? null : (
+                <>
+                  <p className={fieldLabel}>{t.nextYearLabel}</p>
+                  <Check id="f-remindNextYear" checked={input.remindNextYear} onChange={(v) => update("remindNextYear", v)}>
+                    {t.remindNextYear}
+                  </Check>
+                  <Check id="f-multiYear" checked={input.multiYear} onChange={(v) => update("multiYear", v)}>
+                    {t.multiYear}
+                  </Check>
+                </>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field id="f-source" label={t.sourceLabel} optional>
                   <select id="f-source" className={field} value={input.source} onChange={(e) => update("source", e.target.value as BusinessSource)}>
@@ -1776,6 +1789,7 @@ export function BusinessOrderPage() {
             <p className="text-center text-xs leading-relaxed text-oliebol">
               {t.payLater}
             </p>
+            <p className="text-center text-xs leading-relaxed text-oliebol">{t.foundation}</p>
           </Card>
           <p className="px-1 text-xs leading-relaxed text-oliebol">
             {t.forYourself}{" "}

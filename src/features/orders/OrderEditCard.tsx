@@ -20,8 +20,8 @@ type Draft = Record<OrderField, string>;
 
 const FIELDS: OrderField[] = ["type", "locationName", "withRaisins", "withoutRaisins", "deliveryDate", "fulfilment", "deliveryMoment", "pickupLocation", "address", "postalCode", "city", "email", "amount"];
 
-/** The moments a business order can have (same as the order form). */
-const BUSINESS_MOMENTS = Object.values(momentLabel);
+/** The moments a business order can have (same as the order form). Vóór 9:00 bieden we niet aan; alleen een oude aanvraag houdt hem. */
+const BUSINESS_MOMENTS = [momentLabel.regulier, momentLabel.voor10];
 
 /**
  * Edit an order: products, date, bezorgen/afhalen, moment, address and (sheet orders) the amount.
@@ -140,7 +140,7 @@ export function OrderEditCard({ order, state, session, run, onClose }: OrderEdit
               <span className="text-muted">Bezorgmoment</span>
               {business ? (
                 <select className={`${inputClass} ${mark("deliveryMoment")}`} value={draft.deliveryMoment} onChange={(e) => set("deliveryMoment")(e.target.value)}>
-                  {BUSINESS_MOMENTS.map((m) => (
+                  {(BUSINESS_MOMENTS.includes(draft.deliveryMoment) || !draft.deliveryMoment ? BUSINESS_MOMENTS : [...BUSINESS_MOMENTS, draft.deliveryMoment]).map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>

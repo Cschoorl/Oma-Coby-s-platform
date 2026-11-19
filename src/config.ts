@@ -174,10 +174,14 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   // Grote bedrijven bestellen ruim meer dan 500; boven de 10.000 stemmen we het eerst af.
   maximum: 10000,
   fees: { regio: 10, buiten: 25 },
-  // Groot-Amsterdam (10xx en 11xx: ook Diemen en Amstelveen) en Aalsmeer met Kudelstaart (1430–1433).
-  regionPostcodes: "1000-1199, 1430-1433",
-  // Vóór 10:00 is een aanvraag (besluit 11 november); vóór 9:00 bieden we niet meer aan.
-  surcharges: { regulier: 0, voor10: 20, voor9: 0 },
+  // Buiten de regio onder de 500 oliebollen: bezorgkosten op nacalculatie per kilometer (besluit Mark, 19 november).
+  fixedDeliveryFrom: 500,
+  // Groot-Amsterdam (10xx en 11xx: ook Diemen en Amstelveen), Weesp (1380–1384, hoort bij Amsterdam) en Aalsmeer met
+  // Kudelstaart (1430–1433).
+  regionPostcodes: "1000-1199, 1380-1384, 1430-1433",
+  // Vóór 10:00 is een aanvraag (besluit 11 november); vóór 9:00 bieden we niet aan (Mark, 19 november). voor9 staat er
+  // alleen voor oude aanvragen, met dezelfde toeslag als vóór 10:00.
+  surcharges: { regulier: 0, voor10: 20, voor9: 20 },
   // Minimaal 3 werkdagen van tevoren, en uiterlijk maandag 28 december 12:00.
   leadWorkdays: 3,
   closeAt: `${SEASON_YEAR}-12-28T12:00`,

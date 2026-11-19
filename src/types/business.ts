@@ -55,6 +55,11 @@ export interface BusinessInfo {
   /** Maximaal aantal oliebollen per bestelling (MET + ZONDER); meer gaat via de mail. */
   maximum: number;
   fees: Record<BusinessArea, number>;
+  /**
+   * Buiten de regio geldt het vaste tarief (fees.buiten) pas vanaf zo veel oliebollen (Polonaisepartner, 500).
+   * Daaronder rekenen we de bezorgkosten achteraf per kilometer (besluit Mark, 19 november).
+   */
+  fixedDeliveryFrom: number;
   /** Postcodes met het lage bezorgtarief, bijv. "1000-1109, 1430-1433" (Amsterdam, Aalsmeer en Kudelstaart). */
   regionPostcodes: string;
   surcharges: Record<BusinessMoment, number>;
@@ -133,6 +138,10 @@ export interface BusinessOrderInput {
   certificateName: string;
   /** LinkedIn-badge met kant-en-klare post (vanaf Polonaisepartner). */
   linkedin: boolean;
+  /** "Herinner ons volgend jaar": de basis voor herhaalbestellingen. */
+  remindNextYear: boolean;
+  /** "Of word vaste partner voor meerdere jaren": we nemen contact op. */
+  multiYear: boolean;
   source: BusinessSource;
   /** Naam van de ambassadeur, of uit de link (?via=). */
   ambassador: string;
@@ -144,6 +153,8 @@ export interface BusinessTotals {
   oliebollen: number;
   bollen: number;
   delivery: number;
+  /** Buiten de regio en onder fixedDeliveryFrom: bezorgkosten op nacalculatie per kilometer (delivery is dan 0). */
+  deliveryLater: boolean;
   surcharge: number;
   /** Feestprijs excl. btw bij Feestpartner, anders 0. */
   party: number;

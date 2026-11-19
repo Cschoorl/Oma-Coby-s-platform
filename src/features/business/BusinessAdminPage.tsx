@@ -244,6 +244,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
             ["Wall of fame", b.wallOfFame ? "✓ Mag, zonder bedragen" : "Nee"],
             ["Certificaat", b.certificate ? `✓ Op naam van ${b.certificateName || b.company}` : "Nee"],
             ["LinkedIn-badge", b.linkedin ? "✓ Graag" : "Nee"],
+            ["Volgend jaar", b.multiYear ? "✓ Wil vaste partner worden voor meerdere jaren: neem contact op" : b.remindNextYear ? "✓ Herinner ons volgend jaar" : "Nee"],
             ["Gevonden via", b.source ? sourceLabel[b.source] : ""],
             ["Ambassadeur", b.ambassador],
             ["Link", b.via ? `?via=${b.via}` : ""]
@@ -260,7 +261,7 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
                   ["Dag", longDay(b.date)],
                   ["Moment", b.moment === "voor10" ? <>{momentLabel[b.moment]}<br /><span className="text-xs text-muted">Laat binnen 2 werkdagen weten of het lukt. Lukt het niet? Haal de toeslag eraf.</span></> : momentLabel[b.moment]],
                   ["Adres", <>{b.street}<br />{b.postalCode} {b.city}</>],
-                  ["Bezorgkosten", b.area ? areaLabel[b.area] : ""]
+                  ["Bezorgkosten", b.area ? (b.totals.deliveryLater ? <>{areaLabel[b.area]}: op nacalculatie per km<br /><span className="text-xs text-muted">Niet in het bedrag. Zet de bezorgkosten zelf op de factuur.</span></> : areaLabel[b.area]) : ""]
                 ]
               : [
                   ["Dag", longDay(b.date)],

@@ -103,10 +103,15 @@ const CONFIG = {
     /** Hooguit zo veel oliebollen per bestelling; meer gaat via de mail. Instelling: zakelijk_maximum. */
     maximum: 10000,
     fees: { regio: 10, buiten: 25 },
-    /** Postcodes met het lage bezorgtarief: Groot-Amsterdam (10xx, 11xx), Aalsmeer en Kudelstaart. Instelling: zakelijk_postcodes_regio. */
-    regionPostcodes: '1000-1199, 1430-1433',
-    /** Standaard 9:00–15:00 zonder toeslag; vóór 10:00 is een aanvraag (besluit 11 november). Vóór 9:00 bieden we niet meer aan. */
-    surcharges: { regulier: 0, voor10: 20, voor9: 0 },
+    /**
+     * Buiten de regio geldt het vaste tarief pas vanaf zo veel oliebollen; daaronder op nacalculatie per kilometer
+     * (besluit Mark, 19 november). Instelling: zakelijk_bezorgen_vast_vanaf.
+     */
+    fixedDeliveryFrom: 500,
+    /** Postcodes met het lage bezorgtarief: Groot-Amsterdam (10xx, 11xx), Weesp, Aalsmeer en Kudelstaart. Instelling: zakelijk_postcodes_regio. */
+    regionPostcodes: '1000-1199, 1380-1384, 1430-1433',
+    /** Standaard 9:00–15:00 zonder toeslag; vóór 10:00 is een aanvraag (besluit 11 november). Vóór 9:00 bieden we niet aan; voor9 staat er alleen voor oude aanvragen. */
+    surcharges: { regulier: 0, voor10: 20, voor9: 20 },
     /** Doel van de Partypot in euro's. Instelling: partypot_doel. */
     partypotGoal: 3000,
     /** Minimaal zo veel werkdagen van tevoren bestellen. Instelling: zakelijk_werkdagen_vooraf. */
@@ -224,7 +229,7 @@ const TABS = {
     'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op',
     'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link', 'aanleiding',
-    'gasten', 'feest_bedrag']],
+    'gasten', 'feest_bedrag', 'herinneren_volgend_jaar', 'vaste_partner', 'bezorgen_nacalculatie']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
@@ -1706,7 +1711,9 @@ Object.assign(HANDLERS, {
         gasten: input.guests || '', feest_bedrag: totals.party || '',
         wall_of_fame: yes(input.wallOfFame), certificaat: yes(input.certificate), naam_certificaat: input.certificateName,
         linkedin_badge: yes(input.linkedin), herkomst: BUSINESS_SOURCES[input.source] || '', ambassadeur: input.ambassador, via_link: input.via,
-        aanleiding: BUSINESS_OCCASIONS[input.occasion] || ''
+        aanleiding: BUSINESS_OCCASIONS[input.occasion] || '',
+        herinneren_volgend_jaar: yes(input.remindNextYear), vaste_partner: yes(input.multiYear),
+        bezorgen_nacalculatie: totals.deliveryLater ? 'Ja, per km' : ''
       });
       bump_();
       return id;
@@ -1818,8 +1825,9 @@ function businessInfo_() {
     minimum: number('zakelijk_minimum', b.minimum),
     maximum: number('zakelijk_maximum', b.maximum),
     fees: { regio: number('zakelijk_bezorgen_regio', b.fees.regio), buiten: number('zakelijk_bezorgen_buiten', b.fees.buiten) },
+    fixedDeliveryFrom: number('zakelijk_bezorgen_vast_vanaf', b.fixedDeliveryFrom),
     regionPostcodes: String(settings.zakelijk_postcodes_regio || b.regionPostcodes),
-    surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_9', b.surcharges.voor9) },
+    surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_10', b.surcharges.voor10) },
     leadWorkdays: number('zakelijk_werkdagen_vooraf', b.leadWorkdays),
     closeAt: settings.zakelijk_sluiting ? closeAt_(settings.zakelijk_sluiting) : b.closeAt,
     holidays: b.holidays,
@@ -1931,6 +1939,8 @@ function businessInput_(body, info) {
   input.certificate = rank >= 1 && !!body.certificate;
   input.certificateName = input.certificate ? text(body.certificateName) || input.company : '';
   input.linkedin = rank >= 2 && !!body.linkedin;
+  input.remindNextYear = !only && !!body.remindNextYear;
+  input.multiYear = !only && !!body.multiYear;
   return input;
 }
 
@@ -1950,7 +1960,7 @@ function areaFor_(postalCode, city, ranges) {
   }
   const c = String(city || '').trim().toLowerCase();
   if (!c) return '';
-  return /amsterdam|aalsmeer|kudelstaart/.test(c) ? 'regio' : 'buiten';
+  return /amsterdam|weesp|aalsmeer|kudelstaart/.test(c) ? 'regio' : 'buiten';
 }
 
 /** Same rules as validateBusiness in src/features/business/business.ts; returns the first problem. */
@@ -1985,7 +1995,9 @@ function businessTotals_(i, info) {
   const oliebollen = i.withRaisins + i.withoutRaisins;
   const bollen = cents(oliebollen * info.price);
   const bezorgen = i.fulfilment === 'bezorgen' && oliebollen > 0;
-  const delivery = bezorgen && i.area ? info.fees[i.area] : 0;
+  // Buiten de regio onder fixedDeliveryFrom: op nacalculatie per kilometer, dus nog niet in het bedrag.
+  const deliveryLater = bezorgen && i.area === 'buiten' && oliebollen < info.fixedDeliveryFrom;
+  const delivery = bezorgen && i.area && !deliveryLater ? info.fees[i.area] : 0;
   const surcharge = bezorgen ? info.surcharges[i.moment] || 0 : 0;
   // Feestpartner: de feestprijs bovenop de oliebollen, met een eigen btw-tarief.
   const party = i.pakket === 'feest' && oliebollen > 0 ? businessPartyFee_(i.guests, oliebollen, info) : 0;
@@ -1994,7 +2006,7 @@ function businessTotals_(i, info) {
   const total = cents(subtotal + vat);
   // De Partypot: hele euro's, geen btw.
   const donation = cents(Math.max(0, i.donation));
-  return { oliebollen: oliebollen, bollen: bollen, delivery: delivery, surcharge: surcharge, party: party, subtotal: subtotal, vat: vat, total: total,
+  return { oliebollen: oliebollen, bollen: bollen, delivery: delivery, deliveryLater: deliveryLater, surcharge: surcharge, party: party, subtotal: subtotal, vat: vat, total: total,
     donation: donation, invoice: cents(total + donation), ouderen: businessOuderen_(oliebollen, info) };
 }
 
@@ -2114,6 +2126,7 @@ function readBusiness_() {
       linkedin: truthy_(r.linkedin_badge), source: Object.keys(BUSINESS_SOURCES).filter(function (k) { return BUSINESS_SOURCES[k] === String(r.herkomst || ''); })[0] || '',
       ambassador: String(r.ambassadeur || ''), via: String(r.via_link || ''),
       occasion: key(BUSINESS_OCCASIONS, String(r.aanleiding || '')), guests: num_(r.gasten),
+      remindNextYear: truthy_(r.herinneren_volgend_jaar), multiYear: truthy_(r.vaste_partner),
       totals: {
         oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, party: num_(r.feest_bedrag), subtotal: subtotal, vat: num_(r.btw), total: total,
         donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen)
@@ -2125,6 +2138,7 @@ function readBusiness_() {
     const t = businessTotals_(b, info);
     b.totals.bollen = t.bollen;
     b.totals.delivery = t.delivery;
+    b.totals.deliveryLater = t.deliveryLater;
     b.totals.surcharge = t.surcharge;
     return b;
   });
@@ -2199,7 +2213,7 @@ function businessMailData_(id, i, t, info) {
     }
     costs.push([numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']);
     costs.push(['Poedersuiker', 'gratis', '']);
-    costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], euroNl_(t.delivery), '']);
+    costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], t.deliveryLater ? 'op nacalculatie per km' : euroNl_(t.delivery), '']);
     if (t.surcharge) costs.push([BUSINESS_MOMENTS[i.moment], euroNl_(t.surcharge), '']);
     costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted']);
     if (t.party) {
@@ -2218,6 +2232,8 @@ function businessMailData_(id, i, t, info) {
   if (i.wallOfFame) extras.push(['Wall of fame', 'Ja, met jullie naam' + (businessRank_(pkg) >= 2 ? ' en logo' : '') + ' en het aantal ouderen']);
   if (i.certificate) extras.push(['Impactcertificaat', 'Op naam van ' + i.certificateName]);
   if (i.linkedin) extras.push(['LinkedIn-badge', 'Ja, met een kant-en-klare post']);
+  if (i.multiYear) extras.push(['Volgend jaar', 'Jullie willen vaste partner worden voor meerdere jaren: we nemen contact op']);
+  else if (i.remindNextYear) extras.push(['Volgend jaar', 'We sturen jullie volgend jaar een herinnering']);
   const party = !only && pkg.key === 'feest';
   if (party) extras.unshift(['Feest', 'Op locatie, met live band, voor ± ' + numberNl_(i.guests) + ' gasten']);
   return {
@@ -2410,7 +2426,7 @@ function businessMailHtml_(d, src) {
 
     // Footer
     '<tr><td align="center" style="padding:28px 12px 0;">' + img('oliebol', 24, 24, '', 'margin:0 auto 12px;') +
-    '<p style="margin:0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol · KvK 95662391<br>' +
+    '<p style="margin:0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol · Waalstraat 69-2, 1079 DP Amsterdam · KvK 95662391 · btw NL867229093B01<br>' +
     '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.muted + ';">' + e(d.contactEmail) + '</a> · ' +
     '<a href="tel:' + e(d.contactPhone.replace(/\s/g, '')) + '" style="color:' + C.muted + ';white-space:nowrap;">' + e(d.contactPhone) + '</a> · ' +
     '<a href="https://www.omacobysoliebollenbar.nl" style="color:' + C.muted + ';">omacobysoliebollenbar.nl</a></p>' +
@@ -2471,7 +2487,7 @@ function businessMailText_(d) {
     'Warme groet,',
     'Oma Coby (100) en het hele team',
     '',
-    'Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol, KvK 95662391.'
+    'Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol, Waalstraat 69-2, 1079 DP Amsterdam. KvK 95662391, btw NL867229093B01.'
   ]);
   // No empty line twice in a row.
   return lines.filter(function (l, n, all) { return l !== '' || all[n - 1] !== ''; }).join('\n');
@@ -2691,8 +2707,9 @@ Object.assign(HANDLERS, {
         input.area = input.fulfilment === 'bezorgen'
           ? areaFor_(byField.postalCode ? byField.postalCode.to : b.postalCode, byField.city ? byField.city.to : b.city, info.regionPostcodes) : '';
         set.bezorgomgeving = input.area ? BUSINESS_AREAS[input.area] : '';
-        if (byField.deliveryMoment && !Object.keys(BUSINESS_MOMENTS).some(function (k) { return BUSINESS_MOMENTS[k] === byField.deliveryMoment.to; })) {
-          throw new Error('Kies een bezorgmoment: ' + Object.keys(BUSINESS_MOMENTS).map(function (k) { return BUSINESS_MOMENTS[k]; }).join(', ') + '.');
+        // Vóór 9:00 bieden we niet aan: alleen de standaardtijd en vóór 10:00 zijn te kiezen.
+        if (byField.deliveryMoment && [BUSINESS_MOMENTS.regulier, BUSINESS_MOMENTS.voor10].indexOf(byField.deliveryMoment.to) === -1) {
+          throw new Error('Kies een bezorgmoment: ' + BUSINESS_MOMENTS.regulier + ' of ' + BUSINESS_MOMENTS.voor10 + '.');
         }
         const t = businessTotals_(input, info);
         Object.assign(set, {

@@ -30,25 +30,25 @@ import uber from "../../assets/voorgangers/uber.svg";
 
 type Shape = "plat" | "midden" | "blok";
 
-const LOGOS: Array<{ name: string; url: string; src: string; shape: Shape; wit?: boolean }> = [
-  { name: "Deloitte", url: "https://www.deloitte.com/nl", src: deloitte, shape: "plat" },
-  { name: "Heineken Experience", url: "https://www.heinekenexperience.com", src: heineken, shape: "plat" },
-  { name: "Uber", url: "https://www.uber.com/nl", src: uber, shape: "plat" },
-  { name: "Mollie", url: "https://www.mollie.com", src: mollie, shape: "plat" },
-  { name: "DEPT", url: "https://www.deptagency.com", src: dept, shape: "plat" },
-  { name: "Stage Entertainment", url: "https://www.stage-entertainment.nl", src: stage, shape: "blok" },
-  { name: "Nationale Postcode Loterij", url: "https://www.postcodeloterij.nl", src: postcodeloterij, shape: "blok" },
-  { name: "Freshfields", url: "https://www.freshfields.com", src: freshfields, shape: "plat" },
-  { name: "ITV Studios Netherlands", url: "https://www.itvstudios.nl", src: itv, shape: "blok", wit: true },
-  { name: "Amsterdam Museum", url: "https://www.amsterdammuseum.nl", src: amsterdammuseum, shape: "blok" },
-  { name: "OBA, Openbare Bibliotheek Amsterdam", url: "https://www.oba.nl", src: oba, shape: "midden" },
-  { name: "Coinmerce", url: "https://coinmerce.io", src: coinmerce, shape: "plat" },
-  { name: "Cloudpillo", url: "https://cloudpillo.com", src: cloudpillo, shape: "plat" },
-  { name: "Eye Wish Opticiens", url: "https://www.eyewish.nl", src: eyewish, shape: "midden" },
-  { name: "Marie-Stella-Maris", url: "https://www.marie-stella-maris.com", src: marie, shape: "plat" },
-  { name: "Gisou", url: "https://gisou.com", src: gisou, shape: "midden" },
-  { name: "MATT Sleeps", url: "https://www.mattsleeps.com", src: mattsleeps, shape: "midden" },
-  { name: "Brandfirm", url: "https://www.brandfirm.nl", src: brandfirm, shape: "plat" }
+const LOGOS: Array<{ name: string; src: string; shape: Shape; wit?: boolean }> = [
+  { name: "Deloitte", src: deloitte, shape: "plat" },
+  { name: "Heineken Experience", src: heineken, shape: "plat" },
+  { name: "Uber", src: uber, shape: "plat" },
+  { name: "Mollie", src: mollie, shape: "plat" },
+  { name: "DEPT", src: dept, shape: "plat" },
+  { name: "Stage Entertainment", src: stage, shape: "blok" },
+  { name: "Nationale Postcode Loterij", src: postcodeloterij, shape: "blok" },
+  { name: "Freshfields", src: freshfields, shape: "plat" },
+  { name: "ITV Studios Netherlands", src: itv, shape: "blok", wit: true },
+  { name: "Amsterdam Museum", src: amsterdammuseum, shape: "blok" },
+  { name: "OBA, Openbare Bibliotheek Amsterdam", src: oba, shape: "midden" },
+  { name: "Coinmerce", src: coinmerce, shape: "plat" },
+  { name: "Cloudpillo", src: cloudpillo, shape: "plat" },
+  { name: "Eye Wish Opticiens", src: eyewish, shape: "midden" },
+  { name: "Marie-Stella-Maris", src: marie, shape: "plat" },
+  { name: "Gisou", src: gisou, shape: "midden" },
+  { name: "MATT Sleeps", src: mattsleeps, shape: "midden" },
+  { name: "Brandfirm", src: brandfirm, shape: "plat" }
 ];
 
 const height: Record<Shape, string> = { plat: "max-h-5", midden: "max-h-7", blok: "max-h-9" };
@@ -112,7 +112,7 @@ export function WaaromMuziek() {
   );
 }
 
-/** Eén rij logo's onder een kopje die van rechts naar links schuift; elk logo linkt naar de site van het bedrijf. */
+/** Eén rij logo's onder een kopje die van rechts naar links schuift. De logo's linken nergens heen. */
 export function LogoBanner() {
   const t = useT();
   return (
@@ -128,22 +128,14 @@ export function LogoBanner() {
             <ul key={copy} aria-hidden={copy ? true : undefined} className="flex shrink-0">
               {LOGOS.map((l) => (
                 <li key={l.name} className="flex h-12 w-28 shrink-0 items-center justify-center px-1.5 sm:w-32">
-                  <a
-                    href={l.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    tabIndex={copy ? -1 : undefined}
-                    title={l.name}
-                    className="group flex h-full w-full items-center justify-center rounded-md px-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-krent"
-                  >
+                  {/* Geen link naar de site van het bedrijf: dan verdwijnen bezoekers van de bestelpagina. */}
+                  <span title={l.name} className="flex h-full w-full items-center justify-center px-1.5">
                     <img
                       src={l.src}
-                      alt={copy ? "" : t.logoLink(l.name)}
-                      className={`${height[l.shape]} max-w-full object-contain opacity-70 transition duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 ${
-                        l.wit ? "brightness-0" : "grayscale group-hover:grayscale-0 group-focus-visible:grayscale-0"
-                      }`}
+                      alt={copy ? "" : l.name}
+                      className={`${height[l.shape]} max-w-full object-contain opacity-70 ${l.wit ? "brightness-0" : "grayscale"}`}
                     />
-                  </a>
+                  </span>
                 </li>
               ))}
             </ul>

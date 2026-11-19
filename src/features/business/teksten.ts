@@ -119,7 +119,7 @@ const nl = {
     return next ? `${p.oliebollen} tot ${next.oliebollen - 1} oliebollen` : `${p.oliebollen} oliebollen of meer`;
   },
   area: { regio: "Amsterdam of Aalsmeer", buiten: "Buiten Amsterdam en Aalsmeer" } as Record<BusinessArea, string>,
-  areaSub: { regio: "Groot-Amsterdam, Aalsmeer en Kudelstaart", buiten: "daarbuiten" } as Record<BusinessArea, string>,
+  areaSub: { regio: "Groot-Amsterdam, Weesp, Aalsmeer en Kudelstaart", buiten: "daarbuiten" } as Record<BusinessArea, string>,
   moment: { regulier: `Tussen ${from} en ${to}`, voor10: "Vóór 10:00 (op aanvraag)", voor9: "Vóór 9:00" } as Record<BusinessMoment, string>,
 
   // Kop
@@ -171,7 +171,7 @@ const nl = {
   occasionSub: {
     borrel: "Voor het team, de afdeling of de borrel",
     event: "Voor gasten: klanten, open dag of feest",
-    relatiegeschenk: "Om weg te geven aan klanten of relaties"
+    relatiegeschenk: "Om weg te geven aan klanten of relaties. We bezorgen op één adres."
   } as Record<Exclude<BusinessOccasion, "">, string>,
   composeButton: "Stel zelf samen",
   splitTitle: "Met of zonder krenten?",
@@ -224,7 +224,6 @@ const nl = {
   whyMusic: "Waarom muziek?",
   scherderQuote:
     "Het deel van het brein waar muziekherinneringen worden opgeslagen, blijft het langst intact. Dus wanneer ze bij Gouwe Ouwe muziek uit uw jeugd spelen, dan krijgt u meteen die herinneringen weer én dat geweldige gevoel, de nostalgie uit die tijd. Juist omdat dit gebied nog heel lang uitstekend functioneert. Mooi he?",
-  logoLink: (name: string) => `${name} (opent hun website)`,
   scherderRole: "Hoogleraar neuropsychologie",
   scherderCredit: "Foto: DWDD, CC BY 3.0",
   totalExclVat: "Totaal excl. btw",
@@ -240,6 +239,9 @@ const nl = {
   city: "Plaats",
   deliveryCost: "Bezorgkosten",
   areaHint: "Excl. btw. Je postcode bepaalt het tarief.",
+  deliveryLater: "Op nacalculatie",
+  deliveryLaterHint: (from: string, fee: string) =>
+    `Buiten Amsterdam en Aalsmeer rekenen we de bezorgkosten achteraf per kilometer; we laten het bedrag vooraf weten. Vanaf ${from} oliebollen bezorgen we door heel Nederland voor ${fee}.`,
   areaEmpty: "Vul je postcode in, dan rekenen we de bezorgkosten uit.",
   postcodeShort: (pc: string) => `Postcode ${pc}`,
   whichDay: "Welke dag komen we langs?",
@@ -327,7 +329,7 @@ const nl = {
   donationNoVat: "Bijdrage aan de Partypot (geen btw)",
   inPot: (euro: string) => `+ ${euro} in de Partypot`,
   onInvoice: "Op je factuur",
-  short: (n: string, min: number) => `~ Nog ${n} tot het minimum van ${min} oliebollen.`,
+  short: (n: string, min: number) => `~ Nog ${n} tot het minimum van ${min} oliebollen. Geen 50 man? Deel ze uit aan buren, vrienden en familie. Hoe meer mensen van ons weten, hoe meer oudjes we laten rocken.`,
   goodFor: "Goed voor",
   seniors: (n: number) => plural(n, "oudje", "oudjes"),
   onFloor: "op de dansvloer",
@@ -340,6 +342,10 @@ const nl = {
   requestParty: "Vraag het feest aan",
   placeOrder: "Bestelling plaatsen",
   payLater: "Betalen achteraf, op factuur. Kopie direct in je mail.",
+  foundation: "Oma Coby's Oliebollenbar is een initiatief van Stichting Uit Mijn Bol, Waalstraat 69-2, 1079 DP Amsterdam. KvK 95662391, btw NL867229093B01.",
+  nextYearLabel: "Volgend jaar weer?",
+  remindNextYear: "Herinner ons volgend jaar",
+  multiYear: "Of word vaste partner voor meerdere jaren: we nemen contact met je op",
   forYourself: "Bestel je voor jezelf? Dat gaat via",
   barSeniors: (n: string) => `${n} oudjes`,
   toOverview: "Naar overzicht",
@@ -351,6 +357,8 @@ const nl = {
     occasion: "waarvoor het is",
     donation: "donatie",
     flyers: "flyers",
+    remindNextYear: "herinnering volgend jaar",
+    multiYear: "vaste partner",
     wallOfFame: "wall of fame",
     certificate: "certificaat",
     certificateName: "naam op het certificaat",
@@ -457,7 +465,7 @@ const en: Teksten = {
     return next ? `${p.oliebollen} to ${next.oliebollen - 1} oliebollen` : `${p.oliebollen} oliebollen or more`;
   },
   area: { regio: "Amsterdam or Aalsmeer", buiten: "Outside Amsterdam and Aalsmeer" },
-  areaSub: { regio: "Greater Amsterdam, Aalsmeer and Kudelstaart", buiten: "further away" },
+  areaSub: { regio: "Greater Amsterdam, Weesp, Aalsmeer and Kudelstaart", buiten: "further away" },
   moment: { regulier: `Between ${from} and ${to}`, voor10: "Before 10:00 (on request)", voor9: "Before 9:00" },
 
   title: "Get seniors rock & rolling. Your team gets the oliebollen.",
@@ -503,7 +511,7 @@ const en: Teksten = {
   colleaguesEmpty: (per) => `We count ${per} oliebollen per colleague, rounded up to tens.`,
   occasionLabel: "What are the oliebollen for?",
   occasion: { borrel: "A treat", event: "An event", relatiegeschenk: "Business gift" },
-  occasionSub: { borrel: "For the team, the department or drinks", event: "For guests: clients, open day or party", relatiegeschenk: "To give to clients or partners" },
+  occasionSub: { borrel: "For the team, the department or drinks", event: "For guests: clients, open day or party", relatiegeschenk: "To give to clients or partners. We deliver to one address." },
   composeButton: "Build your own",
   splitTitle: "With or without raisins?",
   composeTitle: "Build your own",
@@ -554,7 +562,6 @@ const en: Teksten = {
   whyMusic: "Why music?",
   scherderQuote:
     "The part of the brain where musical memories are stored stays intact the longest. So when Gouwe Ouwe plays the music of your youth, the memories come straight back, along with that wonderful feeling, the nostalgia of that time. Precisely because this area keeps working perfectly for a very long time. Lovely, isn't it?",
-  logoLink: (name) => `${name} (opens their website)`,
   scherderRole: "Professor of neuropsychology",
   scherderCredit: "Photo: DWDD, CC BY 3.0",
   totalExclVat: "Total excl. VAT",
@@ -569,6 +576,9 @@ const en: Teksten = {
   city: "Town",
   deliveryCost: "Delivery cost",
   areaHint: "Excl. VAT. Your postcode sets the rate.",
+  deliveryLater: "Calculated afterwards",
+  deliveryLaterHint: (from, fee) =>
+    `Outside Amsterdam and Aalsmeer we charge delivery afterwards per kilometre; we'll tell you the amount beforehand. From ${from} oliebollen we deliver anywhere in the Netherlands for ${fee}.`,
   areaEmpty: "Fill in your postcode and we'll work out the delivery cost.",
   postcodeShort: (pc) => `Postcode ${pc}`,
   whichDay: "Which day should we come?",
@@ -654,7 +664,7 @@ const en: Teksten = {
   donationNoVat: "Contribution to the Partypot (no VAT)",
   inPot: (euro) => `+ ${euro} in the Partypot`,
   onInvoice: "On your invoice",
-  short: (n, min) => `~ ${n} more to reach the minimum of ${min} oliebollen.`,
+  short: (n, min) => `~ ${n} more to reach the minimum of ${min} oliebollen. Not 50 people? Share them with neighbours, friends and family. The more people know about us, the more oldies we get rocking.`,
   goodFor: "Good for",
   seniors: (n) => plural(n, "senior", "seniors"),
   onFloor: "on the dance floor",
@@ -667,6 +677,10 @@ const en: Teksten = {
   requestParty: "Request the party",
   placeOrder: "Place order",
   payLater: "Pay afterwards by invoice. A copy lands in your inbox right away.",
+  foundation: "Oma Coby's Oliebollenbar is an initiative of Stichting Uit Mijn Bol, Waalstraat 69-2, 1079 DP Amsterdam. Chamber of Commerce (KvK) 95662391, VAT NL867229093B01.",
+  nextYearLabel: "Again next year?",
+  remindNextYear: "Remind us next year",
+  multiYear: "Or become a partner for several years: we'll get in touch",
   forYourself: "Ordering just for yourself? Go to",
   barSeniors: (n) => `${n} seniors`,
   toOverview: "View order",
@@ -678,6 +692,8 @@ const en: Teksten = {
     occasion: "what it is for",
     donation: "donation",
     flyers: "flyers",
+    remindNextYear: "reminder next year",
+    multiYear: "multi-year partner",
     wallOfFame: "wall of fame",
     certificate: "certificate",
     certificateName: "name on the certificate",
@@ -707,7 +723,7 @@ const en: Teksten = {
     tens: "Choose a number in tens.",
     donation: "Fill in an amount in whole euros.",
     occasion: "Choose what the oliebollen are for.",
-    min: (n) => `At least ${n} oliebollen in total.`,
+    min: (n) => `At least ${n} oliebollen in total. Not 50 people? Share them with neighbours, friends and family. The more people know about us, the more oldies we get rocking.`,
     max: (n) => `At most ${n.toLocaleString("en-GB")} oliebollen in total. More? Email us and we'll plan it together.`,
     partyMin: (n) => `Feestpartner starts at ${n} oliebollen.`,
     guests: "Fill in how many guests you expect.",

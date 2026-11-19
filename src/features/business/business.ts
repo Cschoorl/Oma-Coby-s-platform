@@ -172,6 +172,8 @@ export function emptyBusinessInput(): BusinessOrderInput {
     reference: "",
     remark: "",
     wallOfFame: false,
+    remindNextYear: false,
+    multiYear: false,
     certificate: true,
     certificateName: "",
     linkedin: true,
@@ -191,7 +193,9 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const bollen = cents(oliebollen * info.price);
   // Niets te bezorgen zonder oliebollen.
   const bezorgen = input.fulfilment === "bezorgen" && oliebollen > 0;
-  const delivery = bezorgen && input.area ? info.fees[input.area] : 0;
+  // Buiten de regio onder fixedDeliveryFrom: op nacalculatie per kilometer, dus nog niet in het bedrag.
+  const deliveryLater = bezorgen && input.area === "buiten" && oliebollen < info.fixedDeliveryFrom;
+  const delivery = bezorgen && input.area && !deliveryLater ? info.fees[input.area] : 0;
   const surcharge = bezorgen ? info.surcharges[input.moment] ?? 0 : 0;
   // Feestpartner: de feestprijs (min € 1 per oliebol) komt bovenop de oliebollen, met een eigen btw-tarief.
   const party = isParty(input) ? partyFee(input.guests, oliebollen, info) : 0;
@@ -199,7 +203,7 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const vat = cents((bollen + delivery + surcharge) * info.vatRate + party * info.party.vatRate);
   const total = cents(subtotal + vat);
   const donation = cents(Math.max(0, input.donation));
-  return { oliebollen, bollen, delivery, surcharge, party, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info) };
+  return { oliebollen, bollen, delivery, deliveryLater, surcharge, party, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info) };
 }
 
 /** "2026-12-07" ± dagen, zonder tijdzonegedoe. */
@@ -281,7 +285,7 @@ export function areaFor(postalCode: string, city: string, regionPostcodes: strin
   }
   const c = city.trim().toLowerCase();
   if (!c) return "";
-  return /amsterdam|aalsmeer|kudelstaart/.test(c) ? "regio" : "buiten";
+  return /amsterdam|weesp|aalsmeer|kudelstaart/.test(c) ? "regio" : "buiten";
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -295,7 +299,7 @@ export const validationNl = {
   tens: "Kies een aantal in tientallen.",
   donation: "Vul een bedrag in hele euro's in.",
   occasion: "Kies waarvoor de oliebollen zijn.",
-  min: (n: number) => `Samen minimaal ${n} oliebollen.`,
+  min: (n: number) => `Samen minimaal ${n} oliebollen. Geen 50 man? Deel ze uit aan buren, vrienden en familie. Hoe meer mensen van ons weten, hoe meer oudjes we laten rocken.`,
   max: (n: number) => `Samen hooguit ${n.toLocaleString("nl-NL")} oliebollen. Meer? Mail ons, dan plannen we het samen.`,
   partyMin: (n: number) => `Feestpartner is vanaf ${n} oliebollen.`,
   guests: "Vul in hoeveel gasten je verwacht.",

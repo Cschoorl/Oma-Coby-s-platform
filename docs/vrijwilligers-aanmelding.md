@@ -56,7 +56,7 @@ Heeft een dag toch meer dan één dienst in de Agenda (bijvoorbeeld de bar 's mi
 ## Het gesprek
 
 1. **Hoi! Oma Coby hier, nou ja, mijn digitale versie. Weet je al wat je wilt doen, of wanneer je kunt?**
-   - *Ik weet wat ik wil doen*: welke taak? Bij bezorgen volgt de rijbewijsvraag, dan vraag 3, daarna per taak de dagen. Tot slot nog een vraag naar krappe momenten (alleen als die er zijn).
+   - *Ik weet wat ik wil doen*: welke taak? Bij bezorgen volgt de rijbewijsvraag, dan vraag 3, daarna per taak de dagen. Oma vraagt daarna niet meer of je er nog een krap moment bij kunt doen.
    - *Ik weet wanneer ik kan*: welke dagen? Wanneer, alleen op dagen met meer diensten. Wat wil je op die dagen doen? Hier kan ook "maakt niet uit". Bij bezorgen volgt de rijbewijsvraag, dan vraag 3.
    - *Zet me maar in waar het nodig is*: welke dagen? Wanneer, alleen op dagen met meer diensten. Alle taken staan aan en je haalt weg wat niet past. Bij bezorgen volgt de rijbewijsvraag.
 2. **Rijbewijs én auto** (alleen bij bezorgen). We hebben zelf geen auto's, dus je hebt allebei nodig. Keuze uit *Ja, rijbewijs én auto* of *Nee, niet allebei*. Bij "nee" valt bezorgen af. Was dat je enige taak, dan noemt Oma de pop-up (de Oliebollenbar) en het inpakken, en kies je opnieuw.

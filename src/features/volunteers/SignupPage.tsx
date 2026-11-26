@@ -11,8 +11,7 @@ const until = (range: string) => range.replace("–", " tot ");
 /** Bezorgen by car: ca. 9:00 to 15:00, ochtend until 12:30, middag until 15:00. */
 const deliveryText = `ca. ${SHIFT_TIMES.autokoerier.ochtend.split("–")[0]} tot ${SHIFT_TIMES.autokoerier.middag.split("–")[1]}: 's ochtends tot ${SHIFT_TIMES.autokoerier.ochtend.split("–")[1]}, 's middags tot ${SHIFT_TIMES.autokoerier.middag.split("–")[1]}`;
 
-/** Simple check that an e-mail address can be real: something@something.tld. */
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+import { EMAIL_PATTERN as EMAIL, useEmailCheck } from "../../lib/emailCheck";
 import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
 
 /*
@@ -341,10 +340,15 @@ export function SignupPage() {
   else if (phone.replace(/\D/g, "").length < 10) contactErrors.phone = "Vul een telefoonnummer van 10 cijfers in, zoals 06 12345678.";
   if (!email.trim()) contactErrors.email = "Vul je e-mailadres in.";
   else if (!EMAIL.test(email.trim())) contactErrors.email = "Dit e-mailadres klopt niet. Vul het in zoals naam@voorbeeld.nl.";
+  // A domain that takes no mail ("gmial.nl") is surely wrong: then the reminders never arrive.
+  const emailCheck = useEmailCheck(email);
+  if (!contactErrors.email && emailCheck.status === "missing") contactErrors.email = `Ik kan geen mail sturen naar ${emailCheck.domain}. Kijk het adres even na.`;
   const contactOk = Object.keys(contactErrors).length === 0;
   /** Errors show once they press Verder, and then stay live while they fix them. */
   const [contactTried, setContactTried] = useState(false);
-  const shownContact = contactTried ? contactErrors : {};
+  const shownContact: typeof contactErrors = contactTried ? contactErrors : {};
+  // "This domain takes no mail" shows at once, not only after pressing Verder.
+  if (!shownContact.email && emailCheck.status === "missing") shownContact.email = contactErrors.email;
 
   const quietDayMarks = counts && labelQuietDays(counts) ? quietDays(counts) : [];
 
@@ -496,6 +500,17 @@ export function SignupPage() {
                   autoComplete="email"
                   error={shownContact.email}
                   hint="Twee dagen voor je dienst krijg ik je hier een herinnering."
+                  extra={
+                    emailCheck.suggestion ? (
+                      <span className="text-xs text-krent">
+                        Bedoel je{" "}
+                        <button type="button" className="font-bold underline decoration-lijn-2 underline-offset-2 hover:decoration-krent" onClick={() => setEmail(emailCheck.suggestion ?? email)}>
+                          {emailCheck.suggestion}
+                        </button>
+                        ?
+                      </span>
+                    ) : null
+                  }
                 />
                 <Field label="Woonplaats" value={city} onChange={setCity} autoComplete="address-level2" />
                 {roles.autokoerier.wants ? (
@@ -528,6 +543,12 @@ export function SignupPage() {
                     <dd className="text-krent">{drivingLabel[a.driving]}</dd>
                   </div>
                 ) : null}
+                <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
+                  <dt className="font-bold text-krent">E-mail</dt>
+                  <dd className="break-all text-krent">
+                    {email.trim()} <span className="text-muted">(hier komen je herinneringen)</span>
+                  </dd>
+                </div>
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">Planning</dt>
                   <dd className="text-krent">
@@ -924,7 +945,8 @@ function Field({
   placeholder,
   autoFocus,
   error,
-  hint
+  hint,
+  extra
 }: {
   id?: string;
   label: string;
@@ -936,10 +958,13 @@ function Field({
   autoFocus?: boolean;
   error?: string;
   hint?: string;
+  /** Below the hint or error, e.g. "Bedoel je …?" under the e-mail address. */
+  extra?: ReactNode;
 }) {
   const note = id ? `${id}-note` : undefined;
   return (
-    <label className="grid gap-1 text-sm">
+    // content-start: a message under the field next to it must not stretch this one.
+    <label className="grid content-start gap-1 text-sm">
       <span className={fieldLabel}>{label}</span>
       <input
         id={id}
@@ -962,6 +987,7 @@ function Field({
           {hint}
         </span>
       ) : null}
+      {extra}
     </label>
   );
 }

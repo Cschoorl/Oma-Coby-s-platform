@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
-import { countFor, dayKey, labelQuietOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
+import { countFor, dayKey, labelQuietOptions, staffingStatus, targetFor } from "../../utils/staffing";
 import type { VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
@@ -24,7 +24,7 @@ import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, 
  * She never makes promises about the rooster; that comes later.
  */
 
-type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "contact" | "check";
+type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "days" | "parts" | "dayroles" | "flexible" | "max" | "contact" | "check";
 
 const partLabel: Record<Part, string> = { ochtend: "Ochtend", middag: "Middag", avond: "Avond" };
 /** Dagdelen in general: ochtend until 12:30, middag until 15:00. */
@@ -64,19 +64,6 @@ function hasParts(role: VolunteerRole): boolean {
   return new Set(days).size < days.length;
 }
 
-type Suggestion = { role: VolunteerRole; option: string };
-
-/** The answers as per-task moments, with the quiet moments they added when Oma asked ("role|option"). */
-function withExtra(a: Answers, extra: string[]) {
-  const base = toRoles(a);
-  for (const key of extra) {
-    const [role, option] = key.split("|") as [VolunteerRole, string];
-    const days = new Set([...base[role].days, option]);
-    base[role] = { wants: true, days: SIGNUP_OPTIONS[role].filter((o) => days.has(o)) };
-  }
-  return base;
-}
-
 /** Different days they can, over all tasks: inpakken and the bar on one day is still one day. */
 function countDays(roles: ReturnType<typeof toRoles>): number {
   return new Set(ACTIVE_ROLES.flatMap((r) => roles[r].days.map(dayKey))).size;
@@ -113,7 +100,7 @@ function taskNames(roles: VolunteerRole[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} en ${names[names.length - 1]}` : (names[0] ?? "");
 }
 
-function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): StepId[] {
+function stepIds(a: Answers, chosenDays: number): StepId[] {
   const ids: StepId[] = ["mode"];
   if (!a.mode) return ids;
   // Bezorgen needs a licence and a car of their own: asked straight after choosing it, before any days for it.
@@ -121,8 +108,8 @@ function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): Ste
   // Right after the task choice, while it is fresh; "Zet me maar in" and choosing every task already answer it.
   const flexible: StepId[] = a.mode !== "flexibel" && !openToAll(a) ? ["flexible"] : [];
   if (a.mode === "taak") {
+    // No "kun je er nog een?" after the days: Oma does not ask for extra quiet moments.
     ids.push("roles", ...license, ...flexible, ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
-    if (suggestions.length > 0) ids.push("suggest");
   } else {
     ids.push("days");
     // Only a question on days with more than one shift; with one morning shift there is nothing to ask.
@@ -150,8 +137,6 @@ export function SignupPage() {
   const [counts, setCounts] = useState<SignupCounts | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [a, setA] = useState<Answers>(emptyAnswers);
-  /** Quiet moments the volunteer added when Oma asked, as "role|option". */
-  const [extra, setExtra] = useState<string[]>([]);
   const [at, setAt] = useState<StepId>("mode");
   /** Bezorgen was their only task and they have no licence and car: back to the task choice, with the other tasks named. */
   const [bounced, setBounced] = useState(false);
@@ -185,17 +170,12 @@ export function SignupPage() {
       .finally(() => setLoaded(true));
   }, []);
 
-  const suggestions = useMemo<Suggestion[]>(() => {
-    if (!counts || a.mode !== "taak") return [];
-    return a.roles.flatMap((role) => suggestOptions(counts, role, a.picks[role]).map((option) => ({ role, option }))).slice(0, 4);
-  }, [counts, a.mode, a.roles, a.picks]);
-
-  const roles = useMemo(() => withExtra(a, extra), [a, extra]);
+  const roles = useMemo(() => toRoles(a), [a]);
   const chosenDays = countDays(roles);
   /** The maximum as it goes into the sheet: never more than the days they chose. */
   const maxShifts = Math.max(1, Math.min(a.maxShifts ?? chosenDays, chosenDays));
 
-  const ids = stepIds(a, suggestions, chosenDays);
+  const ids = stepIds(a, chosenDays);
   const index = Math.max(0, ids.indexOf(at));
   const current = ids[index];
   const first = firstName.trim().split(" ")[0];
@@ -249,11 +229,6 @@ export function SignupPage() {
         ];
       })
     ) as Record<`picks-${VolunteerRole}`, { say: string[]; answer: () => string; react: () => string | undefined }>),
-    suggest: {
-      say: ["Ik zit nog een beetje krap op een paar momenten. Kun je er misschien ook een? Helemaal goed als het niet uitkomt."],
-      answer: () => (extra.length ? `Ja: ${extra.map((k) => shortOption(k.split("|")[1])).join(", ")}` : "Nee, zo is het goed"),
-      react: () => (extra.length ? "Je bent een schat." : undefined)
-    },
     days: {
       say: [a.mode === "dag" ? "Op welke dagen kun je?" : "Welke dagen ben je beschikbaar? Hoe meer dagen, hoe makkelijker ik je ergens kwijt kan."],
       answer: () => listOrCount(a.days.map(dayLabel), "dagen")
@@ -340,7 +315,7 @@ export function SignupPage() {
     if (open.length) after.parts = { ...after.parts, ...Object.fromEntries(open.map((d) => [d, partsOnDay(d)])) };
     setA(after);
     setError(null);
-    const list = stepIds(after, suggestions, countDays(withExtra(after, extra)));
+    const list = stepIds(after, countDays(toRoles(after)));
     // No licence and bezorgen was their only task: back to choosing what they would like to do.
     if (after.roles.length === 0 && current === "license") {
       setBounced(true);
@@ -414,27 +389,6 @@ export function SignupPage() {
               ]}
             />
           )
-        };
-      case "suggest":
-        return {
-          content: (
-            <div className="grid gap-1.5">
-              {suggestions.map((s) => {
-                const key = `${s.role}|${s.option}`;
-                const n = counts ? countFor(counts, s.role, s.option) : 0;
-                const on = extra.includes(key);
-                return (
-                  <Toggle key={key} on={on} onClick={() => setExtra((x) => (x.includes(key) ? x.filter((k) => k !== key) : [...x, key]))}>
-                    <span className="font-bold">{shortOption(s.option)}</span>
-                    <span className={`block text-xs ${on ? "text-meel/80" : "text-muted"}`}>
-                      {volunteerRoleLabel[s.role]} · {n === 0 ? "nog niemand" : `pas ${n} ${n === 1 ? "aanmelding" : "aanmeldingen"}`}
-                    </span>
-                  </Toggle>
-                );
-              })}
-            </div>
-          ),
-          next: { ready: true, label: extra.length ? "Voeg toe" : "Nee, zo is het goed" }
         };
       case "days":
         return {

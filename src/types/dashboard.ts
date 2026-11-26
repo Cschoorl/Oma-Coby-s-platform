@@ -124,8 +124,11 @@ export interface SignupPlanning {
   maxShifts: number;
   /** Bezorgers only: a driving licence and a car, or a licence without a car of their own. */
   driving?: Driving;
-  /** A message 24 hours before each shift. */
-  reminder: ReminderChannel;
+  /**
+   * Old question "Zal ik je de dag ervoor herinneren?". No longer asked: everyone gets an e-mail 2 days before
+   * each shift. Only signups from before that change have it.
+   */
+  reminder?: ReminderChannel;
 }
 
 export const maxShiftsLabel = (n: number) => `${n} ${n === 1 ? "dag" : "dagen"}`;

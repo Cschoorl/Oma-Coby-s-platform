@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
 import { countFor, dayKey, labelQuietOptions, staffingStatus, suggestOptions, targetFor } from "../../utils/staffing";
-import type { ReminderChannel, VolunteerRole } from "../../types/dashboard";
+import type { VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
-import { BUSINESS_DELIVERY_WINDOW, CONTACT_EMAIL, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
+import { CONTACT_EMAIL, SHIFT_TIMES, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
 
-/** "tussen 9:00 en 15:00": the same window as the business order form promises. */
-const deliveryWindow = `tussen ${BUSINESS_DELIVERY_WINDOW.replace("–", " en ")}`;
+const until = (range: string) => range.replace("–", " tot ");
+/** Bezorgen by car: ca. 9:00 to 15:00, ochtend until 12:30, middag until 15:00. */
+const deliveryText = `ca. ${SHIFT_TIMES.autokoerier.ochtend.split("–")[0]} tot ${SHIFT_TIMES.autokoerier.middag.split("–")[1]}: 's ochtends tot ${SHIFT_TIMES.autokoerier.ochtend.split("–")[1]}, 's middags tot ${SHIFT_TIMES.autokoerier.middag.split("–")[1]}`;
+
+/** Simple check that an e-mail address can be real: something@something.tld. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
 
 /*
@@ -20,9 +24,11 @@ import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, 
  * She never makes promises about the rooster; that comes later.
  */
 
-type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "reminder" | "contact" | "check";
+type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "suggest" | "days" | "parts" | "dayroles" | "flexible" | "max" | "contact" | "check";
 
 const partLabel: Record<Part, string> = { ochtend: "Ochtend", middag: "Middag", avond: "Avond" };
+/** Dagdelen in general: ochtend until 12:30, middag until 15:00. */
+const partTime: Record<Part, string> = { ochtend: "tot 12:30", middag: "tot 15:00", avond: "" };
 
 /** "Dinsdag 15 december" → "di 15 dec". */
 function shortDay(label: string): string {
@@ -47,10 +53,9 @@ function sharedTime(role: VolunteerRole): string {
 }
 
 function roleBlurb(role: VolunteerRole): string {
-  const time = sharedTime(role).replace("–", " tot ");
-  if (role === "inpakken") return time ? `Van ${time} in Aalsmeer, met koffie.` : "Oliebollen in zakken en dozen in Aalsmeer.";
-  if (role === "autokoerier") return time ? `Rondbrengen met je eigen auto, van ${time}.` : `Rondbrengen met je eigen auto, ${deliveryWindow}.`;
-  return "Achter de bar bij een evenement.";
+  if (role === "inpakken") return `Van ${until(SHIFT_TIMES.inpakken)} in Aalsmeer, met koffie.`;
+  if (role === "autokoerier") return `Rondbrengen met je eigen auto, ${deliveryText}.`;
+  return "Achter de bar, alleen op evenementdagen.";
 }
 
 /** True when a task has more than one shift on some day: then its moments need a dagdeel column. */
@@ -77,9 +82,12 @@ function countDays(roles: ReturnType<typeof toRoles>): number {
   return new Set(ACTIVE_ROLES.flatMap((r) => roles[r].days.map(dayKey))).size;
 }
 
-/** The tasks they could be asked for: this season's (on their days, when they chose days), no bezorgen without a licence. */
+/**
+ * The tasks they could be asked for: this season's that have moments (the bar only once it has event days),
+ * on their days when they chose days, and no bezorgen without a licence and car.
+ */
 function offeredRoles(a: Answers): VolunteerRole[] {
-  return (a.mode === "taak" ? ACTIVE_ROLES : rolesOnDays(a.days)).filter((r) => !(r === "autokoerier" && a.driving === "nee"));
+  return (a.mode === "taak" ? ACTIVE_ROLES.filter((r) => SIGNUP_OPTIONS[r].length > 0) : rolesOnDays(a.days)).filter((r) => !(r === "autokoerier" && a.driving === "nee"));
 }
 
 /** They chose every task there is: "somewhere else" does not exist, so they can be put wherever it is busy. */
@@ -95,6 +103,9 @@ function otherTasks(a: Answers): string {
   if (pack) return "Aan de inpaktafel kan ik je goed gebruiken.";
   return "Op je dagen is er verder nog niets; kies gerust andere dagen.";
 }
+
+/** The three ways to start, in the order Oma offers them. The keys stay the same, so the sheet column "Hoe aangemeld" does too. */
+const modeLabel = { dag: "Ik weet welke data ik kan", taak: "Ik weet welk type taak ik wil doen", flexibel: "Ik ben flexibel" } as const;
 
 /** "inpakken en bezorgen": the tasks as Oma says them in a sentence. */
 function taskNames(roles: VolunteerRole[]): string {
@@ -120,7 +131,8 @@ function stepIds(a: Answers, suggestions: Suggestion[], chosenDays: number): Ste
   }
   // With one day the maximum is that day; no need to ask.
   if (chosenDays > 1) ids.push("max");
-  ids.push("reminder", "contact", "check");
+  // No reminder question: everyone gets an e-mail 2 days before each shift.
+  ids.push("contact", "check");
   return ids;
 }
 
@@ -203,8 +215,8 @@ export function SignupPage() {
   const copy: Record<StepId, { say: string[]; answer: () => string; react?: () => string | undefined }> = {
     mode: {
       // Opening: who she is (and that she is digital), what this is, how long; then straight to the first question.
-      say: ["Hoi! Oma Coby hier, nou ja, mijn digitale versie. Een paar korte vragen en ik weet waar ik je kan gebruiken.", "Weet je al wat je wilt doen, of wanneer je kunt?"],
-      answer: () => (a.mode === "taak" ? "Ik weet wat ik wil doen" : a.mode === "dag" ? "Ik weet wanneer ik kan" : "Zet me maar in waar het nodig is"),
+      say: ["Hoi! Oma Coby hier, nou ja, mijn digitale versie. Een paar korte vragen en ik weet waar ik je kan gebruiken.", "Weet je al wanneer je kunt, of wat je wilt doen?"],
+      answer: () => modeLabel[a.mode ?? "flexibel"],
       react: () => (a.mode === "flexibel" ? "Daar word ik blij van!" : undefined)
     },
     roles: {
@@ -223,10 +235,10 @@ export function SignupPage() {
         const time = sharedTime(r).replace("–", " tot ");
         const ask =
           r === "inpakken"
-            ? `${time ? `Inpakken doen we van ${time} in Aalsmeer. ` : ""}Welke dagen kun je?`
+            ? `${time ? `Inpakken doen we van ${time} in Aalsmeer, met koffie. ` : ""}Welke dagen kun je?`
             : r === "autokoerier"
-              ? `${time ? `Bezorgen is van ${time}. ` : `We bezorgen ${deliveryWindow}, in een ochtend- en een middagdienst. `}Welke dagen kun je rijden?`
-              : "Op welke dagen kun je in de Oliebollenbar staan?";
+              ? `We bezorgen met de auto, ${deliveryText}. Welke dagen kun je rijden?`
+              : "De Oliebollenbar staat alleen op evenementdagen. Op welke kun je?";
         return [
           `picks-${r}`,
           {
@@ -272,11 +284,6 @@ export function SignupPage() {
       say: [`Je kunt op ${chosenDays} dagen. Op hoeveel daarvan wil je helpen?`],
       answer: () => (maxShifts === chosenDays ? `Alle ${chosenDays}` : maxShiftsLabel(maxShifts)),
       react: () => (maxShifts === chosenDays ? "Jij bent een kanjer." : `Afgesproken, hooguit ${maxShiftsLabel(maxShifts)}.`)
-    },
-    reminder: {
-      say: ["Zal ik je de dag ervoor even herinneren? Dan weet je waar en hoe laat."],
-      answer: () => (a.reminder === "whatsapp" ? "Ja, via WhatsApp" : a.reminder === "mail" ? "Ja, via mail" : "Hoeft niet"),
-      react: () => (a.reminder === "whatsapp" ? "Komt goed, ik app je." : a.reminder === "mail" ? "Komt goed, je krijgt een mailtje." : "Prima, je rooster krijg je sowieso.")
     },
     contact: {
       say: ["Bijna klaar! Hoe heet je, en hoe kan ik je bereiken?"],
@@ -351,22 +358,34 @@ export function SignupPage() {
     setAt(id);
   }
 
-  const contactProblem = !firstName.trim()
-    ? "Vul je voornaam in."
-    : !lastName.trim()
-    ? `Vul je achternaam in, dan verwar ik je niet met een andere ${first}.`
-    : a.reminder === "whatsapp" && !phone.trim()
-      ? "Vul je telefoonnummer in, dan kan ik je appen."
-      : a.reminder === "mail" && !email.trim()
-        ? "Vul je e-mailadres in, dan kan ik je mailen."
-        : !phone.trim() && !email.trim()
-          ? "Vul een telefoonnummer of e-mailadres in."
-          : null;
+  /** Name, phone and e-mail are all required; the e-mail also has to look real (we mail the reminders there). */
+  const contactErrors: Partial<Record<"firstName" | "lastName" | "phone" | "email", string>> = {};
+  if (!firstName.trim()) contactErrors.firstName = "Vul je voornaam in.";
+  if (!lastName.trim()) contactErrors.lastName = `Vul je achternaam in, dan verwar ik je niet met een andere ${first || "vrijwilliger"}.`;
+  if (!phone.trim()) contactErrors.phone = "Vul je telefoonnummer in.";
+  else if (phone.replace(/\D/g, "").length < 10) contactErrors.phone = "Vul een telefoonnummer van 10 cijfers in, zoals 06 12345678.";
+  if (!email.trim()) contactErrors.email = "Vul je e-mailadres in.";
+  else if (!EMAIL.test(email.trim())) contactErrors.email = "Dit e-mailadres klopt niet. Vul het in zoals naam@voorbeeld.nl.";
+  const contactOk = Object.keys(contactErrors).length === 0;
+  /** Errors show once they press Verder, and then stay live while they fix them. */
+  const [contactTried, setContactTried] = useState(false);
+  const shownContact = contactTried ? contactErrors : {};
 
   const quietDayMarks = counts && labelQuietDays(counts) ? quietDays(counts) : [];
 
   /** The answer controls for each step, and whether "Verder" can be pressed (none: a quick reply answers). */
-  function composer(id: StepId): { content: ReactNode; next?: { ready: boolean; label?: string } } {
+  /** Verder on the contact step: on to the check when all is filled in, else show what is missing and focus it. */
+  function continueContact() {
+    setContactTried(true);
+    if (contactOk) {
+      advance();
+      return;
+    }
+    const firstMissing = (["firstName", "lastName", "phone", "email"] as const).find((f) => contactErrors[f]);
+    window.setTimeout(() => document.getElementById(`v-${firstMissing}`)?.focus(), 0);
+  }
+
+  function composer(id: StepId): { content: ReactNode; next?: { ready: boolean; label?: string; onNext?: () => void } } {
     switch (id) {
       case "mode":
         return {
@@ -374,11 +393,7 @@ export function SignupPage() {
             <QuickReplies
               value={a.mode}
               onPick={(mode) => advance({ mode, flexible: mode === "flexibel" ? true : a.flexible })}
-              options={[
-                ["taak", "Ik weet wat ik wil doen"],
-                ["dag", "Ik weet wanneer ik kan"],
-                ["flexibel", "Zet me maar in waar het nodig is"]
-              ]}
+              options={(["dag", "taak", "flexibel"] as const).map((m): [typeof m, string] => [m, modeLabel[m]])}
             />
           )
         };
@@ -450,7 +465,7 @@ export function SignupPage() {
                   <span className="text-sm font-bold text-krent">{dayLabel(day)}</span>
                   <ChipGrid
                     columns="grid-cols-3"
-                    items={partsOnDay(day).map((p) => ({ key: p, label: partLabel[p] }))}
+                    items={partsOnDay(day).map((p) => ({ key: p, label: partLabel[p], sub: partTime[p] }))}
                     value={a.parts[day] ?? []}
                     onChange={(change) =>
                       setA((prev) => {
@@ -510,29 +525,24 @@ export function SignupPage() {
             />
           )
         };
-      case "reminder":
-        return {
-          content: (
-            <QuickReplies<ReminderChannel>
-              value={a.reminder}
-              onPick={(reminder) => advance({ reminder })}
-              options={[
-                ["whatsapp", "Ja, via WhatsApp"],
-                ["mail", "Ja, via mail"],
-                ["geen", "Hoeft niet"]
-              ]}
-            />
-          )
-        };
       case "contact":
         return {
           content: (
             <div className="grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Voornaam *" value={firstName} onChange={setFirstName} autoComplete="given-name" autoFocus />
-                <Field label="Achternaam *" value={lastName} onChange={setLastName} autoComplete="family-name" />
-                <Field label={`Telefoonnummer${a.reminder === "whatsapp" ? " *" : ""}`} value={phone} onChange={setPhone} type="tel" autoComplete="tel" />
-                <Field label={`E-mailadres${a.reminder === "mail" ? " *" : ""}`} value={email} onChange={setEmail} type="email" autoComplete="email" />
+                <Field id="v-firstName" label="Voornaam *" value={firstName} onChange={setFirstName} autoComplete="given-name" autoFocus error={shownContact.firstName} />
+                <Field id="v-lastName" label="Achternaam *" value={lastName} onChange={setLastName} autoComplete="family-name" error={shownContact.lastName} />
+                <Field id="v-phone" label="Telefoonnummer *" value={phone} onChange={setPhone} type="tel" autoComplete="tel" error={shownContact.phone} />
+                <Field
+                  id="v-email"
+                  label="E-mailadres *"
+                  value={email}
+                  onChange={setEmail}
+                  type="email"
+                  autoComplete="email"
+                  error={shownContact.email}
+                  hint="Twee dagen voor je dienst krijg ik je hier een herinnering."
+                />
                 <Field label="Woonplaats" value={city} onChange={setCity} autoComplete="address-level2" />
                 {roles.autokoerier.wants ? (
                   <div className="sm:col-span-2">
@@ -541,10 +551,10 @@ export function SignupPage() {
                   </div>
                 ) : null}
               </div>
-              {contactProblem && (firstName || lastName || phone || email) ? <p className="text-xs text-muted">{contactProblem}</p> : null}
             </div>
           ),
-          next: { ready: !contactProblem }
+          // Always pressable: pressing Verder with something missing shows what to fix, field by field.
+          next: { ready: true, onNext: continueContact }
         };
       case "check": {
         const neediest = counts && a.mode === "flexibel" ? neediestFor(counts, a) : [];
@@ -582,7 +592,7 @@ export function SignupPage() {
               </label>
               <label className="flex items-start gap-2 text-sm text-krent">
                 <input type="checkbox" className="mt-1 accent-[#69873c]" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />
-                Ik geef toestemming om mijn gegevens te bewaren voor de planning van deze oliebollenactie. Na de actie worden ze verwijderd.
+                Vind je het oké als Oma Coby je gegevens in haar notitieboekje bijhoudt? Na de actie gooit ze ze weg.
               </label>
             </div>
           )
@@ -622,10 +632,15 @@ export function SignupPage() {
     event.preventDefault();
     // Enter in a text field means "Verder" until the last step.
     if (current !== "check") {
-      if (view.next?.ready) advance();
+      if (view.next?.ready) (view.next.onNext ?? advance)();
       return;
     }
-    if (!a.mode || (a.flexible === null && !flexibleNow) || !a.reminder) return;
+    if (!a.mode || (a.flexible === null && !flexibleNow)) return;
+    if (!contactOk) {
+      goTo("contact");
+      setContactTried(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -643,7 +658,6 @@ export function SignupPage() {
           mode: a.mode,
           flexible: flexibleNow,
           maxShifts,
-          reminder: a.reminder,
           driving: roles.autokoerier.wants && a.driving && a.driving !== "nee" ? a.driving : undefined
         }
       });
@@ -667,9 +681,7 @@ export function SignupPage() {
         <div className="grid content-center gap-2 p-5 sm:p-7">
           <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Dankjewel, {first}!</h1>
           <p className="text-krent">Je bent nu officieel mijn hulpje. Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster en laat ik je weten waar en wanneer ik je verwacht.</p>
-          {a.reminder && a.reminder !== "geen" ? (
-            <p className="text-sm text-krent">De dag ervoor krijg je nog een herinnering via {a.reminder === "whatsapp" ? "WhatsApp" : "mail"}.</p>
-          ) : null}
+          <p className="text-sm text-krent">Twee dagen voor elke dienst krijg je automatisch een herinnering per mail, op {email.trim()}.</p>
           <p className="text-sm text-muted">
             Vragen of iets wijzigen? Mail naar{" "}
             <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>
@@ -745,7 +757,7 @@ export function SignupPage() {
                     {busy ? "Versturen…" : "Aanmelden"}
                   </button>
                 ) : view.next ? (
-                  <button type="button" className={primaryButton} disabled={!view.next.ready} onClick={() => advance()}>
+                  <button type="button" className={primaryButton} disabled={!view.next.ready} onClick={() => (view.next?.onNext ?? advance)()}>
                     {view.next.label ?? "Verder"}
                   </button>
                 ) : null}
@@ -949,14 +961,18 @@ function OptionGrid({ role, quiet, value, onChange }: { role: VolunteerRole; qui
 }
 
 function Field({
+  id,
   label,
   value,
   onChange,
   type = "text",
   autoComplete,
   placeholder,
-  autoFocus
+  autoFocus,
+  error,
+  hint
 }: {
+  id?: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -964,11 +980,34 @@ function Field({
   autoComplete?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  error?: string;
+  hint?: string;
 }) {
+  const note = id ? `${id}-note` : undefined;
   return (
     <label className="grid gap-1 text-sm">
       <span className={fieldLabel}>{label}</span>
-      <input className={inputClass} type={type} value={value} onChange={(e) => onChange(e.target.value)} autoComplete={autoComplete} placeholder={placeholder} autoFocus={autoFocus} />
+      <input
+        id={id}
+        className={`${inputClass} ${error ? "border-feest" : ""}`}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? note : undefined}
+      />
+      {error ? (
+        <span id={note} className="text-xs font-bold text-feest-ink">
+          ! {error}
+        </span>
+      ) : hint ? (
+        <span id={note} className="text-xs text-muted">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }

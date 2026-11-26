@@ -1107,7 +1107,8 @@ function createDemoBackend(notice?: string): Backend {
     async registerVolunteer(signup) {
       await delay(300);
       if (!signup.name.trim()) throw new Error("Vul je naam in.");
-      if (!signup.phone.trim() && !signup.email.trim()) throw new Error("Vul een telefoonnummer of e-mailadres in.");
+      if (!signup.phone.trim()) throw new Error("Vul je telefoonnummer in.");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(signup.email.trim())) throw new Error("Vul een geldig e-mailadres in.");
       if (!signup.consent) throw new Error("Geef toestemming voor het bewaren van je gegevens.");
       if (!Object.values(signup.roles).some((r) => r.wants)) throw new Error("Kies minstens één taak waarmee je wilt helpen.");
       mutate((store) => {

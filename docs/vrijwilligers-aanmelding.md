@@ -2,6 +2,22 @@
 
 De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een gesprek met Oma Coby. Ze stelt zich voor, vraagt één ding tegelijk en reageert kort op elk antwoord. Eerdere antwoorden blijven als chat erboven staan, elk met *Wijzig*. De logica staat los in `signupFlow.ts`.
 
+## Seizoen 2026 (wijzigingen 26 november)
+
+- **Start.** Drie keuzes, in deze volgorde: *Ik weet welke data ik kan* (`dag`), *Ik weet welk type taak ik wil doen* (`taak`),
+  *Ik ben flexibel* (`flexibel`). De sleutels zijn gelijk gebleven, dus de kolom *Hoe aangemeld* ook.
+- **Dagen.** Eén lijst voor alles: `SEASON_WORKDAYS` in `src/config.ts`, ma t/m vr van 7 december tot en met 8 januari,
+  zonder 25, 26, 27 december en 1 januari. Het zakelijke bestelformulier gebruikt dezelfde lijst (`deliveryDays`).
+  Het tabblad Agenda bepaalt niet meer welke dagen of tijden je kunt kiezen; het geeft alleen nog *nodig* per moment.
+- **Taken.** Inpakken 7:00 tot 9:30, met koffie. Autokoerier ca. 9:00 tot 15:00, met eigen auto (ochtend tot 12:30,
+  middag tot 15:00). Oliebollenbar alleen op evenementdagen: `BAR_EVENT_DAYS` in `src/config.ts`, nog leeg tot Mark de
+  data stuurt; zolang hij leeg is, wordt de bar nergens aangeboden. Geen fiets meer.
+- **Geen herinneringsvraag.** Iedereen krijgt automatisch 2 dagen van tevoren een mail. De kolom
+  *Herinnering 24 uur van tevoren* blijft voor nieuwe aanmeldingen leeg.
+- **Contact.** Voornaam, achternaam, telefoon en e-mail zijn verplicht; bij *Verder* staat per veld wat er mist of
+  niet klopt. Het Apps Script controleert telefoon en e-mail ook.
+- **Toestemming.** "Vind je het oké als Oma Coby je gegevens in haar notitieboekje bijhoudt? Na de actie gooit ze ze weg."
+
 ## Persona: Oma Coby
 
 - **Toon.** Warm, een beetje ondeugend, korte zinnen, je/jij. Zodra ze je naam weet, gebruikt ze die ("Dankjewel, Ria!").

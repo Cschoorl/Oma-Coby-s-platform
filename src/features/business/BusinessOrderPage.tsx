@@ -8,6 +8,7 @@ import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
 import heroUrl from "../../assets/mark-en-oma-coby.jpg";
 import { LogoBanner, WaaromMuziek } from "./Voorgangers";
 import { AddressSearch } from "./AddressSearch";
+import { useEmailCheck } from "../../lib/emailCheck";
 import {
   areaFor,
   businessTotals,
@@ -154,6 +155,21 @@ function Field({ id, label, optional, hint, error, children }: { id: string; lab
         <p className="text-xs text-oliebol">{hint}</p>
       ) : null}
     </div>
+  );
+}
+
+/** "Bedoel je ria@gmail.com?" under an e-mail field, with one click to take it over. */
+function EmailSuggestion({ suggestion, onUse }: { suggestion: string | null; onUse: (fixed: string) => void }) {
+  const t = useT();
+  if (!suggestion) return null;
+  return (
+    <p className="text-xs text-krent">
+      {t.emailDidYouMean}{" "}
+      <button type="button" className="font-bold underline decoration-lijn-2 underline-offset-2 hover:decoration-krent" onClick={() => onUse(suggestion)}>
+        {suggestion}
+      </button>
+      ?
+    </p>
   );
 }
 
@@ -1097,7 +1113,15 @@ export function BusinessOrderPage() {
   const errors = validateBusiness(order, info, now, t.validation);
   // With the same address, a wrong e-mail is one mistake, not two.
   if (sameInvoice) delete errors.invoiceEmail;
+  // A domain that takes no mail ("4buildidng.nl") is surely wrong: then the confirmation never arrives.
+  const emailCheck = useEmailCheck(input.email);
+  const invoiceCheck = useEmailCheck(sameInvoice ? "" : input.invoiceEmail);
+  if (!errors.email && emailCheck.status === "missing") errors.email = t.emailNoDomain(emailCheck.domain);
+  if (!sameInvoice && !errors.invoiceEmail && invoiceCheck.status === "missing") errors.invoiceEmail = t.emailNoDomain(invoiceCheck.domain);
   const shown = showErrors ? errors : {};
+  /** The e-mail fields show "this domain takes no mail" at once, not only after pressing Next. */
+  const shownMail = (field: "email" | "invoiceEmail", check: typeof emailCheck) =>
+    shown[field] ?? (check.status === "missing" ? errors[field] : undefined);
   const missing = FIELD_ORDER.filter((f) => errors[f]);
 
   function update<K extends keyof BusinessOrderInput>(key: K, value: BusinessOrderInput[K]) {
@@ -1660,8 +1684,9 @@ export function BusinessOrderPage() {
               <Field id="f-phone" label={t.phone} hint={t.phoneHint} error={shown.phone}>
                 <input id="f-phone" type="tel" className={field} autoComplete="tel" value={input.phone} onChange={(e) => update("phone", e.target.value)} />
               </Field>
-              <Field id="f-email" label={t.email} hint={t.emailHint} error={shown.email}>
+              <Field id="f-email" label={t.email} hint={t.emailHint} error={shownMail("email", emailCheck)}>
                 <input id="f-email" type="email" className={field} autoComplete="email" value={input.email} onChange={(e) => update("email", e.target.value)} />
+                <EmailSuggestion suggestion={emailCheck.suggestion} onUse={(fixed) => update("email", fixed)} />
               </Field>
             </div>
 
@@ -1670,8 +1695,9 @@ export function BusinessOrderPage() {
                 {t.sameInvoice}
               </Check>
               {!sameInvoice ? (
-                <Field id="f-invoiceEmail" label={t.invoiceEmail} error={shown.invoiceEmail}>
+                <Field id="f-invoiceEmail" label={t.invoiceEmail} error={shownMail("invoiceEmail", invoiceCheck)}>
                   <input id="f-invoiceEmail" type="email" className={field} value={input.invoiceEmail} onChange={(e) => update("invoiceEmail", e.target.value)} placeholder={t.invoiceEmailPlaceholder} />
+                  <EmailSuggestion suggestion={invoiceCheck.suggestion} onUse={(fixed) => update("invoiceEmail", fixed)} />
                 </Field>
               ) : null}
               {/* Factuuradres als groot vak: bedrijven hebben vaak afdeling, postbus en kostenplaats op aparte regels. */}
@@ -1757,6 +1783,12 @@ export function BusinessOrderPage() {
           </div>
           ) : null}
 
+          {/* Op de laatste stap nog één keer het adres, groot: een tikfout zie je hier eerder dan in het veld. */}
+          {step === 3 && !nextStep && !errors.email ? (
+            <p className="text-[15px] text-krent">
+              {t.emailConfirm} <b className="break-all">{input.email.trim()}</b>. {t.emailConfirmEnd}
+            </p>
+          ) : null}
           {/* Vorige en Volgende onder elke stap; op de laatste stap wordt Volgende de verstuurknop. */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             {prevStep ? (

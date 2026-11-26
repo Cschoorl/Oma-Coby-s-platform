@@ -222,7 +222,8 @@ export function SignupPage() {
     parts: {
       say: [
         byTask
-          ? `${a.days.length === 1 ? "Dit is je dienst op die dag" : "Dit zijn je diensten op die dagen"}, met de tijd erbij. Alles staat aan; vink uit wat niet lukt.`
+          ? // One dienst, more on one day, or more days: the sentence follows what is on screen.
+            `${a.days.reduce((n, d) => n + partsOnDay(d, scope).length, 0) === 1 ? "Dit is je dienst op die dag" : a.days.length === 1 ? "Dit zijn je diensten op die dag" : "Dit zijn je diensten op die dagen"}, met de tijd erbij. Alles staat aan; vink uit wat niet lukt.`
           : "Op een dag zijn er een paar momenten, elk met een eigen tijd. Alles staat aan; vink uit wat niet lukt."
       ],
       answer: () => {

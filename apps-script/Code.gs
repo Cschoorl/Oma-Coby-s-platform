@@ -768,6 +768,8 @@ const HANDLERS = {
         const column = index[role + 'Days'];
         if (column !== undefined) sheet.getRange(at, column + 1).setNumberFormat('@');
       });
+      // Zo geschreven toont Sheets van de tijdstempel alleen de datum; met deze opmaak staat de tijd er weer bij.
+      if (index.timestamp !== undefined) sheet.getRange(at, index.timestamp + 1).setNumberFormat('dd-MM-yyyy HH:mm:ss');
       sheet.getRange(at, 1, 1, row.length).setValues([row]);
       bump_();
       return { saved: true };

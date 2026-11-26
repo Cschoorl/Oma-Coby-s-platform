@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { backend, type SignupCounts } from "../../data/backend";
-import { countFor, dayKey, labelQuietOptions, staffingStatus, targetFor } from "../../utils/staffing";
+import { dayKey } from "../../utils/staffing";
 import type { VolunteerRole } from "../../types/dashboard";
-import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
+import { ACTIVE_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
 import omaAvatarUrl from "../../assets/oma-coby-lijst.png";
 import { AddressSearch, CitySearch } from "../business/AddressSearch";
-import { CONTACT_EMAIL, SHIFT_TIMES, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
+import { CONTACT_EMAIL, SHIFT_TIMES, SIGNUP_OPTIONS, applyAgenda } from "../../config";
 
 const until = (range: string) => range.replace("–", " tot ");
 /** Bezorgen by car: ca. 9:00 to 15:00, ochtend until 12:30, middag until 15:00. */
@@ -25,9 +25,11 @@ import { daysWithChoice, emptyAnswers, eventOn, labelQuietDays, neediestFor, opt
  * She never makes promises about the rooster; that comes later.
  */
 
-type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "days" | "parts" | "dayroles" | "flexible" | "max" | "contact" | "check";
+type StepId = "mode" | "roles" | "license" | "days" | "parts" | "dayroles" | "flexible" | "max" | "contact" | "check";
 
 const partLabel: Record<Part, string> = { vroeg: "Vroeg", ochtend: "Ochtend", middag: "Middag", evenement: "Evenement", avond: "Avond" };
+/** After choosing tasks a moment is a dienst of that task: "Inpakken 7:00–9:30", not "Vroeg". */
+const taskPartLabel: Record<Part, string> = { vroeg: "Inpakken", ochtend: "Bezorgen", middag: "Bezorgen", evenement: "Oliebollenbar", avond: "Oliebollenbar" };
 
 /** "Dinsdag 15 december" → "di 15 dec". */
 function shortDay(label: string): string {
@@ -45,23 +47,14 @@ function listOrCount(items: string[], plural: string): string {
   return items.length <= 3 ? items.join(", ") : `${items.length} ${plural}`;
 }
 
-/** The shift time of a task when all its moments share one ("6:30–12:00"), else "". */
-function sharedTime(role: VolunteerRole): string {
-  const times = new Set(SIGNUP_OPTIONS[role].map((o) => optionTime(role, o)));
-  return times.size === 1 ? [...times][0] : "";
-}
-
 function roleBlurb(role: VolunteerRole): string {
   if (role === "inpakken") return `Van ${until(SHIFT_TIMES.inpakken)} in Aalsmeer, met koffie.`;
   if (role === "autokoerier") return `Rondbrengen met je eigen auto, ${deliveryText}.`;
   return "Helpen op evenementen en pick-ups van Oma Coby's Oliebollenbar.";
 }
 
-/** True when a task has more than one shift on some day: then its moments need a dagdeel column. */
-function hasParts(role: VolunteerRole): boolean {
-  const days = SIGNUP_OPTIONS[role].map(dayKey);
-  return new Set(days).size < days.length;
-}
+/** Only the Oliebollenbar: its events are the days, each with its own time, so there is nothing more to ask per day. */
+const barOnly = (a: Answers) => a.mode === "taak" && a.roles.length === 1 && a.roles[0] === "oliebollenbar";
 
 /** Different days they can, over all tasks: inpakken and the bar on one day is still one day. */
 function countDays(roles: ReturnType<typeof toRoles>): number {
@@ -107,8 +100,9 @@ function stepIds(a: Answers, chosenDays: number): StepId[] {
   // Right after the task choice, while it is fresh; "Zet me maar in" and choosing every task already answer it.
   const flexible: StepId[] = a.mode !== "flexibel" && !openToAll(a) ? ["flexible"] : [];
   if (a.mode === "taak") {
-    // No "kun je er nog een?" after the days: Oma does not ask for extra quiet moments.
-    ids.push("roles", ...license, ...flexible, ...ACTIVE_ROLES.filter((r) => a.roles.includes(r)).map((r) => `picks-${r}` as StepId));
+    // The days once, for all their tasks together; then per day the diensten of those tasks, each with its time.
+    ids.push("roles", ...license, ...flexible, "days");
+    if (!barOnly(a)) ids.push("parts");
   } else {
     ids.push("days");
     // Only a question on days with more than one shift; with one morning shift there is nothing to ask.
@@ -117,7 +111,7 @@ function stepIds(a: Answers, chosenDays: number): StepId[] {
   }
   // With one day the maximum is that day; no need to ask.
   if (chosenDays > 1) ids.push("max");
-  // No reminder question: everyone gets an e-mail 2 days before each shift.
+  // No reminder question: rooster and reminders go by WhatsApp to everyone.
   ids.push("contact", "check");
   return ids;
 }
@@ -134,7 +128,6 @@ function joinLines(reaction: string | undefined, say: string[]): string[] {
 /** Standalone signup page (no login). Saved to the same tab as the Google Form, plus the planning columns. */
 export function SignupPage() {
   const [counts, setCounts] = useState<SignupCounts | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const [a, setA] = useState<Answers>(emptyAnswers);
   const [at, setAt] = useState<StepId>("mode");
   /** Bezorgen was their only task and they have no licence and car: back to the task choice, with the other tasks named. */
@@ -165,8 +158,7 @@ export function SignupPage() {
         applyAgenda(info.agenda);
         setCounts(info.counts);
       })
-      .catch(() => setCounts(null))
-      .finally(() => setLoaded(true));
+      .catch(() => setCounts(null));
   }, []);
 
   const roles = useMemo(() => toRoles(a), [a]);
@@ -185,7 +177,12 @@ export function SignupPage() {
 
   const days = seasonDays();
   const dayLabel = (key: string) => shortDay(days.find((d) => d.key === key)?.label ?? key);
-  const pickedCount = (r: VolunteerRole) => a.picks[r].length;
+  /** With a task in mind the days and moments are those of their tasks; otherwise of the whole season. */
+  const byTask = a.mode === "taak";
+  const scope = byTask ? a.roles : ACTIVE_ROLES;
+  /** The days whose moments are asked: with a task every day (they see their diensten), else only days with a choice. */
+  const partDays = byTask ? a.days : daysWithChoice(a.days);
+  const momentLabel = (p: Part) => (byTask ? taskPartLabel[p] : partLabel[p]);
 
   /*
    * What Oma says per step, how the answer reads back, and her reaction to it. A reaction is only
@@ -209,35 +206,31 @@ export function SignupPage() {
       answer: () => (a.driving === "auto" ? "Ja, rijbewijs én auto" : "Nee, niet allebei"),
       react: () => (a.driving === "nee" ? "Geen probleem, dan laat ik bezorgen zitten." : undefined)
     },
-    ...(Object.fromEntries(
-      VOLUNTEER_ROLES.map((r) => {
-        const time = sharedTime(r).replace("–", " tot ");
-        const ask =
-          r === "inpakken"
-            ? `${time ? `Inpakken doen we van ${time} in Aalsmeer, met koffie. ` : ""}Welke dagen kun je?`
-            : r === "autokoerier"
-              ? `We bezorgen met de auto, ${deliveryText}. Welke dagen kun je rijden?`
-              : "De Oliebollenbar staat er bij een paar evenementen en pick-ups. Bij elk staat hoe laat ik je erbij nodig heb, met opbouwen en opruimen. Waar kun je bij zijn? Meer dan één mag, hoe meer hoe liever.";
-        return [
-          `picks-${r}`,
-          {
-            say: [ask],
-            answer: () => listOrCount(a.picks[r].map(shortOption), "dagen"),
-            react: () => (pickedCount(r) >= 3 ? "Wat een toppertje." : undefined)
-          }
-        ];
-      })
-    ) as Record<`picks-${VolunteerRole}`, { say: string[]; answer: () => string; react: () => string | undefined }>),
     days: {
-      say: [a.mode === "dag" ? "Op welke dagen kun je?" : "Welke dagen ben je beschikbaar? Hoe meer dagen, hoe makkelijker ik je ergens kwijt kan."],
-      answer: () => listOrCount(a.days.map(dayLabel), "dagen")
+      say: [
+        barOnly(a)
+          ? "De Oliebollenbar staat op een paar evenementen en pick-ups. Bij elk zie je hoe laat ik je nodig heb, inclusief opbouwen en opruimen. Waar kun je bij zijn? Meer dan één mag: hoe meer, hoe liever."
+          : byTask
+            ? `${a.roles.length === 1 && a.roles[0] === "inpakken" ? `Inpakken doen we van ${until(SHIFT_TIMES.inpakken)} in Aalsmeer. ` : ""}Op welke dagen kun je?${a.roles.includes("oliebollenbar") ? " Bij de dagen met een evenement of pick-up van de Oliebollenbar staat dat erbij." : ""}`
+            : a.mode === "dag"
+              ? "Op welke dagen kun je?"
+              : "Welke dagen ben je beschikbaar? Hoe meer dagen, hoe makkelijker ik je ergens kwijt kan."
+      ],
+      answer: () => listOrCount(a.days.map(dayLabel), "dagen"),
+      react: () => (byTask && a.days.length >= 3 ? "Wat een toppertje." : undefined)
     },
     parts: {
-      say: ["Op een dag zijn er een paar momenten, elk met een eigen tijd. Alles staat aan; vink uit wat niet lukt."],
-      answer: () =>
-        daysWithChoice(a.days)
-          .map((d) => `${dayLabel(d)}: ${(a.parts[d] ?? []).map((p) => partLabel[p].toLowerCase()).join(" en ")}`)
-          .join(", ")
+      say: [
+        byTask
+          ? `${a.days.length === 1 ? "Dit is je dienst op die dag" : "Dit zijn je diensten op die dagen"}, met de tijd erbij. Alles staat aan; vink uit wat niet lukt.`
+          : "Op een dag zijn er een paar momenten, elk met een eigen tijd. Alles staat aan; vink uit wat niet lukt."
+      ],
+      answer: () => {
+        const chosen = partDays.filter((d) => (a.parts[d] ?? []).length > 0);
+        const count = chosen.reduce((n, d) => n + (a.parts[d] ?? []).length, 0);
+        if (chosen.length > 3) return `${count} ${byTask ? "diensten" : "momenten"} op ${chosen.length} dagen`;
+        return chosen.map((d) => `${dayLabel(d)}: ${(a.parts[d] ?? []).map((p) => (byTask && (p === "ochtend" || p === "middag") ? `bezorgen ${p}` : momentLabel(p).toLowerCase())).join(" en ")}`).join(", ");
+      }
     },
     dayroles: {
       say: bounced
@@ -309,9 +302,22 @@ export function SignupPage() {
     const after = { ...a, ...next };
     // "Zet me maar in": open to every task on their days, unless they untick one.
     if (after.mode === "flexibel" && after.roles.length === 0 && after.days.length > 0) after.roles = rolesOnDays(after.days).filter((r) => !(r === "autokoerier" && after.driving === "nee"));
-    // Days with more than one shift start with all of them ticked; untick what does not fit.
-    const open = daysWithChoice(after.days).filter((d) => !after.parts[d]);
-    if (open.length) after.parts = { ...after.parts, ...Object.fromEntries(open.map((d) => [d, partsOnDay(d)])) };
+    if (after.mode === "taak") {
+      // Only days their tasks have, and per day the diensten of those tasks: all ticked until they untick one.
+      const valid = seasonDays(after.roles).map((d) => d.key);
+      after.days = after.days.filter((d) => valid.includes(d));
+      after.parts = Object.fromEntries(
+        after.days.map((d) => {
+          const on = partsOnDay(d, after.roles);
+          const had = after.parts[d];
+          return [d, had ? on.filter((p) => had.includes(p)) : on];
+        })
+      );
+    } else {
+      // Days with more than one shift start with all of them ticked; untick what does not fit.
+      const open = daysWithChoice(after.days).filter((d) => !after.parts[d]);
+      if (open.length) after.parts = { ...after.parts, ...Object.fromEntries(open.map((d) => [d, partsOnDay(d)])) };
+    }
     setA(after);
     setError(null);
     const list = stepIds(after, countDays(toRoles(after)));
@@ -332,7 +338,7 @@ export function SignupPage() {
     setAt(id);
   }
 
-  /** Name, phone and e-mail are all required; the e-mail also has to look real (we mail the reminders there). */
+  /** Name, phone and e-mail are all required: rooster and reminders go by WhatsApp, the e-mail is the fallback and has to look real. */
   const contactErrors: Partial<Record<"firstName" | "lastName" | "phone" | "email" | "city", string>> = {};
   if (!firstName.trim()) contactErrors.firstName = "Vul je voornaam in.";
   if (!lastName.trim()) contactErrors.lastName = `Vul je achternaam in, dan verwar ik je niet met een andere ${first || "vrijwilliger"}.`;
@@ -340,7 +346,7 @@ export function SignupPage() {
   else if (phone.replace(/\D/g, "").length < 10) contactErrors.phone = "Vul een telefoonnummer van 10 cijfers in, zoals 06 12345678.";
   if (!email.trim()) contactErrors.email = "Vul je e-mailadres in.";
   else if (!EMAIL.test(email.trim())) contactErrors.email = "Dit e-mailadres klopt niet. Vul het in zoals naam@voorbeeld.nl.";
-  // A domain that takes no mail ("gmial.nl") is surely wrong: then the reminders never arrive.
+  // A domain that takes no mail ("gmial.nl") is surely wrong: then no mail of ours ever arrives.
   const emailCheck = useEmailCheck(email);
   if (!contactErrors.email && emailCheck.status === "missing") contactErrors.email = `Ik kan geen mail sturen naar ${emailCheck.domain}. Kijk het adres even na.`;
   // Woonplaats is needed for the planning (bezorgers near home); the list gives the right spelling.
@@ -373,14 +379,16 @@ export function SignupPage() {
           content: (
             <QuickReplies
               value={a.mode}
-              onPick={(mode) => advance({ mode, flexible: mode === "flexibel" ? true : a.flexible })}
+              // Another way in asks other things: start clean, so no days or moments linger from the first try.
+              onPick={(mode) => advance({ mode, flexible: mode === "flexibel" ? true : a.flexible, ...(mode !== a.mode ? { roles: [], days: [], parts: {} } : {}) })}
               options={(["dag", "taak", "flexibel"] as const).map((m): [typeof m, string] => [m, modeLabel[m]])}
             />
           )
         };
       case "roles":
         return {
-          content: <RolePicker roles={offeredRoles(a)} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles) }))} />,
+          // Other tasks, other diensten: every dienst of the new choice starts ticked again.
+          content: <RolePicker roles={offeredRoles(a)} value={a.roles} onChange={(change) => setA((prev) => ({ ...prev, roles: change(prev.roles), parts: {} }))} />,
           next: { ready: a.roles.length > 0 }
         };
       case "license":
@@ -396,27 +404,40 @@ export function SignupPage() {
             />
           )
         };
-      case "days":
+      case "days": {
+        const list = seasonDays(scope);
+        const events = barOnly(a);
         return {
           content: (
             <div className="grid gap-2">
               <ChipGrid
-                items={days.map((d) => ({ key: d.key, label: shortDay(d.label), mark: quietDayMarks.includes(d.key) }))}
+                // Only the bar: each event with its name and time. Otherwise plain days, with a note on days that have an event.
+                columns={events ? "grid-cols-2 sm:grid-cols-3" : undefined}
+                items={list.map((d) => ({
+                  key: d.key,
+                  label: shortDay(d.label),
+                  sub: events ? eventOn(d.key) : scope.includes("oliebollenbar") && eventOn(d.key) ? "evenement" : undefined,
+                  time: events ? partTimeOn(d.key, "evenement") : undefined,
+                  mark: quietDayMarks.includes(d.key)
+                }))}
                 value={a.days}
                 onChange={(change) =>
                   setA((prev) => {
                     const next = change(prev.days);
-                    return { ...prev, days: days.map((d) => d.key).filter((k) => next.includes(k)), roles: prev.mode === "flexibel" ? [] : prev.roles };
+                    return { ...prev, days: list.map((d) => d.key).filter((k) => next.includes(k)), roles: prev.mode === "flexibel" ? [] : prev.roles };
                   })
                 }
               />
-              {quietDayMarks.length > 0 ? <MarkLegend /> : null}
+              {list.some((d) => quietDayMarks.includes(d.key)) ? <MarkLegend /> : null}
             </div>
           ),
           next: { ready: a.days.length > 0 }
         };
+      }
       case "parts": {
-        const choice = daysWithChoice(a.days);
+        const choice = partDays;
+        // They chose the bar too, but none of their days has an event: say so, or the bar silently drops out.
+        const noEvent = byTask && a.roles.includes("oliebollenbar") && !a.days.some((d) => eventOn(d));
         return {
           content: (
             <div className="grid gap-1.5">
@@ -426,21 +447,32 @@ export function SignupPage() {
                   <ChipGrid
                     columns="grid-cols-2 sm:grid-cols-4"
                     // Each moment with its start and end; an event also with its name.
-                    items={partsOnDay(day).map((p) => ({ key: p, label: partLabel[p], sub: p === "evenement" ? eventOn(day) : undefined, time: partTimeOn(day, p) }))}
+                    items={partsOnDay(day, scope).map((p) => ({
+                      key: p,
+                      label: momentLabel(p),
+                      sub: p === "evenement" ? eventOn(day) : byTask && (p === "ochtend" || p === "middag") ? partLabel[p].toLowerCase() : undefined,
+                      time: partTimeOn(day, p)
+                    }))}
                     value={a.parts[day] ?? []}
                     onChange={(change) =>
                       setA((prev) => {
                         const next = change(prev.parts[day] ?? []);
-                        return { ...prev, parts: { ...prev.parts, [day]: partsOnDay(day).filter((p) => next.includes(p)) } };
+                        return { ...prev, parts: { ...prev.parts, [day]: partsOnDay(day, scope).filter((p) => next.includes(p)) } };
                       })
                     }
                   />
                 </div>
               ))}
-              <p className="text-xs text-muted">Kun je op een dag toch niet? Haal die dag dan weg bij de vorige vraag.</p>
+              {noEvent ? (
+                <p className="text-xs text-muted">
+                  Op deze dagen staat de Oliebollenbar nergens. Wil je daar ook helpen? Kies dan bij de vorige vraag een dag waar "evenement" bij staat.
+                </p>
+              ) : null}
+              {byTask ? null : <p className="text-xs text-muted">Kun je op een dag toch niet? Haal die dag dan weg bij de vorige vraag.</p>}
             </div>
           ),
-          next: { ready: choice.every((d) => (a.parts[d] ?? []).length > 0) }
+          // With a task in mind a dienst may be unticked as long as one is left; else every day keeps a moment.
+          next: { ready: byTask ? chosenDays > 0 : choice.every((d) => (a.parts[d] ?? []).length > 0) }
         };
       }
       case "dayroles": {
@@ -493,7 +525,16 @@ export function SignupPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field id="v-firstName" label="Voornaam *" value={firstName} onChange={setFirstName} autoComplete="given-name" autoFocus error={shownContact.firstName} />
                 <Field id="v-lastName" label="Achternaam *" value={lastName} onChange={setLastName} autoComplete="family-name" error={shownContact.lastName} />
-                <Field id="v-phone" label="Telefoonnummer *" value={phone} onChange={setPhone} type="tel" autoComplete="tel" error={shownContact.phone} />
+                <Field
+                  id="v-phone"
+                  label="Telefoonnummer *"
+                  value={phone}
+                  onChange={setPhone}
+                  type="tel"
+                  autoComplete="tel"
+                  error={shownContact.phone}
+                  hint="Hier stuur ik via WhatsApp je rooster en je herinneringen."
+                />
                 <Field
                   id="v-email"
                   label="E-mailadres *"
@@ -502,7 +543,7 @@ export function SignupPage() {
                   type="email"
                   autoComplete="email"
                   error={shownContact.email}
-                  hint="Twee dagen voor je dienst krijg ik je hier een herinnering."
+                  hint="Voor als ik je via WhatsApp niet te pakken krijg."
                   extra={
                     emailCheck.suggestion ? (
                       <span className="text-xs text-krent">
@@ -577,10 +618,14 @@ export function SignupPage() {
                   </div>
                 ) : null}
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
-                  <dt className="font-bold text-krent">E-mail</dt>
-                  <dd className="break-all text-krent">
-                    {email.trim()} <span className="text-muted">(hier komen je herinneringen)</span>
+                  <dt className="font-bold text-krent">WhatsApp</dt>
+                  <dd className="text-krent">
+                    {phone.trim()} <span className="text-muted">(hier komen je rooster en je herinneringen)</span>
                   </dd>
+                </div>
+                <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
+                  <dt className="font-bold text-krent">E-mail</dt>
+                  <dd className="break-all text-krent">{email.trim()}</dd>
                 </div>
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">Planning</dt>
@@ -604,39 +649,6 @@ export function SignupPage() {
               </label>
             </div>
           )
-        };
-      }
-      default: {
-        const role = id.slice(6) as VolunteerRole;
-        const quiet = (o: string) => !!counts && labelQuietOptions(counts, role) && staffingStatus(countFor(counts, role, o), targetFor(role, o)) === "weinig";
-        const setPicks = (change: (prev: string[]) => string[]) => setA((prev) => ({ ...prev, picks: { ...prev.picks, [role]: change(prev.picks[role]) } }));
-        return {
-          content: (
-            <div className="grid gap-2">
-              {loaded && SIGNUP_OPTIONS[role].length === 0 ? <p className="text-sm text-muted">Hiervoor staan nog geen momenten in de agenda.</p> : null}
-              {hasParts(role) ? (
-                <OptionGrid role={role} quiet={quiet} value={a.picks[role]} onChange={setPicks} />
-              ) : (
-                // One shift a day: just the days, like a calendar.
-                // A time on each day only when the days differ (the bar's events); one shared time is in Oma's question.
-                <ChipGrid
-                  columns={sharedTime(role) ? undefined : "grid-cols-2 sm:grid-cols-3"}
-                  items={SIGNUP_OPTIONS[role].map((o) => ({
-                    key: o,
-                    label: shortDay(o.split(/[:(]/)[0].trim()),
-                    sub: o.match(/\(([^)]+)\)/)?.[1],
-                    time: sharedTime(role) ? undefined : optionTime(role, o),
-                    mark: quiet(o)
-                  }))}
-                  value={a.picks[role]}
-                  // Keep the agenda order, so the sheet reads the same as a Google Form answer.
-                  onChange={(change) => setPicks((prev) => SIGNUP_OPTIONS[role].filter((o) => change(prev).includes(o)))}
-                />
-              )}
-              {SIGNUP_OPTIONS[role].some(quiet) ? <MarkLegend /> : null}
-            </div>
-          ),
-          next: { ready: a.picks[role].length > 0 }
         };
       }
     }
@@ -696,8 +708,8 @@ export function SignupPage() {
         </div>
         <div className="grid content-center gap-2 p-5 sm:p-7">
           <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Dankjewel, {first}!</h1>
-          <p className="text-krent">Je bent nu officieel mijn hulpje. Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster en laat ik je weten waar en wanneer ik je verwacht.</p>
-          <p className="text-sm text-krent">Twee dagen voor elke dienst krijg je automatisch een herinnering per mail, op {email.trim()}.</p>
+          <p className="text-krent">Fijn dat je wilt helpen. Je zit nu officieel in mijn team. Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster en laat ik je weten waar en wanneer ik je verwacht.</p>
+          <p className="text-sm text-krent">Je rooster en je herinneringen stuur ik vooral via WhatsApp, op {phone.trim()}. Houd je telefoon dus in de gaten.</p>
           <p className="text-sm text-muted">
             Vragen of iets wijzigen? Mail naar{" "}
             <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>
@@ -705,7 +717,7 @@ export function SignupPage() {
             </a>
             .
           </p>
-          <p className="text-xs text-muted">Met 10 oliebollen laat je 1 oudje rock en rollen.</p>
+          <p className="text-xs text-muted">Samen laten we ouderen rock 'n rollen!</p>
         </div>
       </section>
     );
@@ -917,63 +929,6 @@ function MarkLegend() {
     <p className="flex items-center gap-1.5 text-xs text-muted">
       <span className="h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> Daar heb ik nog weinig mensen.
     </p>
-  );
-}
-
-/**
- * A task with more than one shift on a day, as a table: a row per day, a column per dagdeel.
- * Clicking the day ticks or unticks the whole day.
- */
-function OptionGrid({ role, quiet, value, onChange }: { role: VolunteerRole; quiet: (option: string) => boolean; value: string[]; onChange: (change: (prev: string[]) => string[]) => void }) {
-  const options = SIGNUP_OPTIONS[role];
-  const rows: Array<{ day: string; label: string; options: string[] }> = [];
-  for (const option of options) {
-    const day = dayKey(option);
-    const row = rows.find((r) => r.day === day);
-    if (row) row.options.push(option);
-    else rows.push({ day, label: shortDay(option.split(/[:(]/)[0].trim()), options: [option] });
-  }
-  // Keep the agenda order, so the sheet reads the same as a Google Form answer.
-  const toggle = (o: string) => onChange((prev) => (prev.includes(o) ? prev.filter((x) => x !== o) : options.filter((x) => x === o || prev.includes(x))));
-  return (
-    <div className="grid gap-1">
-      {rows.map((r) => (
-        <div key={r.day} className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-2">
-          <button
-            type="button"
-            className="text-left text-sm font-bold text-krent hover:underline"
-            title="Hele dag aan of uit"
-            onClick={() => onChange((prev) => (r.options.every((o) => prev.includes(o)) ? prev.filter((v) => !r.options.includes(v)) : options.filter((x) => prev.includes(x) || r.options.includes(x))))}
-          >
-            {r.label}
-          </button>
-          <div className="flex flex-wrap gap-1.5">
-            {r.options.map((o) => {
-              const on = value.includes(o);
-              const part = optionPart(o);
-              const text = o.match(/\(([^)]+)\)/)?.[1] ?? (part ? partLabel[part] : "Hele dag");
-              const time = optionTime(role, o);
-              return (
-                <button
-                  key={o}
-                  type="button"
-                  aria-pressed={on}
-                  aria-label={`${o}${quiet(o) ? ", nog nodig" : ""}`}
-                  onClick={() => toggle(o)}
-                  className={`relative min-h-[40px] min-w-[96px] rounded-lg px-3 py-1.5 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-krent ${
-                    on ? "bg-krent font-bold text-meel" : "bg-vul text-krent hover:bg-vul-2"
-                  }`}
-                >
-                  {text}
-                  {time ? <span className={`block text-[11px] font-normal ${on ? "text-meel/80" : "text-muted"}`}>{time}</span> : null}
-                  {quiet(o) ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> : null}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 

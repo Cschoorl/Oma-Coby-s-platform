@@ -2,6 +2,25 @@
 
 De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een gesprek met Oma Coby. Ze stelt zich voor, vraagt één ding tegelijk en reageert kort op elk antwoord. Eerdere antwoorden blijven als chat erboven staan, elk met *Wijzig*. De logica staat los in `signupFlow.ts`.
 
+## Feedback van Mark, 26 november (avond)
+
+- **Eén keer dagen kiezen, daarna je diensten.** Bij *Ik weet welk type taak ik wil doen* vroeg Oma de dagen per taak
+  opnieuw, waardoor je na "9 en 10 december" voor het inpakken alsnog alle evenementen van de Oliebollenbar kreeg en
+  nergens een inpakdienst zag. Nu kies je na je taken één keer je dagen en zie je daarna per dag je diensten met de
+  tijd erbij: *Inpakken 7:00–9:30*, *Bezorgen ochtend/middag* en op evenementdagen *Oliebollenbar* met het evenement.
+  Alles staat aan; je vinkt uit wat niet lukt. Het is dezelfde opzet als bij *Ik ben flexibel*.
+- **Alleen de Oliebollenbar.** Dan zijn de evenementen zelf de keuze (naam en tijd per evenement) en volgt er geen
+  vraag per dag.
+- **Evenementdagen herkenbaar.** In de dagenlijst staat "evenement" bij de dagen waarop de Oliebollenbar ergens staat.
+  Koos je de bar, maar geen dag met een evenement, dan zegt Oma dat erbij.
+- **Herinneringen via WhatsApp.** Het rooster en de herinneringen gaan vooral via WhatsApp. Dat staat nu bij het
+  telefoonnummer, in de samenvatting en op het bedankscherm; het e-mailadres is de reserve.
+- **Bedankscherm.** "Fijn dat je wilt helpen. Je zit nu officieel in mijn team." en "Samen laten we ouderen rock 'n rollen!"
+- **Dagen in de Sheet.** Eén losse dag ("Woensdag 9 december") sloeg Google Sheets op als datum; in de planning gaf dat
+  kolommen "20 NaN". En een evenement met een komma in de naam ("Olieborrel, Het Amstelhuis") kwam in twee helften
+  terug. Het Apps Script schrijft de dagen nu als tekst en splitst niet meer binnen haakjes; de app herstelt bestaande
+  rijen zelf (`src/lib/volunteerDays.ts`). **Het Apps Script moet hiervoor opnieuw worden geplaatst.**
+
 ## Seizoen 2026 (wijzigingen 26 november)
 
 - **Start.** Drie keuzes, in deze volgorde: *Ik weet welke data ik kan* (`dag`), *Ik weet welk type taak ik wil doen* (`taak`),
@@ -13,11 +32,11 @@ De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een g
   middag tot 15:00). Oliebollenbar alleen op evenementdagen: `BAR_EVENTS` in `src/config.ts`, met per evenement de naam (die komt
   tussen haakjes in de Sheet, bijvoorbeeld "Woensdag 9 december (Olieborrel, Het Amstelhuis)") en de tijd van de
   helpende handjes. Geen fiets meer.
-- **Momenten per dag.** Bij *Ik weet welke data ik kan* en *Ik ben flexibel* kiezen mensen per dag de momenten met hun
+- **Momenten per dag.** Bij alle drie de ingangen kiezen mensen per dag de momenten met hun
   eigen tijd: Vroeg (inpakken 7:00–9:30), Ochtend en Middag (bezorgen 9:00–12:30 en 12:30–15:00) en op evenementdagen
   Evenement (naam en tijd uit `BAR_EVENTS`). Een taak telt alleen op een moment dat is aangevinkt (`partOf` in
   `signupFlow.ts`).
-- **Geen herinneringsvraag.** Iedereen krijgt automatisch 2 dagen van tevoren een mail. De kolom
+- **Geen herinneringsvraag.** Rooster en herinneringen gaan via WhatsApp (zie hierboven). De kolom
   *Herinnering 24 uur van tevoren* blijft voor nieuwe aanmeldingen leeg.
 - **Contact.** Voornaam, achternaam, telefoon, e-mail en woonplaats zijn verplicht. Woonplaats en (voor bezorgers) adres
   komen uit een zoeklijst van PDOK, zodat ze goed gespeld zijn; bij *Verder* staat per veld wat er mist of

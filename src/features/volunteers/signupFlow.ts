@@ -21,13 +21,11 @@ export interface Answers {
   mode: SignupMode | null;
   /** Taak: the tasks they want. Dag and flexibel: the tasks they are open to. */
   roles: VolunteerRole[];
-  /** Taak: the options they picked per task, exactly as in the form. */
-  picks: Record<VolunteerRole, string[]>;
-  /** Dag and flexibel: the days they can, as day keys ("15 december"). */
+  /** The days they can, as day keys ("15 december"). Asked once, whatever the way in. */
   days: string[];
   /**
-   * Dag and flexibel: per day the dagdelen they can. Only asked when a chosen day has more than one;
-   * a day without an entry means the whole day.
+   * Per day the moments they can. Taak: the moments of their tasks on that day (their "diensten").
+   * Dag and flexibel: only asked when a chosen day has more than one. A day without an entry means the whole day.
    */
   parts: Record<string, Part[]>;
   flexible: boolean | null;
@@ -39,7 +37,6 @@ export interface Answers {
 export const emptyAnswers = (): Answers => ({
   mode: null,
   roles: [],
-  picks: { inpakken: [], fietskoerier: [], autokoerier: [], oliebollenbar: [] },
   days: [],
   parts: {},
   flexible: null,
@@ -118,10 +115,11 @@ export function rolesOnDays(days: string[]): VolunteerRole[] {
   return ACTIVE_ROLES.filter((role) => SIGNUP_OPTIONS[role].some((o) => days.includes(dayKey(o))));
 }
 
-/** The moments on one day, over this season's tasks. */
-export function partsOnDay(day: string): Part[] {
+/** The moments on one day, over this season's tasks (or only the given ones). */
+export function partsOnDay(day: string, roles: VolunteerRole[] = ACTIVE_ROLES): Part[] {
   const found = new Set<Part>();
   for (const role of ACTIVE_ROLES) {
+    if (!roles.includes(role)) continue;
     for (const option of SIGNUP_OPTIONS[role]) {
       const part = partOf(role, option);
       if (part && dayKey(option) === day) found.add(part);
@@ -150,7 +148,7 @@ export function optionsFor(role: VolunteerRole, days: string[], parts: Record<st
 export function toRoles(a: Answers): Record<VolunteerRole, RoleAvailability> {
   const result = {} as Record<VolunteerRole, RoleAvailability>;
   for (const role of VOLUNTEER_ROLES) {
-    const days = !a.roles.includes(role) ? [] : a.mode === "taak" ? a.picks[role] : optionsFor(role, a.days, a.parts);
+    const days = a.roles.includes(role) ? optionsFor(role, a.days, a.parts) : [];
     result[role] = { wants: days.length > 0, days };
   }
   return result;

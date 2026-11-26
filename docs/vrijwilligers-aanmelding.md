@@ -15,7 +15,8 @@ De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een g
   helpende handjes. Geen fiets meer.
 - **Geen herinneringsvraag.** Iedereen krijgt automatisch 2 dagen van tevoren een mail. De kolom
   *Herinnering 24 uur van tevoren* blijft voor nieuwe aanmeldingen leeg.
-- **Contact.** Voornaam, achternaam, telefoon en e-mail zijn verplicht; bij *Verder* staat per veld wat er mist of
+- **Contact.** Voornaam, achternaam, telefoon, e-mail en woonplaats zijn verplicht. Woonplaats en (voor bezorgers) adres
+  komen uit een zoeklijst van PDOK, zodat ze goed gespeld zijn; bij *Verder* staat per veld wat er mist of
   niet klopt. Het Apps Script controleert telefoon en e-mail ook.
 - **Toestemming.** "Vind je het oké als Oma Coby je gegevens in haar notitieboekje bijhoudt? Na de actie gooit ze ze weg."
 

@@ -31,6 +31,75 @@ export function AddressSearch({ id, value, onChange, onPick, invalid, describedB
   /** Naam van de lijst voor schermlezers ("Adressen"). */
   listLabel: string;
 }) {
+  function pick(s: Suggestion) {
+    fetch(`${PDOK}/lookup?id=${encodeURIComponent(s.id)}&fl=straatnaam,huis_nlt,postcode,woonplaatsnaam`)
+      .then((r) => r.json())
+      .then((data: { response?: { docs?: Array<{ straatnaam?: string; huis_nlt?: string; postcode?: string; woonplaatsnaam?: string }> } }) => {
+        const d = data.response?.docs?.[0];
+        if (!d) return;
+        onPick({ street: [d.straatnaam, d.huis_nlt].filter(Boolean).join(" "), postalCode: formatPostcode(d.postcode ?? ""), city: d.woonplaatsnaam ?? "" });
+      })
+      .catch(() => undefined);
+  }
+  return (
+    <PdokSearch
+      id={id}
+      kind="adres"
+      value={value}
+      onChange={onChange}
+      onPick={pick}
+      invalid={invalid}
+      describedBy={describedBy}
+      listLabel={listLabel}
+      autoComplete="street-address"
+      placeholder="Keizersgracht 210"
+    />
+  );
+}
+
+/**
+ * Woonplaats zoeken tijdens het typen (PDOK, type woonplaats): kies je er een, dan staat de naam goed gespeld in het veld
+ * ("Amsterdam", niet "Amsterda"). De lijst toont ook gemeente en provincie, voor plaatsen die twee keer voorkomen.
+ */
+export function CitySearch({ id, value, onChange, invalid, describedBy }: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  invalid?: boolean;
+  describedBy?: string;
+}) {
+  return (
+    <PdokSearch
+      id={id}
+      kind="woonplaats"
+      value={value}
+      onChange={onChange}
+      // "Amsterdam, Amsterdam, Noord-Holland" → "Amsterdam".
+      onPick={(s) => onChange(s.label.split(",")[0].trim())}
+      invalid={invalid}
+      describedBy={describedBy}
+      listLabel="Woonplaatsen"
+      autoComplete="address-level2"
+      placeholder="Bijvoorbeeld Aalsmeer"
+      minLength={2}
+    />
+  );
+}
+
+/** The search field with its list; AddressSearch and CitySearch only differ in what they look up and do with a pick. */
+function PdokSearch({ id, kind, value, onChange, onPick, invalid, describedBy, listLabel, autoComplete, placeholder, minLength = 3 }: {
+  id: string;
+  kind: "adres" | "woonplaats";
+  value: string;
+  onChange: (v: string) => void;
+  onPick: (s: Suggestion) => void;
+  invalid?: boolean;
+  describedBy?: string;
+  listLabel: string;
+  autoComplete: string;
+  placeholder: string;
+  minLength?: number;
+}) {
   const listId = useId();
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -40,13 +109,13 @@ export function AddressSearch({ id, value, onChange, onPick, invalid, describedB
 
   useEffect(() => {
     const q = value.trim();
-    if (!typed.current || q.length < 3) {
+    if (!typed.current || q.length < minLength) {
       setItems([]);
       return;
     }
     const ctrl = new AbortController();
     const timer = window.setTimeout(() => {
-      fetch(`${PDOK}/suggest?q=${encodeURIComponent(q)}&fq=type:adres&rows=6`, { signal: ctrl.signal })
+      fetch(`${PDOK}/suggest?q=${encodeURIComponent(q)}&fq=type:${kind}&rows=6`, { signal: ctrl.signal })
         .then((r) => r.json())
         .then((data: { response?: { docs?: Array<{ id: string; weergavenaam: string }> } }) => {
           const docs = data.response?.docs ?? [];
@@ -60,22 +129,14 @@ export function AddressSearch({ id, value, onChange, onPick, invalid, describedB
       window.clearTimeout(timer);
       ctrl.abort();
     };
-  }, [value]);
+  }, [value, kind, minLength]);
 
   function pick(s: Suggestion) {
     typed.current = false;
     setOpen(false);
     setItems([]);
-    fetch(`${PDOK}/lookup?id=${encodeURIComponent(s.id)}&fl=straatnaam,huis_nlt,postcode,woonplaatsnaam`)
-      .then((r) => r.json())
-      .then((data: { response?: { docs?: Array<{ straatnaam?: string; huis_nlt?: string; postcode?: string; woonplaatsnaam?: string }> } }) => {
-        const d = data.response?.docs?.[0];
-        if (!d) return;
-        onPick({ street: [d.straatnaam, d.huis_nlt].filter(Boolean).join(" "), postalCode: formatPostcode(d.postcode ?? ""), city: d.woonplaatsnaam ?? "" });
-      })
-      .catch(() => undefined);
+    onPick(s);
   }
-
   return (
     <div className="relative">
       <input
@@ -87,10 +148,10 @@ export function AddressSearch({ id, value, onChange, onPick, invalid, describedB
         aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
-        autoComplete="street-address"
+        autoComplete={autoComplete}
         className={`${inputClass} min-h-[44px] w-full`}
         value={value}
-        placeholder="Keizersgracht 210"
+        placeholder={placeholder}
         onChange={(e) => {
           typed.current = true;
           onChange(e.target.value);

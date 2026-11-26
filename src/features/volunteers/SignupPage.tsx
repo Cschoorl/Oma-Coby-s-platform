@@ -5,6 +5,8 @@ import type { VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButton, rollOliebol, textAction } from "../../components/ui";
 import omaUrl from "../../assets/oma-coby.jpg";
+import omaAvatarUrl from "../../assets/oma-coby-lijst.png";
+import { AddressSearch, CitySearch } from "../business/AddressSearch";
 import { CONTACT_EMAIL, SHIFT_TIMES, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
 
 const until = (range: string) => range.replace("–", " tot ");
@@ -54,7 +56,7 @@ function sharedTime(role: VolunteerRole): string {
 function roleBlurb(role: VolunteerRole): string {
   if (role === "inpakken") return `Van ${until(SHIFT_TIMES.inpakken)} in Aalsmeer, met koffie.`;
   if (role === "autokoerier") return `Rondbrengen met je eigen auto, ${deliveryText}.`;
-  return "Achter de bar, alleen op evenementdagen.";
+  return "Helpen op evenementen en pick-ups van Oma Coby's Oliebollenbar.";
 }
 
 /** True when a task has more than one shift on some day: then its moments need a dagdeel column. */
@@ -217,7 +219,7 @@ export function SignupPage() {
             ? `${time ? `Inpakken doen we van ${time} in Aalsmeer, met koffie. ` : ""}Welke dagen kun je?`
             : r === "autokoerier"
               ? `We bezorgen met de auto, ${deliveryText}. Welke dagen kun je rijden?`
-              : "De Oliebollenbar staat er bij een paar evenementen. Bij elk staat hoe laat ik je erbij nodig heb, met opbouwen en opruimen. Waar kun je bij zijn?";
+              : "De Oliebollenbar staat er bij een paar evenementen en pick-ups. Bij elk staat hoe laat ik je erbij nodig heb, met opbouwen en opruimen. Waar kun je bij zijn? Meer dan één mag, hoe meer hoe liever.";
         return [
           `picks-${r}`,
           {
@@ -333,7 +335,7 @@ export function SignupPage() {
   }
 
   /** Name, phone and e-mail are all required; the e-mail also has to look real (we mail the reminders there). */
-  const contactErrors: Partial<Record<"firstName" | "lastName" | "phone" | "email", string>> = {};
+  const contactErrors: Partial<Record<"firstName" | "lastName" | "phone" | "email" | "city", string>> = {};
   if (!firstName.trim()) contactErrors.firstName = "Vul je voornaam in.";
   if (!lastName.trim()) contactErrors.lastName = `Vul je achternaam in, dan verwar ik je niet met een andere ${first || "vrijwilliger"}.`;
   if (!phone.trim()) contactErrors.phone = "Vul je telefoonnummer in.";
@@ -343,6 +345,8 @@ export function SignupPage() {
   // A domain that takes no mail ("gmial.nl") is surely wrong: then the reminders never arrive.
   const emailCheck = useEmailCheck(email);
   if (!contactErrors.email && emailCheck.status === "missing") contactErrors.email = `Ik kan geen mail sturen naar ${emailCheck.domain}. Kijk het adres even na.`;
+  // Woonplaats is needed for the planning (bezorgers near home); the list gives the right spelling.
+  if (!city.trim()) contactErrors.city = "Vul je woonplaats in.";
   const contactOk = Object.keys(contactErrors).length === 0;
   /** Errors show once they press Verder, and then stay live while they fix them. */
   const [contactTried, setContactTried] = useState(false);
@@ -360,7 +364,7 @@ export function SignupPage() {
       advance();
       return;
     }
-    const firstMissing = (["firstName", "lastName", "phone", "email"] as const).find((f) => contactErrors[f]);
+    const firstMissing = (["firstName", "lastName", "phone", "email", "city"] as const).find((f) => contactErrors[f]);
     window.setTimeout(() => document.getElementById(`v-${firstMissing}`)?.focus(), 0);
   }
 
@@ -512,11 +516,41 @@ export function SignupPage() {
                     ) : null
                   }
                 />
-                <Field label="Woonplaats" value={city} onChange={setCity} autoComplete="address-level2" />
+                <div className="grid content-start gap-1 text-sm">
+                  <label htmlFor="v-city" className={fieldLabel}>
+                    Woonplaats *
+                  </label>
+                  <CitySearch id="v-city" value={city} onChange={setCity} invalid={!!shownContact.city} describedBy="v-city-note" />
+                  {shownContact.city ? (
+                    <span id="v-city-note" className="text-xs font-bold text-feest-ink">
+                      ! {shownContact.city}
+                    </span>
+                  ) : (
+                    <span id="v-city-note" className="text-xs text-muted">
+                      Kies je woonplaats uit de lijst, dan staat hij goed gespeld.
+                    </span>
+                  )}
+                </div>
                 {roles.autokoerier.wants ? (
-                  <div className="sm:col-span-2">
-                    <Field label="Adres" value={address} onChange={setAddress} autoComplete="street-address" placeholder="Straat en huisnummer" />
-                    <p className="mt-1 text-xs text-muted">Handig voor bezorgers: dan plan ik een route bij jou in de buurt.</p>
+                  <div className="grid gap-1 text-sm sm:col-span-2">
+                    <label htmlFor="v-address" className={fieldLabel}>
+                      Adres
+                    </label>
+                    {/* Picking an address from the list also fills in the woonplaats. */}
+                    <AddressSearch
+                      id="v-address"
+                      value={address}
+                      onChange={setAddress}
+                      onPick={(found) => {
+                        setAddress(found.street);
+                        if (found.city) setCity(found.city);
+                      }}
+                      describedBy="v-address-note"
+                      listLabel="Adressen"
+                    />
+                    <span id="v-address-note" className="text-xs text-muted">
+                      Handig voor bezorgers: dan plan ik een route bij jou in de buurt.
+                    </span>
                   </div>
                 ) : null}
               </div>
@@ -758,7 +792,7 @@ function OmaSays({ lines, typing = false }: { lines: string[]; typing?: boolean 
   if (lines.length === 0 && !typing) return null;
   return (
     <div className="flex items-end gap-2">
-      <img src={omaUrl} alt="" className="h-8 w-8 flex-none rounded-full object-cover object-top" />
+      <img src={omaAvatarUrl} alt="" className="h-9 w-9 flex-none object-contain" />
       <div className="grid max-w-[85%] justify-items-start gap-2">
         {lines.map((line, i) => (
           <p key={i} className="rounded-kaart rounded-bl-sm bg-papier px-3 py-2 text-sm text-krent shadow-zacht">

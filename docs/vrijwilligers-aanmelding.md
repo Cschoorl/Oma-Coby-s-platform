@@ -13,6 +13,10 @@ De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een g
   middag tot 15:00). Oliebollenbar alleen op evenementdagen: `BAR_EVENTS` in `src/config.ts`, met per evenement de naam (die komt
   tussen haakjes in de Sheet, bijvoorbeeld "Woensdag 9 december (Olieborrel, Het Amstelhuis)") en de tijd van de
   helpende handjes. Geen fiets meer.
+- **Momenten per dag.** Bij *Ik weet welke data ik kan* en *Ik ben flexibel* kiezen mensen per dag de momenten met hun
+  eigen tijd: Vroeg (inpakken 7:00–9:30), Ochtend en Middag (bezorgen 9:00–12:30 en 12:30–15:00) en op evenementdagen
+  Evenement (naam en tijd uit `BAR_EVENTS`). Een taak telt alleen op een moment dat is aangevinkt (`partOf` in
+  `signupFlow.ts`).
 - **Geen herinneringsvraag.** Iedereen krijgt automatisch 2 dagen van tevoren een mail. De kolom
   *Herinnering 24 uur van tevoren* blijft voor nieuwe aanmeldingen leeg.
 - **Contact.** Voornaam, achternaam, telefoon, e-mail en woonplaats zijn verplicht. Woonplaats en (voor bezorgers) adres

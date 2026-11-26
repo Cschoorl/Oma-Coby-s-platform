@@ -720,7 +720,9 @@ const HANDLERS = {
     const phone = String(body.phone || '').trim();
     const email = String(body.email || '').trim();
     if (!name) throw new Error('Vul je naam in.');
-    if (!phone && !email) throw new Error('Vul een telefoonnummer of e-mailadres in.');
+    // Naam, telefoon en e-mail zijn alle drie verplicht: de herinnering gaat 2 dagen van tevoren per mail.
+    if (!phone) throw new Error('Vul je telefoonnummer in.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new Error('Vul een geldig e-mailadres in.');
     if (!body.consent) throw new Error('Geef toestemming voor het bewaren van je gegevens.');
     const roles = body.roles || {};
     const wantsSomething = VOLUNTEER_ROLES.some(function (r) { return roles[r] && roles[r].wants; });

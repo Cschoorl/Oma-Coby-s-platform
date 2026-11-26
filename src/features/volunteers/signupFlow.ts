@@ -1,5 +1,5 @@
 import type { SignupCounts } from "../../data/backend";
-import type { Driving, ReminderChannel, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
+import type { Driving, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES } from "../../types/dashboard";
 import { SIGNUP_OPTIONS } from "../../config";
 import { countFor, dayKey, staffingStatus, targetFor } from "../../utils/staffing";
@@ -25,12 +25,10 @@ export interface Answers {
    * a day without an entry means the whole day.
    */
   parts: Record<string, Part[]>;
-  cargoBike: boolean;
   flexible: boolean | null;
   maxShifts: number | null;
   /** Asked when they want to bezorgen: licence and own car ("auto"), or "nee", which takes autokoerier off their tasks. */
   driving: Driving | "nee" | null;
-  reminder: ReminderChannel | null;
 }
 
 export const emptyAnswers = (): Answers => ({
@@ -39,11 +37,9 @@ export const emptyAnswers = (): Answers => ({
   picks: { inpakken: [], fietskoerier: [], autokoerier: [], oliebollenbar: [] },
   days: [],
   parts: {},
-  cargoBike: false,
   flexible: null,
   maxShifts: null,
-  driving: null,
-  reminder: null
+  driving: null
 });
 
 /** "Vrijdag 18 december: middag" → "middag"; whole-day options give "". */

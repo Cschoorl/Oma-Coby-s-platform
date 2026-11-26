@@ -15,21 +15,61 @@ function dayLabel(year: number, month: number, day: number): string {
   return `${DUTCH_WEEKDAYS[date.getDay()]} ${date.getDate()} ${DUTCH_MONTHS[date.getMonth()]}`;
 }
 
-/** Season days, same pattern as 2025: 15-24 December and 27-31 December. */
 export const SEASON_YEAR = 2026;
-const SEASON_DAYS = [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 30, 31].map((d) => dayLabel(SEASON_YEAR, 12, d));
+
+/** "2026-12-07" → "Maandag 7 december". */
+export function isoDayLabel(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return dayLabel(y, m, d);
+}
+
+/** Every Monday to Friday from `from` to `to` (YYYY-MM-DD), without the days in `skip`. */
+function weekdaysBetween(from: string, to: string, skip: string[]): string[] {
+  const out: string[] = [];
+  const day = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  for (; day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
+    const iso = day.toISOString().slice(0, 10);
+    if (day.getUTCDay() >= 1 && day.getUTCDay() <= 5 && !skip.includes(iso)) out.push(iso);
+  }
+  return out;
+}
+
+/**
+ * THE season days, one list for everything: the volunteer signup and the business order form (deliveryDays).
+ * Monday to Friday from Monday 7 December up to and including Friday 8 January, without 25, 26 and 27 December
+ * (Christmas and the weekend after) and New Year's Day. Change it here only.
+ */
+export const SEASON_WORKDAYS: string[] = weekdaysBetween(`${SEASON_YEAR}-12-07`, `${SEASON_YEAR + 1}-01-08`, [
+  `${SEASON_YEAR}-12-25`,
+  `${SEASON_YEAR}-12-26`,
+  `${SEASON_YEAR}-12-27`,
+  `${SEASON_YEAR + 1}-01-01`
+]);
+
+/**
+ * Event days of the Oliebollenbar (YYYY-MM-DD). Only on these days can volunteers choose the bar.
+ * Still empty: Mark sends the event dates; add them here (e.g. "2026-12-19").
+ */
+export const BAR_EVENT_DAYS: string[] = [];
+
+const SEASON_DAYS = SEASON_WORKDAYS.map(isoDayLabel);
+
+/** Shift times per task as shown on the signup. Dagdelen: ochtend until 12:30, middag until 15:00. */
+export const SHIFT_TIMES = {
+  inpakken: "7:00–9:30",
+  autokoerier: { ochtend: "9:00–12:30", middag: "12:30–15:00" }
+};
 
 /*
- * Business orders are delivered between 9:00 and 15:00 (BUSINESS_DELIVERY_WINDOW), so autokoeriers get a
- * morning shift (9:00–12:00, which also covers the "vóór 10:00" requests) and an afternoon shift (12:00–15:00).
- * Inpakkers start earlier. Fietskoerier no longer takes part: no options, also not when the agenda still lists it.
+ * Options per task. Inpakken every season day; the autokoerier in a morning and an afternoon shift
+ * (bezorgen is ca. 9:00–15:00, by car only); the bar only on its event days. No fietskoerier anymore.
  */
 const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
   inpakken: SEASON_DAYS,
   fietskoerier: [],
   autokoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
-  /** Events with location, e.g. "Zaterdag 26 december (Pick-up Schaatsbaan)". */
-  oliebollenbar: SEASON_DAYS
+  oliebollenbar: BAR_EVENT_DAYS.map(isoDayLabel)
 };
 
 /**
@@ -46,10 +86,10 @@ export function optionKeyFor(role: VolunteerRole, option: string): string {
   return `${role}|${option.trim().toLowerCase()}`;
 }
 
-/** Shift times until the agenda gives its own. */
+/** Shift times per option; always these, whatever the agenda says. */
 const DEFAULT_TIMES: Record<string, string> = Object.fromEntries([
-  ...DEFAULT_OPTIONS.inpakken.map((o) => [optionKeyFor("inpakken", o), "6:30–12:00"]),
-  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), o.endsWith("middag") ? "12:00–15:00" : "9:00–12:00"])
+  ...DEFAULT_OPTIONS.inpakken.map((o) => [optionKeyFor("inpakken", o), SHIFT_TIMES.inpakken]),
+  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), o.endsWith("middag") ? SHIFT_TIMES.autokoerier.middag : SHIFT_TIMES.autokoerier.ochtend])
 ]);
 
 /** Time per task and option ("6:30–12:00"), keyed by optionKeyFor. Use optionTime to read it. */
@@ -60,7 +100,6 @@ export const OPTION_TARGETS: Record<string, number> = {};
 
 export const optionTime = (role: VolunteerRole, option: string): string => OPTION_TIMES[optionKeyFor(role, option)] ?? "";
 
-const PART_ORDER = ["", "ochtend", "middag", "avond"];
 
 /** "2026-12-30" + "ochtend" + "" → "Woensdag 30 december: ochtend"; with a location: "… (Pick-up Schaatsbaan)". */
 export function agendaLabel(slot: Pick<AgendaSlot, "date" | "part" | "location">): string {
@@ -70,37 +109,31 @@ export function agendaLabel(slot: Pick<AgendaSlot, "date" | "part" | "location">
 
 let appliedKey = "";
 
-/** Uses the Agenda tab for the signup options, times and targets. An empty agenda keeps the defaults. */
+/**
+ * The days and times come from SEASON_WORKDAYS, SHIFT_TIMES and BAR_EVENT_DAYS above, never from the Agenda tab:
+ * the signup may not offer other days than these. The Agenda tab only gives how many people are needed ("nodig")
+ * on a moment that also exists here; agenda rows on other days, other times or for the fietskoerier are ignored.
+ */
 export function applyAgenda(slots: AgendaSlot[]): void {
   const key = JSON.stringify(slots);
   if (key === appliedKey) return;
   appliedKey = key;
+  Object.assign(SIGNUP_OPTIONS, DEFAULT_OPTIONS);
   for (const k of Object.keys(OPTION_TIMES)) delete OPTION_TIMES[k];
+  Object.assign(OPTION_TIMES, DEFAULT_TIMES);
   for (const k of Object.keys(OPTION_TARGETS)) delete OPTION_TARGETS[k];
-  if (slots.length === 0) {
-    Object.assign(SIGNUP_OPTIONS, DEFAULT_OPTIONS);
-    Object.assign(OPTION_TIMES, DEFAULT_TIMES);
-    return;
-  }
-  const sorted = [...slots].sort((a, b) => a.date.localeCompare(b.date) || PART_ORDER.indexOf(a.part) - PART_ORDER.indexOf(b.part));
-  for (const role of Object.keys(DEFAULT_OPTIONS) as VolunteerRole[]) {
-    const options: string[] = [];
-    for (const slot of sorted.filter((s) => s.role === role)) {
-      const label = agendaLabel(slot);
-      if (options.includes(label)) continue;
-      options.push(label);
-      if (slot.time) OPTION_TIMES[optionKeyFor(role, label)] = slot.time;
-      if (slot.needed) OPTION_TARGETS[optionKeyFor(role, label)] = slot.needed;
-    }
-    SIGNUP_OPTIONS[role] = role === "fietskoerier" ? [] : options;
+  for (const slot of slots) {
+    if (!slot.needed) continue;
+    const label = agendaLabel({ ...slot, location: "" });
+    if (SIGNUP_OPTIONS[slot.role]?.includes(label)) OPTION_TARGETS[optionKeyFor(slot.role, label)] = slot.needed;
   }
 }
 
 export const SIGNUP_HINTS = {
-  inpakken: "Inpakken van 6:30 tot 12:00 in Aalsmeer.",
-  fietskoerier: "Ochtendsessie start om 9:00 uur in Amsterdam (max. 3 uurtjes). Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
-  autokoerier: "We bezorgen tussen 9:00 en 15:00: 's ochtends van 9:00 tot 12:00, 's middags van 12:00 tot 15:00. Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
-  oliebollenbar: "Op welke dag(en) wil je helpen in de Oliebollenbar?"
+  inpakken: "Inpakken van 7:00 tot 9:30 in Aalsmeer, met koffie.",
+  fietskoerier: "",
+  autokoerier: "Bezorgen met je eigen auto, ca. 9:00 tot 15:00: 's ochtends tot 12:30, 's middags tot 15:00. Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
+  oliebollenbar: "Alleen op evenementdagen. Op welke dag(en) wil je helpen in de Oliebollenbar?"
 };
 
 /**
@@ -187,7 +220,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   closeAt: `${SEASON_YEAR}-12-28T12:00`,
   holidays: [`${SEASON_YEAR}-12-25`, `${SEASON_YEAR}-12-26`, `${SEASON_YEAR + 1}-01-01`],
   // Alle doordeweekse dagen van maandag 7 december tot en met vrijdag 8 januari, behalve 25 december en 1 januari.
-  deliveryDays: weekdays(`${SEASON_YEAR}-12-07`, `${SEASON_YEAR + 1}-01-08`, [`${SEASON_YEAR}-12-25`, `${SEASON_YEAR + 1}-01-01`]),
+  // The same days as the volunteer signup: SEASON_WORKDAYS.
+  deliveryDays: SEASON_WORKDAYS,
   email: "info@omacobysoliebollenbar.nl",
   phone: "06 45 44 35 09",
   // Herstructurering november: de aantallen blijven, de namen schuiven door. Schuifelpartner 50 tot 149, Danspartner 150 tot 499,
@@ -209,17 +243,6 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
 /** Namen van pakketten die niet meer op het formulier staan, voor oude aanvragen in beheer. */
 export const OLD_PACKAGE_NAMES: Record<string, string> = { middag60: "Bandpartner 60 gasten", middag100: "Bandpartner 100 gasten" };
 
-/** Alle maandagen tot en met vrijdagen van `from` tot en met `to`, zonder de dagen in `skip`. */
-function weekdays(from: string, to: string, skip: string[]): string[] {
-  const out: string[] = [];
-  const day = new Date(`${from}T12:00:00Z`);
-  const end = new Date(`${to}T12:00:00Z`);
-  for (; day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
-    const iso = day.toISOString().slice(0, 10);
-    if (day.getUTCDay() >= 1 && day.getUTCDay() <= 5 && !skip.includes(iso)) out.push(iso);
-  }
-  return out;
-}
 
 /** Oliebollen per collega als richtlijn bij de pakketten (3 als ze er een mee naar huis nemen). */
 export const BUSINESS_PER_COLLEAGUE = 2;

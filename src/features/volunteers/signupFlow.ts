@@ -1,7 +1,7 @@
 import type { SignupCounts } from "../../data/backend";
 import type { Driving, RoleAvailability, SignupMode, VolunteerRole } from "../../types/dashboard";
 import { ACTIVE_ROLES, VOLUNTEER_ROLES } from "../../types/dashboard";
-import { SIGNUP_OPTIONS } from "../../config";
+import { SIGNUP_OPTIONS, optionTime } from "../../config";
 import { countFor, dayKey, staffingStatus, targetFor } from "../../utils/staffing";
 
 /*
@@ -9,8 +9,13 @@ import { countFor, dayKey, staffingStatus, targetFor } from "../../utils/staffin
  * (per task: wants + options), so the sheet, the staffing counts and the agenda keep working.
  */
 
-export type Part = "ochtend" | "middag" | "avond";
-const PART_ORDER: Part[] = ["ochtend", "middag", "avond"];
+/**
+ * The moments of a day, each with its own time (from the task that has it): vroeg = inpakken (7:00–9:30),
+ * ochtend and middag = bezorgen (9:00–12:30, 12:30–15:00), evenement = the Oliebollenbar on its event days.
+ * "Dag" and "flexibel" choose these per day; a task only counts on a moment they ticked.
+ */
+export type Part = "vroeg" | "ochtend" | "middag" | "evenement" | "avond";
+const PART_ORDER: Part[] = ["vroeg", "ochtend", "middag", "evenement", "avond"];
 
 export interface Answers {
   mode: SignupMode | null;
@@ -46,6 +51,33 @@ export const emptyAnswers = (): Answers => ({
 export function optionPart(option: string): Part | "" {
   const match = option.match(/:\s*(ochtend|middag|avond)/i);
   return match ? (match[1].toLowerCase() as Part) : "";
+}
+
+/** The moment an option of a task falls in: inpakken is always vroeg, the bar always its event, bezorgen its dagdeel. */
+export function partOf(role: VolunteerRole, option: string): Part | "" {
+  if (role === "inpakken") return "vroeg";
+  if (role === "oliebollenbar") return "evenement";
+  return optionPart(option);
+}
+
+/** The option behind one moment on one day, for its time and (at an event) its name. */
+function optionAt(day: string, part: Part): { role: VolunteerRole; option: string } | null {
+  for (const role of ACTIVE_ROLES) {
+    const option = SIGNUP_OPTIONS[role].find((o) => dayKey(o) === day && partOf(role, o) === part);
+    if (option) return { role, option };
+  }
+  return null;
+}
+
+/** "7:00–9:30": when this moment on this day starts and ends. */
+export function partTimeOn(day: string, part: Part): string {
+  const at = optionAt(day, part);
+  return at ? optionTime(at.role, at.option) : "";
+}
+
+/** "Olieborrel, Het Amstelhuis": the event on this day, for the evenement moment. */
+export function eventOn(day: string): string {
+  return optionAt(day, "evenement")?.option.match(/\(([^)]+)\)/)?.[1] ?? "";
 }
 
 export interface SeasonDay {
@@ -86,12 +118,12 @@ export function rolesOnDays(days: string[]): VolunteerRole[] {
   return ACTIVE_ROLES.filter((role) => SIGNUP_OPTIONS[role].some((o) => days.includes(dayKey(o))));
 }
 
-/** Dagdelen on one day, over this season's tasks; empty when that day has only whole-day options. */
+/** The moments on one day, over this season's tasks. */
 export function partsOnDay(day: string): Part[] {
   const found = new Set<Part>();
   for (const role of ACTIVE_ROLES) {
     for (const option of SIGNUP_OPTIONS[role]) {
-      const part = optionPart(option);
+      const part = partOf(role, option);
       if (part && dayKey(option) === day) found.add(part);
     }
   }
@@ -103,12 +135,12 @@ export function daysWithChoice(days: string[]): string[] {
   return days.filter((d) => partsOnDay(d).length > 1);
 }
 
-/** The options of a task on the chosen days and, per day, the chosen dagdelen. Whole-day options always fit. */
+/** The options of a task on the chosen days and, per day, the chosen moments. A day with one moment needs no choice. */
 export function optionsFor(role: VolunteerRole, days: string[], parts: Record<string, Part[]>): string[] {
   return SIGNUP_OPTIONS[role].filter((o) => {
     const day = dayKey(o);
     if (!days.includes(day)) return false;
-    const part = optionPart(o);
+    const part = partOf(role, o);
     const chosen = parts[day];
     return part === "" || !chosen || chosen.includes(part);
   });

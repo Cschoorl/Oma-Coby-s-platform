@@ -14,7 +14,7 @@ const until = (range: string) => range.replace("–", " tot ");
 const deliveryText = `ca. ${SHIFT_TIMES.autokoerier.ochtend.split("–")[0]} tot ${SHIFT_TIMES.autokoerier.middag.split("–")[1]}: 's ochtends tot ${SHIFT_TIMES.autokoerier.ochtend.split("–")[1]}, 's middags tot ${SHIFT_TIMES.autokoerier.middag.split("–")[1]}`;
 
 import { EMAIL_PATTERN as EMAIL, useEmailCheck } from "../../lib/emailCheck";
-import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, optionsFor, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
+import { daysWithChoice, emptyAnswers, eventOn, labelQuietDays, neediestFor, optionPart, optionsFor, partTimeOn, partsOnDay, quietDays, rolesOnDays, seasonDays, toRoles, type Answers, type Part } from "./signupFlow";
 
 /*
  * The signup as a conversation with Oma Coby. She introduces herself, asks one thing at a time,
@@ -27,9 +27,7 @@ import { daysWithChoice, emptyAnswers, labelQuietDays, neediestFor, optionPart, 
 
 type StepId = "mode" | "roles" | "license" | `picks-${VolunteerRole}` | "days" | "parts" | "dayroles" | "flexible" | "max" | "contact" | "check";
 
-const partLabel: Record<Part, string> = { ochtend: "Ochtend", middag: "Middag", avond: "Avond" };
-/** Dagdelen in general: ochtend until 12:30, middag until 15:00. */
-const partTime: Record<Part, string> = { ochtend: "tot 12:30", middag: "tot 15:00", avond: "" };
+const partLabel: Record<Part, string> = { vroeg: "Vroeg", ochtend: "Ochtend", middag: "Middag", evenement: "Evenement", avond: "Avond" };
 
 /** "Dinsdag 15 december" → "di 15 dec". */
 function shortDay(label: string): string {
@@ -235,7 +233,7 @@ export function SignupPage() {
       answer: () => listOrCount(a.days.map(dayLabel), "dagen")
     },
     parts: {
-      say: ["Op sommige dagen is er meer dan één dienst. Wanneer kun je dan?"],
+      say: ["Op een dag zijn er een paar momenten, elk met een eigen tijd. Alles staat aan; vink uit wat niet lukt."],
       answer: () =>
         daysWithChoice(a.days)
           .map((d) => `${dayLabel(d)}: ${(a.parts[d] ?? []).map((p) => partLabel[p].toLowerCase()).join(" en ")}`)
@@ -426,8 +424,9 @@ export function SignupPage() {
                 <div key={day} className="grid grid-cols-[80px_minmax(0,1fr)] items-center gap-2">
                   <span className="text-sm font-bold text-krent">{dayLabel(day)}</span>
                   <ChipGrid
-                    columns="grid-cols-3"
-                    items={partsOnDay(day).map((p) => ({ key: p, label: partLabel[p], sub: partTime[p] }))}
+                    columns="grid-cols-2 sm:grid-cols-4"
+                    // Each moment with its start and end; an event also with its name.
+                    items={partsOnDay(day).map((p) => ({ key: p, label: partLabel[p], sub: p === "evenement" ? eventOn(day) : undefined, time: partTimeOn(day, p) }))}
                     value={a.parts[day] ?? []}
                     onChange={(change) =>
                       setA((prev) => {

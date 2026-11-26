@@ -720,7 +720,7 @@ const HANDLERS = {
     const phone = String(body.phone || '').trim();
     const email = String(body.email || '').trim();
     if (!name) throw new Error('Vul je naam in.');
-    // Naam, telefoon en e-mail zijn alle drie verplicht: de herinnering gaat 2 dagen van tevoren per mail.
+    // Naam, telefoon en e-mail zijn alle drie verplicht: rooster en herinneringen gaan via WhatsApp, de mail is de reserve.
     if (!phone) throw new Error('Vul je telefoonnummer in.');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new Error('Vul een geldig e-mailadres in.');
     if (!body.consent) throw new Error('Geef toestemming voor het bewaren van je gegevens.');
@@ -760,7 +760,15 @@ const HANDLERS = {
       Object.keys(index).forEach(function (field) {
         if (values[field] !== undefined) row[index[field]] = values[field];
       });
-      sheet.appendRow(row);
+      // Eén losse dag ("Woensdag 9 december") ziet Sheets als datum en slaat hij dan als datum op. Daarom
+      // krijgen de dagen-cellen eerst de opmaak "tekst" en schrijven we de rij daarna pas weg.
+      const at = sheet.getLastRow() + 1;
+      if (at > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 1);
+      VOLUNTEER_ROLES.forEach(function (role) {
+        const column = index[role + 'Days'];
+        if (column !== undefined) sheet.getRange(at, column + 1).setNumberFormat('@');
+      });
+      sheet.getRange(at, 1, 1, row.length).setValues([row]);
       bump_();
       return { saved: true };
     });
@@ -1165,7 +1173,9 @@ function readVolunteers_() {
   return values.slice(1).map(function (row, i) {
     const roles = {};
     VOLUNTEER_ROLES.forEach(function (role) {
-      const days = splitList_(cell(row, role + 'Days'));
+      // Een losse dag die Sheets toch als datum bewaarde (oudere rijen) wordt weer "Woensdag 9 december".
+      const raw = index[role + 'Days'] === undefined ? '' : row[index[role + 'Days']];
+      const days = raw instanceof Date ? [volunteerDayLabel_(raw)] : splitDays_(cell(row, role + 'Days'));
       roles[role] = { wants: truthy_(cell(row, role)) || days.length > 0, days: days };
     });
     return {
@@ -1628,6 +1638,24 @@ function truthy_(v) {
 
 function splitList_(v) {
   return String(v || '').split(',').map(function (s) { return s.trim(); }).filter(String);
+}
+
+/**
+ * De dagen van een vrijwilliger: gescheiden door komma's, maar een komma tussen haakjes hoort bij de naam van
+ * een evenement ("Woensdag 9 december (Olieborrel, Het Amstelhuis)") en splitst niet.
+ */
+function splitDays_(v) {
+  return String(v || '').split(/,(?![^(]*\))/).map(function (s) { return s.trim(); }).filter(String);
+}
+
+/** Een datum uit de Sheet → "Woensdag 9 december". Sheets raadt het jaar; januari hoort bij het jaar na december. */
+function volunteerDayLabel_(date) {
+  const parts = Utilities.formatDate(date, tz_(), 'M-d').split('-').map(Number);
+  const now = new Date();
+  const season = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
+  const d = new Date(parts[0] < 7 ? season + 1 : season, parts[0] - 1, parts[1], 12);
+  const weekday = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'][d.getDay()];
+  return weekday + ' ' + d.getDate() + ' ' + DUTCH_MONTHS[d.getMonth()];
 }
 
 function now_() {

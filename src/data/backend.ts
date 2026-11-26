@@ -27,6 +27,7 @@ import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus, P
 import { BUSINESS_DEFAULTS, PARTYPOT_GOAL } from "../config";
 import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
+import { repairCounts, repairVolunteer } from "../lib/volunteerDays";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
 import { categoryOf } from "../lib/categories";
@@ -313,6 +314,8 @@ function createAppsScriptBackend(url: string): Backend {
         bakeApprovals: rest.bakeApprovals ?? [],
         bakery: rest.bakery ?? { phone: "", email: "" },
         meta: Object.fromEntries(Object.entries(rest.meta ?? {}).map(([k, m]) => [k, { ...emptyMeta, ...m }])),
+        // A single day comes back from the Sheet as a date and an event name with a comma in two halves: make them whole.
+        volunteers: (rest.volunteers ?? []).map(repairVolunteer),
         orders: mapSheetRowsToOrders(rows).filter((order) => order.deliveryDate)
       };
     },
@@ -333,7 +336,7 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async getSignupInfo() {
       const data = await call<{ counts: SignupCounts; agenda?: AgendaSlot[] }>("signupStats", {});
-      return { counts: data.counts, agenda: data.agenda ?? [] };
+      return { counts: repairCounts(data.counts), agenda: data.agenda ?? [] };
     },
     async approveBaked(session, input) {
       return call<SavedVersion>("approveBaked", withSession(session, { ...input }));

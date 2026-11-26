@@ -229,8 +229,8 @@ export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDa
         {p ? <Fact label="Indelen">{p.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen bij de gekozen taak"}</Fact> : null}
         {p?.driving ? <Fact label="Rijbewijs">{drivingLabel[p.driving]}</Fact> : null}
         {v.cargoBike ? <Fact label="Bakfiets">Kan er een lenen</Fact> : null}
-        {/* Since the reminder question is gone, everyone gets a mail 2 days before; older signups still show their answer. */}
-        {p ? <Fact label="Herinnering">{!p.reminder ? "Per mail, 2 dagen van tevoren" : p.reminder === "geen" ? "Hoeft niet" : `De dag ervoor via ${reminderLabel[p.reminder]}`}</Fact> : null}
+        {/* Since the reminder question is gone, rooster and reminders go by WhatsApp; older signups still show their answer. */}
+        {p ? <Fact label="Herinnering">{!p.reminder ? "Via WhatsApp" : p.reminder === "geen" ? "Hoeft niet" : `De dag ervoor via ${reminderLabel[p.reminder]}`}</Fact> : null}
         {v.phone ? <Fact label="Telefoon">{v.phone}</Fact> : null}
         {v.email ? <Fact label="E-mail">{v.email}</Fact> : null}
         {v.address || v.city ? <Fact label="Adres">{[v.address, v.city].filter(Boolean).join(", ")}</Fact> : null}

@@ -48,10 +48,21 @@ export const SEASON_WORKDAYS: string[] = weekdaysBetween(`${SEASON_YEAR}-12-07`,
 ]);
 
 /**
- * Event days of the Oliebollenbar (YYYY-MM-DD). Only on these days can volunteers choose the bar.
- * Still empty: Mark sends the event dates; add them here (e.g. "2026-12-19").
+ * Events of the Oliebollenbar: only on these days can volunteers choose the bar. `name` shows on the signup
+ * and goes into the Sheet ("Woensdag 9 december (Olieborrel, Het Amstelhuis)"); `time` is when the helping
+ * hands are needed, `event` when the event itself runs. List from Mark, 26 November.
  */
-export const BAR_EVENT_DAYS: string[] = [];
+export const BAR_EVENTS: { date: string; name: string; event: string; time: string }[] = [
+  { date: `${SEASON_YEAR}-12-09`, name: "Olieborrel, Het Amstelhuis", event: "14:30–17:00", time: "13:00–17:30" },
+  { date: `${SEASON_YEAR}-12-18`, name: "Kerstlunch met Le Petit Brunch", event: "12:00–14:30", time: "11:00–16:00" },
+  { date: `${SEASON_YEAR}-12-19`, name: "Bubbels & Bollen", event: "14:00–17:00", time: "13:00–17:30" },
+  { date: `${SEASON_YEAR}-12-20`, name: "Ochtendgymnastiek", event: "11:00–11:45", time: "10:30–13:00" },
+  { date: `${SEASON_YEAR}-12-30`, name: "Pick-up Aalsmeer, 't Kloosterhof", event: "16:00–18:00", time: "14:45–18:45" },
+  { date: `${SEASON_YEAR}-12-31`, name: "Pick-up Amsterdam, Het Amstelhuis", event: "14:00–16:00", time: "12:45–17:00" }
+];
+
+/** "Woensdag 9 december (Olieborrel, Het Amstelhuis)": the option for one bar event, as it goes into the Sheet. */
+const barOption = (e: (typeof BAR_EVENTS)[number]) => `${isoDayLabel(e.date)} (${e.name})`;
 
 const SEASON_DAYS = SEASON_WORKDAYS.map(isoDayLabel);
 
@@ -69,7 +80,7 @@ const DEFAULT_OPTIONS: Record<VolunteerRole, string[]> = {
   inpakken: SEASON_DAYS,
   fietskoerier: [],
   autokoerier: SEASON_DAYS.flatMap((d) => [`${d}: ochtend`, `${d}: middag`]),
-  oliebollenbar: BAR_EVENT_DAYS.map(isoDayLabel)
+  oliebollenbar: BAR_EVENTS.map(barOption)
 };
 
 /**
@@ -89,7 +100,8 @@ export function optionKeyFor(role: VolunteerRole, option: string): string {
 /** Shift times per option; always these, whatever the agenda says. */
 const DEFAULT_TIMES: Record<string, string> = Object.fromEntries([
   ...DEFAULT_OPTIONS.inpakken.map((o) => [optionKeyFor("inpakken", o), SHIFT_TIMES.inpakken]),
-  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), o.endsWith("middag") ? SHIFT_TIMES.autokoerier.middag : SHIFT_TIMES.autokoerier.ochtend])
+  ...DEFAULT_OPTIONS.autokoerier.map((o) => [optionKeyFor("autokoerier", o), o.endsWith("middag") ? SHIFT_TIMES.autokoerier.middag : SHIFT_TIMES.autokoerier.ochtend]),
+  ...BAR_EVENTS.map((e) => [optionKeyFor("oliebollenbar", barOption(e)), e.time])
 ]);
 
 /** Time per task and option ("6:30–12:00"), keyed by optionKeyFor. Use optionTime to read it. */
@@ -124,8 +136,10 @@ export function applyAgenda(slots: AgendaSlot[]): void {
   for (const k of Object.keys(OPTION_TARGETS)) delete OPTION_TARGETS[k];
   for (const slot of slots) {
     if (!slot.needed) continue;
-    const label = agendaLabel({ ...slot, location: "" });
-    if (SIGNUP_OPTIONS[slot.role]?.includes(label)) OPTION_TARGETS[optionKeyFor(slot.role, label)] = slot.needed;
+    // Same day and dagdeel; the bar's options carry the event name, which the agenda row need not repeat.
+    const label = agendaLabel({ ...slot, location: "" }).toLowerCase();
+    const option = SIGNUP_OPTIONS[slot.role]?.find((o) => o.toLowerCase() === label || o.toLowerCase().startsWith(`${label} (`));
+    if (option) OPTION_TARGETS[optionKeyFor(slot.role, option)] = slot.needed;
   }
 }
 
@@ -133,7 +147,7 @@ export const SIGNUP_HINTS = {
   inpakken: "Inpakken van 7:00 tot 9:30 in Aalsmeer, met koffie.",
   fietskoerier: "",
   autokoerier: "Bezorgen met je eigen auto, ca. 9:00 tot 15:00: 's ochtends tot 12:30, 's middags tot 15:00. Kruis aan wat mogelijk is, wij delen je in waar we je het hardst nodig hebben.",
-  oliebollenbar: "Alleen op evenementdagen. Op welke dag(en) wil je helpen in de Oliebollenbar?"
+  oliebollenbar: "Alleen bij evenementen; de tijd is inclusief opbouwen en opruimen. Bij welke wil je helpen in de Oliebollenbar?"
 };
 
 /**

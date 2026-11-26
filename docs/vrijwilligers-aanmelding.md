@@ -10,8 +10,9 @@ De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een g
   zonder 25, 26, 27 december en 1 januari. Het zakelijke bestelformulier gebruikt dezelfde lijst (`deliveryDays`).
   Het tabblad Agenda bepaalt niet meer welke dagen of tijden je kunt kiezen; het geeft alleen nog *nodig* per moment.
 - **Taken.** Inpakken 7:00 tot 9:30, met koffie. Autokoerier ca. 9:00 tot 15:00, met eigen auto (ochtend tot 12:30,
-  middag tot 15:00). Oliebollenbar alleen op evenementdagen: `BAR_EVENT_DAYS` in `src/config.ts`, nog leeg tot Mark de
-  data stuurt; zolang hij leeg is, wordt de bar nergens aangeboden. Geen fiets meer.
+  middag tot 15:00). Oliebollenbar alleen op evenementdagen: `BAR_EVENTS` in `src/config.ts`, met per evenement de naam (die komt
+  tussen haakjes in de Sheet, bijvoorbeeld "Woensdag 9 december (Olieborrel, Het Amstelhuis)") en de tijd van de
+  helpende handjes. Geen fiets meer.
 - **Geen herinneringsvraag.** Iedereen krijgt automatisch 2 dagen van tevoren een mail. De kolom
   *Herinnering 24 uur van tevoren* blijft voor nieuwe aanmeldingen leeg.
 - **Contact.** Voornaam, achternaam, telefoon en e-mail zijn verplicht; bij *Verder* staat per veld wat er mist of

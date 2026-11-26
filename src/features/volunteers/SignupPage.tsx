@@ -217,7 +217,7 @@ export function SignupPage() {
             ? `${time ? `Inpakken doen we van ${time} in Aalsmeer, met koffie. ` : ""}Welke dagen kun je?`
             : r === "autokoerier"
               ? `We bezorgen met de auto, ${deliveryText}. Welke dagen kun je rijden?`
-              : "De Oliebollenbar staat alleen op evenementdagen. Op welke kun je?";
+              : "De Oliebollenbar staat er bij een paar evenementen. Bij elk staat hoe laat ik je erbij nodig heb, met opbouwen en opruimen. Waar kun je bij zijn?";
         return [
           `picks-${r}`,
           {
@@ -585,8 +585,16 @@ export function SignupPage() {
                 <OptionGrid role={role} quiet={quiet} value={a.picks[role]} onChange={setPicks} />
               ) : (
                 // One shift a day: just the days, like a calendar.
+                // A time on each day only when the days differ (the bar's events); one shared time is in Oma's question.
                 <ChipGrid
-                  items={SIGNUP_OPTIONS[role].map((o) => ({ key: o, label: shortDay(o.split(/[:(]/)[0].trim()), sub: o.match(/\(([^)]+)\)/)?.[1], mark: quiet(o) }))}
+                  columns={sharedTime(role) ? undefined : "grid-cols-2 sm:grid-cols-3"}
+                  items={SIGNUP_OPTIONS[role].map((o) => ({
+                    key: o,
+                    label: shortDay(o.split(/[:(]/)[0].trim()),
+                    sub: o.match(/\(([^)]+)\)/)?.[1],
+                    time: sharedTime(role) ? undefined : optionTime(role, o),
+                    mark: quiet(o)
+                  }))}
                   value={a.picks[role]}
                   // Keep the agenda order, so the sheet reads the same as a Google Form answer.
                   onChange={(change) => setPicks((prev) => SIGNUP_OPTIONS[role].filter((o) => change(prev).includes(o)))}
@@ -840,7 +848,7 @@ function ChipGrid({
   onChange,
   columns = "grid-cols-3 sm:grid-cols-5"
 }: {
-  items: Array<{ key: string; label: string; sub?: string; mark?: boolean }>;
+  items: Array<{ key: string; label: string; sub?: string; time?: string; mark?: boolean }>;
   value: string[];
   onChange: (change: (prev: string[]) => string[]) => void;
   columns?: string;
@@ -862,6 +870,7 @@ function ChipGrid({
           >
             {item.label}
             {item.sub ? <span className={`block text-[11px] font-normal ${on ? "text-meel/80" : "text-muted"}`}>{item.sub}</span> : null}
+            {item.time ? <span className={`block text-[11px] font-bold tabular-nums ${on ? "text-meel" : "text-krent"}`}>{item.time}</span> : null}
             {item.mark ? <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-feest" aria-hidden="true" /> : null}
           </button>
         );

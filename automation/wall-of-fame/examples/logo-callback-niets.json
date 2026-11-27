@@ -1,0 +1,12 @@
+{
+  "action": "wallOfFameLogo",
+  "secret": "<WALL_CALLBACK_SECRET>",
+  "key": "2026:bakkerij-de-zon",
+  "found": false,
+  "logoUrl": "",
+  "ink": "donker",
+  "source": "n8n",
+  "logoDomain": "",
+  "confidence": null,
+  "note": "Geen logo gevonden bij Brandfetch of Logo.dev voor Bakkerij De Zon; het naambordje blijft hangen."
+}

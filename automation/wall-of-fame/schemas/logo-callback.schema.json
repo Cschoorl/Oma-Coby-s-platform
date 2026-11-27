@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oma-coby/wall-of-fame/logo-callback",
+  "title": "Logo gevonden (logozoeker → Apps Script, actie wallOfFameLogo)",
+  "description": "Komt alleen aan bij een plek met logo_status 'zoeken'. Een gevonden logo komt op 'nakijken': beheer keurt het goed, nooit Claude. Tot dan hangt het naambordje.",
+  "type": "object",
+  "required": ["action", "secret", "key", "found", "logoUrl", "ink", "source", "confidence", "note"],
+  "additionalProperties": false,
+  "properties": {
+    "action": { "const": "wallOfFameLogo" },
+    "secret": { "type": "string", "description": "WALL_CALLBACK_SECRET uit de Script-eigenschappen." },
+    "key": { "type": "string" },
+    "found": { "type": "boolean" },
+    "logoUrl": { "type": "string", "description": "https-link naar het logo (bij voorkeur SVG), leeg als found = false." },
+    "ink": { "enum": ["donker", "licht", "kleur"], "description": "Hoe het op de muur komt: krent-inkt van een donker of licht logo, of in eigen kleur." },
+    "source": { "type": "string", "description": "website, brandfetch, logo.dev of n8n" },
+    "logoDomain": { "type": "string", "description": "Het domein waar het logo vandaan komt. Wijkt het af van het domein van de besteller, dan waarschuwt beheer voor een naamgenoot of concurrent." },
+    "confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "note": { "type": "string", "maxLength": 400, "description": "Eén zin voor beheer." }
+  }
+}

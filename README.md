@@ -17,6 +17,8 @@ via een Apps Script.
 | Vrijwilligers | beheer | wie kan wanneer: een rij per vrijwilliger, een kolom per dag, bezetting per taak bovenaan; klik een naam of dag voor details; na de actie persoonsgegevens verwijderen |
 | Aanmelden (`#/aanmelden`) | openbaar | korte vragen één voor één: taak, dag of "maakt niet uit", dan beschikbaarheid, maximum en herinnering (zie `docs/vrijwilligers-aanmelding.md`); momenten uit het tabblad Agenda; komt in hetzelfde tabblad als het Google Formulier |
 | Bestellen (`#/bestellen`) | openbaar | zakelijk bestelformulier: begint met de pakketten Brons, Zilver en Goud (50, 150 of 500 oliebollen, met het aantal ouderen dat een middag gaat dansen) of zelf samenstellen (MET/ZONDER, min. 50); extra doneren, flyers, bezorgen of afhalen, dag en moment, gegevens voor de factuur; rekent prijs, btw en bezorgkosten mee. Na versturen een opgemaakte bevestigingsmail. Zie `docs/zakelijk-bestellen.md` |
+| Wall of fame (`#/wall-of-fame`) | openbaar | de bedrijven die met toestemming op Oma's muur staan, als foto van een bruin café: Goud en Zilver met logo in bruine lijsten (zonder goedgekeurd logo een naambordje), Brons op het krijtbord, nooit bedragen. Alleen bevestigde bestellingen uit de Sheet; in demo-modus voorbeelddata. Met `?embed=1` zonder kop voor een iframe op de website. Zie `docs/wall-of-fame.md` |
+| Wall of fame (`#/muur`) | beheer | wie er hangt, logo's nakijken en goedkeuren, iemand van de muur halen, een akkoord per mail toevoegen |
 | Agenda | beheer | "Waar is nog plek?" per dag, taak en dagdeel (klik een dag om te zien wie er is) en wie er op een dag is |
 | Pakbonnen (`#/pakbonnen`) | inpakker, beheer | printbare pakbon per order, in routevolgorde |
 

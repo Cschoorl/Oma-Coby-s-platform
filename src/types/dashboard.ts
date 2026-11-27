@@ -1,4 +1,5 @@
 import type { BusinessOrder } from "./business";
+import type { WallEntry } from "./wallOfFame";
 import type { Order } from "./order";
 
 export type Role = "beheer" | "inpakker" | "bezorger";
@@ -264,6 +265,8 @@ export interface DashboardState {
   agenda: AgendaSlot[];
   /** Zakelijke aanvragen van het bestelformulier; alleen voor beheer. */
   business: BusinessOrder[];
+  /** Wall of fame met logostatus en toestemming; alleen voor beheer (openbaar: getWallOfFame). */
+  wallOfFame: WallEntry[];
   /** Wijzigingslog, newest first. */
   changes: ChangeEntry[];
   /** Sold so far per pop-up (order id of the pop-up stock). */

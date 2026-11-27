@@ -109,6 +109,21 @@ Er komen vijf kolommen bij. Apps Script zet ze achteraan zodra ze voor het eerst
 
 In de demo-modus komt alles in de lokale demo-opslag terecht. Op *Vrijwilligers* zie je de antwoorden als labels per persoon.
 
+## Mails na een aanmelding
+
+Sinds 27 november gaan er na elke aanmelding twee mails uit (`sendVolunteerMails_` in `apps-script/Code.gs`):
+
+- **Bevestiging aan de vrijwilliger**, in platte tekst en in de stem van Oma: de gekozen taken en dagen met tijden, de
+  overige antwoorden en "Iets veranderd? Antwoord gewoon op deze mail". Het antwoordadres is planning@, dus een wijziging
+  komt daar binnen. Hetzelfde adres krijgt hooguit 3 bevestigingen per uur, zodat niemand het formulier kan gebruiken
+  om iemands inbox vol te laten lopen. Het bedankscherm noemt de mail alleen als hij echt verstuurd is.
+- **Melding aan planning@** met alles uit de aanmelding, ook de opmerking. Antwoorden gaat naar de vrijwilliger. Een
+  ander adres kies je met de instelling `vrijwilligers_melding_naar` in het tabblad Instellingen.
+
+Een mislukte mail maakt de aanmelding nooit ongedaan: die staat dan al in de Sheet. De afzender is het Google-account
+waar het script onder draait, met de naam "Oma Coby's Oliebollenbar". Zelf wijzigen via een persoonlijke link komt in
+een volgende stap.
+
 ## Getoetst aan planningstools
 
 We hebben de flow naast gangbare rooster- en vrijwilligerstools gelegd (Shiftbase, Planday, en de best practices van vrijwilligersplanners zoals VolunteerMatrix):

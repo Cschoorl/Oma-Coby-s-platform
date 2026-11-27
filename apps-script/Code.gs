@@ -77,6 +77,11 @@ const CONFIG = {
   /** Afzendernaam van de klantbevestiging. */
   MAIL_SENDER_NAME: "Oma Coby's Oliebollenbar",
   /**
+   * Vrijwilligers: hier komt een melding van elke aanmelding binnen, en de antwoorden op de bevestigingsmail.
+   * Instelling: vrijwilligers_melding_naar (staat die er niet, dan dit adres).
+   */
+  VOLUNTEERS_NOTIFY: 'planning@omacobysoliebollenbar.nl',
+  /**
    * Zakelijk bestellen (#/bestellen). Standaardprijzen en -dagen; overschrijf ze in het tabblad
    * Instellingen (zakelijk_minimum, zakelijk_dagen_vooraf, …; de prijs niet) en in het tabblad Zakelijke dagen.
    * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
@@ -772,8 +777,9 @@ const HANDLERS = {
       if (index.timestamp !== undefined) sheet.getRange(at, index.timestamp + 1).setNumberFormat('dd-MM-yyyy HH:mm:ss');
       sheet.getRange(at, 1, 1, row.length).setValues([row]);
       bump_();
-      return { saved: true };
     });
+    // The signup is saved; a mail that fails must not make it look like it was not.
+    return { saved: true, mailed: sendVolunteerMails_(values, roles, body.times || {}) };
   },
   extractReceipt: function (body) {
     const base64 = String(body.imageBase64 || '');
@@ -2540,6 +2546,119 @@ function businessMailImages_() {
     // No images: the mail still works, with text in place of the logo.
   }
   return images;
+}
+
+/** Shift times as the form shows them ("7:00–9:30"); anything else is left out of the mail. */
+function volunteerTime_(value) {
+  const t = String(value || '').trim();
+  return /^\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2}$/.test(t) ? t : '';
+}
+
+const VOLUNTEER_ROLE_NAMES = { inpakken: 'Inpakken', fietskoerier: 'Fietskoerier', autokoerier: 'Autokoerier', oliebollenbar: 'Oliebollenbar' };
+
+/** "Inpakken\n- Maandag 7 december, 7:00–9:30\n…" for each task they want. */
+function volunteerChoicesText_(roles, times) {
+  return VOLUNTEER_ROLES.filter(function (role) { return roles[role] && roles[role].wants; }).map(function (role) {
+    const roleTimes = Array.isArray(times[role]) ? times[role] : [];
+    const days = (roles[role].days || []).slice(0, 60).map(function (day, n) {
+      const time = volunteerTime_(roleTimes[n]);
+      return '- ' + String(day).slice(0, 120) + (time ? ', ' + time : '');
+    });
+    return VOLUNTEER_ROLE_NAMES[role] + '\n' + (days.length ? days.join('\n') : '- Nog geen dag gekozen');
+  }).join('\n\n');
+}
+
+/**
+ * Confirmation to the volunteer (their answer goes to planning@) and a notice to planning@.
+ * Each in its own try, so one failing never stops the other. Returns whether the confirmation went out.
+ */
+function sendVolunteerMails_(values, roles, times) {
+  const settings = {};
+  try {
+    readTab_('settings').forEach(function (r) { settings[String(r.sleutel).trim()] = r.waarde; });
+  } catch (err) {
+    // No settings tab: CONFIG is used.
+  }
+  const planning = String(settings.vrijwilligers_melding_naar || CONFIG.VOLUNTEERS_NOTIFY).trim();
+  const first = values.name.split(/\s+/)[0];
+  const choices = volunteerChoicesText_(roles, times);
+  const details = [
+    values.flexible ? 'Mag ook ergens anders ingedeeld worden: ' + values.flexible : '',
+    values.maxShifts ? 'Maximaal: ' + values.maxShifts : '',
+    values.driving ? 'Rijbewijs: ' + values.driving : '',
+    'Telefoon: ' + values.phone,
+    values.city ? 'Woonplaats: ' + values.city : '',
+    values.address ? 'Adres: ' + values.address : ''
+  ].filter(String).join('\n');
+
+  let mailed = false;
+  // At most 3 confirmations per address per hour, so the public form cannot be used to flood someone's inbox.
+  const cache = CacheService.getScriptCache();
+  const key = 'vrijwilliger-mail-' + values.email.toLowerCase();
+  const sent = Number(cache.get(key) || 0);
+  if (sent < 3) {
+    try {
+      const mail = {
+        to: values.email,
+        name: CONFIG.MAIL_SENDER_NAME,
+        subject: 'Je staat erop, ' + first + '! Je aanmelding als vrijwilliger',
+        body: [
+          'Hoi ' + first + ',',
+          '',
+          'Dankjewel dat je wilt helpen! Je aanmelding is binnen en je zit nu officieel in mijn team. Dit heb je opgegeven:',
+          '',
+          choices,
+          '',
+          details,
+          '',
+          'Wat nu? Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster. Via WhatsApp hoor je dan waar en wanneer ik je verwacht.',
+          '',
+          'Iets veranderd, of kun je toch een keer niet? Antwoord gewoon op deze mail, dan passen we het aan.',
+          '',
+          'Warme groet,',
+          'Oma Coby (100) en het hele team',
+          '',
+          '--',
+          'Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol, Waalstraat 69-2, 1079 DP Amsterdam.'
+        ].join('\n')
+      };
+      if (planning) mail.replyTo = planning;
+      MailApp.sendEmail(mail);
+      cache.put(key, String(sent + 1), 3600);
+      mailed = true;
+    } catch (err) {
+      console.error('Bevestiging vrijwilliger ' + values.email + ' niet verstuurd: ' + err);
+    }
+  }
+  if (planning) {
+    try {
+      const tasks = VOLUNTEER_ROLES.filter(function (role) { return roles[role] && roles[role].wants; })
+        .map(function (role) { return VOLUNTEER_ROLE_NAMES[role].toLowerCase(); });
+      MailApp.sendEmail({
+        to: planning,
+        replyTo: values.email,
+        name: CONFIG.MAIL_SENDER_NAME,
+        subject: 'Nieuwe vrijwilliger: ' + values.name + ' (' + tasks.join(', ') + ')',
+        body: [
+          'Er is een nieuwe aanmelding. Je vindt hem in het tabblad ' + CONFIG.VOLUNTEERS_SHEET + ' en op de pagina Vrijwilligers in het platform.',
+          '',
+          'Naam: ' + values.name,
+          'E-mail: ' + values.email,
+          details,
+          values.mode ? 'Hoe aangemeld: ' + values.mode : '',
+          '',
+          choices,
+          values.remark ? '\nOpmerking:\n' + values.remark : '',
+          '',
+          mailed ? 'De vrijwilliger heeft een bevestiging per mail gekregen. Antwoord je op deze mail, dan gaat je antwoord naar de vrijwilliger.'
+            : 'Let op: de bevestiging naar de vrijwilliger is niet verstuurd. Neem zelf even contact op.'
+        ].join('\n').replace(/\n{3,}/g, '\n\n')
+      });
+    } catch (err) {
+      console.error('Melding vrijwilliger ' + values.email + ' niet verstuurd: ' + err);
+    }
+  }
+  return mailed;
 }
 
 function sendBusinessMails_(id, i, t, info) {

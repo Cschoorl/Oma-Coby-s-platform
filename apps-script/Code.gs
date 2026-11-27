@@ -745,7 +745,7 @@ const HANDLERS = {
       values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
     }
 
-    return withLock_(function () {
+    withLock_(function () {
       const sheet = volunteerSheet_();
       let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
       let index = volunteerIndex_(headers);
@@ -772,8 +772,18 @@ const HANDLERS = {
       if (index.timestamp !== undefined) sheet.getRange(at, index.timestamp + 1).setNumberFormat('dd-MM-yyyy HH:mm:ss');
       sheet.getRange(at, 1, 1, row.length).setValues([row]);
       bump_();
-      return { saved: true };
     });
+
+    // Mail na het opslaan: een mailprobleem kost nooit een aanmelding. "mailed" zegt de pagina of de bevestiging weg is.
+    let mailed = false;
+    try {
+      sendVolunteerMails_({ name: name, phone: phone, email: email, city: values.city, address: values.address, roles: roles,
+        maxShifts: values.maxShifts || '', flexible: values.flexible || '', driving: values.driving || '', remark: values.remark });
+      mailed = true;
+    } catch (err) {
+      console.error('Bevestiging vrijwilliger niet verstuurd: ' + err);
+    }
+    return { saved: true, mailed: mailed };
   },
   extractReceipt: function (body) {
     const base64 = String(body.imageBase64 || '');
@@ -3115,3 +3125,249 @@ Object.assign(HANDLERS, {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Vrijwilligersaanmelding (#/aanmelden): bevestiging aan de vrijwilliger en een melding aan de planning.
+//
+// Na het opslaan gaat er een bevestiging naar de vrijwilliger, met de diensten die hij koos, en een korte
+// melding naar de planning. Antwoorden op de bevestiging komen bij de planning uit (replyTo). De mail gaat
+// weg vanuit het Google-account waaronder de web-app draait, net als de zakelijke bevestiging.
+//
+// Het adres komt van een openbaar formulier. Daarom staat in de bevestiging alleen vaste tekst, de naam en
+// de dagen die het script herkent; de opmerking van de vrijwilliger gaat alleen naar de planning.
+
+const VOLUNTEER_MAIL = {
+  /** Waar antwoorden heen gaan. Instelling: vrijwilligers_email. */
+  email: 'planning@omacobysoliebollenbar.nl',
+  /** Wie bij elke aanmelding een melding krijgt. Instelling: vrijwilligers_melding_naar (leeg laten = geen melding). */
+  notify: 'planning@omacobysoliebollenbar.nl',
+  labels: { inpakken: 'Inpakken', fietskoerier: 'Fietskoerier', autokoerier: 'Autokoerier', oliebollenbar: 'Oliebollenbar' },
+  /** Zelfde tijden als SHIFT_TIMES in src/config.ts. */
+  times: { inpakken: '7:00–9:30', ochtend: '9:00–12:30', middag: '12:30–15:00' },
+  /** Tijd van de helpende handjes per evenement, op dag. Zelfde lijst als BAR_EVENTS in src/config.ts. */
+  events: { '9 december': '13:00–17:30', '18 december': '11:00–16:00', '19 december': '13:00–17:30', '20 december': '10:30–13:00',
+    '30 december': '14:45–18:45', '31 december': '12:45–17:00' },
+  /** Plaatjes uit public/mail die in de bevestiging staan (BUSINESS_MAIL_FILES). */
+  images: ['logo', 'bedankt', 'oma', 'oliebol']
+};
+
+/** "Woensdag 9 december", "Maandag 7 december: ochtend" of "Woensdag 9 december (Olieborrel, Het Amstelhuis)". */
+const VOLUNTEER_DAY = /^([A-Za-zÀ-ÿ]+ \d{1,2} [A-Za-zÀ-ÿ]+)(?::\s*(ochtend|middag|avond))?(?:\s*\(([^()]{1,80})\))?$/;
+
+/** Eén gekozen moment als dag, toelichting (dagdeel of evenement) en tijd; null als het script de dag niet herkent. */
+function volunteerShift_(role, option) {
+  const m = String(option || '').trim().match(VOLUNTEER_DAY);
+  if (!m) return null;
+  const day = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  const part = String(m[2] || '').toLowerCase();
+  const key = day.toLowerCase().replace(/^[^\d]*/, '');
+  const t = VOLUNTEER_MAIL.times;
+  if (role === 'inpakken') return { day: day, detail: 'in Aalsmeer', time: t.inpakken };
+  if (role === 'oliebollenbar') return { day: day, detail: m[3] || '', time: VOLUNTEER_MAIL.events[key] || '' };
+  return { day: day, detail: part, time: t[part] || '' };
+}
+
+/** Alles wat de bevestiging en de melding tonen, één keer uitgewerkt voor de HTML en de tekst. */
+function volunteerMailData_(v, contactEmail) {
+  const oneLine = function (text, max) { return String(text || '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, max); };
+  const name = oneLine(v.name, 80);
+  const tasks = VOLUNTEER_ROLES.filter(function (role) { return v.roles[role] && v.roles[role].wants; }).map(function (role) {
+    const shifts = (v.roles[role].days || []).slice(0, 80).map(function (o) { return volunteerShift_(role, o); }).filter(Boolean);
+    return { role: role, label: VOLUNTEER_MAIL.labels[role], shifts: shifts };
+  }).filter(function (task) { return task.shifts.length > 0; });
+  const days = {};
+  tasks.forEach(function (task) { task.shifts.forEach(function (s) { days[s.day] = true; }); });
+  return {
+    // De aanhef en het onderwerp: alleen de letters van de voornaam, zodat er nooit een link of opmaak in komt.
+    name: name, firstName: name.split(' ')[0].replace(/[^A-Za-zÀ-ÿ'’-]/g, '').slice(0, 30) || 'vrijwilliger', phone: oneLine(v.phone, 30), email: oneLine(v.email, 120), city: oneLine(v.city, 80),
+    address: oneLine(v.address, 120), tasks: tasks, dayCount: Object.keys(days).length,
+    maxShifts: oneLine(v.maxShifts, 20), flexible: v.flexible === 'Ja', driving: oneLine(v.driving, 40),
+    remark: String(v.remark || '').trim().slice(0, 1000), contactEmail: contactEmail
+  };
+}
+
+/** "Maximaal 2 dagen. Ik zet je alleen bij de taken die je koos." */
+function volunteerAgreement_(d) {
+  return (d.maxShifts ? 'Je helpt op hooguit ' + d.maxShifts + '. ' : '') +
+    (d.flexible ? 'Als het ergens anders drukker is, mag ik je daar ook neerzetten.' : 'Ik zet je alleen bij de taken die je koos.');
+}
+
+/** De stappen na de aanmelding, voor de HTML en de tekst. */
+function volunteerSteps_(d) {
+  return [
+    ['Ik maak het rooster', 'zodra ik weet hoeveel bestellingen er zijn. Tot die tijd is dit je beschikbaarheid, nog geen rooster.'],
+    ['Je hoort waar en wanneer ik je verwacht', 'via WhatsApp, op ' + d.phone + '. Daar komen ook je herinneringen.'],
+    ['Kun je toch niet, of juist vaker?', 'Beantwoord deze mail, dan pas ik het aan.']
+  ];
+}
+
+/** De bevestiging als tekst, voor mailprogramma's zonder HTML. */
+function volunteerMailText_(d) {
+  const lines = ['Dankjewel, ' + d.firstName + '!', '', 'Fijn dat je wilt helpen. Je zit nu officieel in mijn team. Dit heb ik van je genoteerd.', ''];
+  d.tasks.forEach(function (task) {
+    lines.push(task.label.toUpperCase());
+    task.shifts.forEach(function (s) { lines.push('- ' + [s.day, s.detail, s.time].filter(String).join(', ')); });
+    lines.push('');
+  });
+  lines.push(volunteerAgreement_(d), '', 'WAT GEBEURT ER NU?');
+  volunteerSteps_(d).forEach(function (s, n) { lines.push((n + 1) + '. ' + s[0] + ' ' + s[1]); });
+  lines.push('', 'Een vraag? Beantwoord deze mail of mail naar ' + d.contactEmail + '.', '', 'Warme groet,', 'Oma Coby (100) en het hele team', '',
+    'Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol, Waalstraat 69-2, 1079 DP Amsterdam.',
+    'Je krijgt deze mail omdat je je als vrijwilliger hebt aangemeld.');
+  return lines.join('\n');
+}
+
+/**
+ * De bevestiging als HTML, in dezelfde opzet als de zakelijke bevestiging (zie docs/huisstijl-regels.md, Mail):
+ * tabellen en inline stijlen, meel als achtergrond en één papieren kaart. src(naam) geeft het adres van een plaatje
+ * uit public/mail, of '' om het weg te laten.
+ */
+function volunteerMailHtml_(d, src) {
+  const e = escapeHtml_;
+  const C = { meel: '#f9f3d9', papier: '#fffdf6', krent: '#261f1f', oliebol: '#5c4238', muted: '#6d5a4f', lijn: '#ebe1bf', gouwe50: '#fbf3cf', gouweInk: '#5b480b' };
+  const TEXT = "Arvo,Rockwell,'Roboto Slab',Georgia,serif";
+  const HEAD = "Vollkorn,Georgia,'Times New Roman',serif";
+  const NUM = "Vollkorn,Rockwell,'Roboto Slab',Georgia,serif";
+  const img = function (name, w, h, alt, style) {
+    return src(name) ? '<img src="' + src(name) + '" width="' + w + '" height="' + h + '" alt="' + e(alt) + '" style="display:block;border:0;outline:none;' + (style || '') + '">' : '';
+  };
+  const label = function (text) {
+    return '<p style="margin:0 0 12px;font-family:' + TEXT + ';font-size:11px;line-height:16px;font-weight:bold;letter-spacing:0.12em;text-transform:uppercase;color:' + C.muted + ';">' + text + '</p>';
+  };
+  const rule = '<tr><td style="padding:32px 0 0;"><div style="height:1px;line-height:1px;font-size:1px;background:' + C.lijn + ';">&nbsp;</div></td></tr>';
+  const section = function (title, inner) {
+    return rule + '<tr><td style="padding:32px 0 0;">' + label(title) + inner + '</td></tr>';
+  };
+  // Per taak een blok: de dag links, het evenement of dagdeel eronder, de tijd rechts.
+  const tasks = d.tasks.map(function (task, n) {
+    return '<p style="margin:' + (n ? 22 : 0) + 'px 0 6px;font-family:' + HEAD + ';font-size:19px;line-height:24px;font-weight:bold;color:' + C.krent + ';">' + e(task.label) + '</p>' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + task.shifts.map(function (s) {
+        return '<tr><td valign="top" style="padding:6px 16px 6px 0;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.krent + ';">' + e(s.day) +
+          (s.detail ? '<br><span style="font-size:13px;line-height:19px;color:' + C.muted + ';">' + e(s.detail) + '</span>' : '') + '</td>' +
+          '<td align="right" valign="top" style="padding:6px 0;white-space:nowrap;font-family:' + NUM + ';font-size:15px;line-height:22px;font-weight:bold;color:' + C.krent + ';">' + e(s.time) + '</td></tr>';
+      }).join('') + '</table>';
+  }).join('');
+  const steps = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' + volunteerSteps_(d).map(function (s, n) {
+    return '<tr><td valign="top" style="padding:0 14px 16px 0;width:28px;"><div style="width:28px;height:28px;border-radius:14px;background:' + C.krent + ';color:' + C.meel + ';font-family:' + NUM + ';font-size:15px;line-height:28px;font-weight:bold;text-align:center;">' + (n + 1) + '</div></td>' +
+      '<td valign="top" style="padding:3px 0 16px;font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.oliebol + ';"><b style="color:' + C.krent + ';">' + e(s[0]) + '</b> ' + e(s[1]) + '</td></tr>';
+  }).join('') + '</table>';
+  const headline = 'Je zit in mijn team, ' + d.firstName + '!';
+  const preheader = 'Je aanmelding als vrijwilliger is binnen: ' + d.dayCount + (d.dayCount === 1 ? ' dag' : ' dagen') + '. Het rooster volgt via WhatsApp.';
+
+  return '<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>' + e(headline) + '</title>' +
+    '<style>body{margin:0;padding:0;}img{-ms-interpolation-mode:bicubic;}a{color:' + C.krent + ';}' +
+    '@media (max-width:620px){.oc-card{padding:28px 20px !important;}.oc-h1{font-size:26px !important;line-height:32px !important;}.oc-outer{padding:20px 12px !important;}}</style></head>' +
+    '<body style="margin:0;padding:0;background:' + C.meel + ';">' +
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:' + C.meel + ';">' + e(preheader) + new Array(60).join('&#847;&zwnj;&nbsp;') + '</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="' + C.meel + '" style="background:' + C.meel + ';">' +
+    '<tr><td class="oc-outer" align="center" style="padding:32px 16px 40px;">' +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">' +
+
+    // Logo
+    '<tr><td align="center" style="padding:0 0 24px;">' +
+    (src('logo') ? img('logo', 200, 64, 'Oma Coby\'s Oliebollenbar', 'margin:0 auto;') : '<p style="margin:0;font-family:' + HEAD + ';font-size:22px;font-weight:bold;color:' + C.oliebol + ';">Oma Coby\'s Oliebollenbar</p>') +
+    '</td></tr>' +
+
+    // Kaart
+    '<tr><td class="oc-card" bgcolor="' + C.papier + '" style="background:' + C.papier + ';border-radius:10px;padding:44px 44px 40px;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
+
+    '<tr><td style="padding:0 0 20px;">' + img('bedankt', 150, 63, 'Bedankt!', 'margin-left:-6px;') + '</td></tr>' +
+    '<tr><td><h1 class="oc-h1" style="margin:0;font-family:' + HEAD + ';font-size:32px;line-height:38px;font-weight:bold;color:' + C.krent + ';">' + e(headline) + '</h1>' +
+    '<p style="margin:16px 0 0;font-family:' + TEXT + ';font-size:16px;line-height:26px;color:' + C.oliebol + ';">Fijn dat je wilt helpen. Je aanmelding is binnen; hieronder staat wat ik van je heb genoteerd.</p></td></tr>' +
+
+    section('Hier kun je helpen', tasks +
+      '<p style="margin:20px 0 0;padding:14px 18px;border-radius:10px;background:' + C.gouwe50 + ';font-family:' + TEXT + ';font-size:15px;line-height:23px;color:' + C.gouweInk + ';">' + e(volunteerAgreement_(d)) + '</p>') +
+    section('Wat gebeurt er nu?', steps) +
+
+    // Vragen
+    rule +
+    '<tr><td style="padding:32px 0 0;"><p style="margin:0;font-family:' + TEXT + ';font-size:15px;line-height:24px;color:' + C.oliebol + ';">' +
+    '<b style="color:' + C.krent + ';">Een vraag?</b> Beantwoord deze mail of mail naar ' +
+    '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.krent + ';font-weight:bold;">' + e(d.contactEmail) + '</a>.</p></td></tr>' +
+
+    // Groet
+    rule +
+    '<tr><td style="padding:28px 0 0;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+    (src('oma') ? '<td valign="middle" style="padding:0 16px 0 0;">' + img('oma', 56, 56, 'Oma Coby', 'border-radius:28px;') + '</td>' : '') +
+    '<td valign="middle" style="font-family:' + TEXT + ';font-size:15px;line-height:22px;color:' + C.oliebol + ';">Warme groet,<br><b style="color:' + C.krent + ';">Oma Coby (100) en het hele team</b></td>' +
+    '</tr></table></td></tr>' +
+
+    '</table></td></tr>' +
+
+    // Voet
+    '<tr><td align="center" style="padding:28px 12px 0;">' + img('oliebol', 24, 24, '', 'margin:0 auto 12px;') +
+    '<p style="margin:0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Oma Coby\'s Oliebollenbar is een initiatief van Stichting Uit Mijn Bol · Waalstraat 69-2, 1079 DP Amsterdam<br>' +
+    '<a href="mailto:' + e(d.contactEmail) + '" style="color:' + C.muted + ';">' + e(d.contactEmail) + '</a> · ' +
+    '<a href="https://www.omacobysoliebollenbar.nl" style="color:' + C.muted + ';">omacobysoliebollenbar.nl</a></p>' +
+    '<p style="margin:10px 0 0;font-family:' + TEXT + ';font-size:12px;line-height:19px;color:' + C.muted + ';">Je krijgt deze mail omdat je je als vrijwilliger hebt aangemeld.</p>' +
+    '</td></tr>' +
+
+    '</table></td></tr></table></body></html>';
+}
+
+/** De melding aan de planning: wie, hoe te bereiken, waar en wanneer, en de opmerking. Alleen tekst. */
+function volunteerNotifyText_(d) {
+  const lines = ['Nieuwe aanmelding als vrijwilliger.', '', 'Naam: ' + d.name, 'Telefoon: ' + d.phone, 'E-mail: ' + d.email,
+    'Woonplaats: ' + d.city];
+  if (d.address) lines.push('Adres: ' + d.address);
+  lines.push('');
+  d.tasks.forEach(function (task) {
+    lines.push(task.label.toUpperCase());
+    task.shifts.forEach(function (s) { lines.push('- ' + [s.day, s.detail, s.time].filter(String).join(', ')); });
+    lines.push('');
+  });
+  lines.push('Maximaal: ' + (d.maxShifts || 'niet opgegeven'), 'Indelen waar nodig: ' + (d.flexible ? 'ja' : 'nee'));
+  if (d.driving) lines.push('Rijbewijs: ' + d.driving);
+  if (d.remark) lines.push('', 'Opmerking: ' + d.remark);
+  lines.push('', 'Alle aanmeldingen staan op de pagina Vrijwilligers in het platform. Antwoord op deze mail gaat naar de vrijwilliger.');
+  return lines.join('\n');
+}
+
+/** De plaatjes voor de bevestiging als blobs op naam; wat niet op te halen is, blijft weg. */
+function volunteerMailImages_() {
+  const base = String(CONFIG.BUSINESS.mailImages || '');
+  if (!base) return {};
+  const images = {};
+  try {
+    const names = VOLUNTEER_MAIL.images;
+    const responses = UrlFetchApp.fetchAll(names.map(function (name) { return { url: base + BUSINESS_MAIL_FILES[name], muteHttpExceptions: true }; }));
+    responses.forEach(function (r, n) {
+      if (r.getResponseCode() === 200) images[names[n]] = r.getBlob().setName(BUSINESS_MAIL_FILES[names[n]]);
+    });
+  } catch (err) {
+    // Geen plaatjes: de mail werkt ook zo, met tekst op de plek van het logo.
+  }
+  return images;
+}
+
+function sendVolunteerMails_(v) {
+  const settings = {};
+  readTab_('settings').forEach(function (r) { settings[String(r.sleutel).trim()] = r.waarde; });
+  const contact = String(settings.vrijwilligers_email || VOLUNTEER_MAIL.email).trim();
+  const d = volunteerMailData_(v, contact);
+  const images = volunteerMailImages_();
+  MailApp.sendEmail({
+    to: d.email, replyTo: contact, name: CONFIG.MAIL_SENDER_NAME,
+    subject: 'Je zit in mijn team, ' + d.firstName + '! Je aanmelding als vrijwilliger',
+    body: volunteerMailText_(d),
+    htmlBody: volunteerMailHtml_(d, function (name) { return images[name] ? 'cid:' + name : ''; }),
+    inlineImages: images
+  });
+  // De melding aan de planning in een eigen try: een probleem hier telt niet als een mislukte bevestiging.
+  try {
+    // Een lege waarde in Instellingen betekent: geen melding.
+    const notify = String(settings.vrijwilligers_melding_naar === undefined ? VOLUNTEER_MAIL.notify : settings.vrijwilligers_melding_naar).trim();
+    if (notify) {
+      MailApp.sendEmail({
+        to: notify, replyTo: d.email, name: CONFIG.MAIL_SENDER_NAME,
+        subject: 'Nieuwe vrijwilliger: ' + d.name + ' (' + d.tasks.map(function (t) { return t.label.toLowerCase(); }).join(', ') + '), ' +
+          d.dayCount + (d.dayCount === 1 ? ' dag' : ' dagen'),
+        body: volunteerNotifyText_(d)
+      });
+    }
+  } catch (err) {
+    console.error('Melding vrijwilliger ' + d.name + ' niet verstuurd: ' + err);
+  }
+}

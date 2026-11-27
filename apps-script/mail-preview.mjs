@@ -59,3 +59,30 @@ for (const [file, input] of Object.entries(examples)) {
   writeFileSync(new URL(`../docs/${file}.html`, here), html);
   console.log(`docs/${file}.html`);
 }
+
+// De bevestiging van een vrijwilligersaanmelding  →  docs/mail-vrijwilliger-bevestiging.html en .txt (de tekstversie en de melding aan de planning).
+const volunteer = {
+  name: "Ria de Boer", phone: "06 12345678", email: "ria@example.nl", city: "Aalsmeer", address: "", maxShifts: "3 dagen", flexible: "Nee", driving: "Rijbewijs en auto",
+  remark: "Ik kom samen met mijn buurvrouw Tineke.",
+  roles: {
+    inpakken: { wants: true, days: ["Woensdag 9 december", "Donderdag 10 december"] },
+    fietskoerier: { wants: false, days: [] },
+    autokoerier: { wants: true, days: ["Maandag 14 december: ochtend", "Maandag 14 december: middag"] },
+    oliebollenbar: { wants: true, days: ["Woensdag 9 december (Olieborrel, Het Amstelhuis)", "Woensdag 30 december (Pick-up Aalsmeer, 't Kloosterhof)"] }
+  }
+};
+const made = runInContext(
+  `(function (v) {
+    const d = volunteerMailData_(v, VOLUNTEER_MAIL.email);
+    return {
+      html: volunteerMailHtml_(d, function (name) { return '../public/mail/' + BUSINESS_MAIL_FILES[name]; }),
+      text: volunteerMailText_(d) + '\\n\\n=== MELDING AAN DE PLANNING ===\\n\\n' + volunteerNotifyText_(d)
+    };
+  })`,
+  context
+)(volunteer);
+writeFileSync(new URL("../docs/mail-vrijwilliger-bevestiging.html", here), made.html);
+writeFileSync(new URL("../docs/mail-vrijwilliger-bevestiging.txt", here), made.text + "\n");
+console.log("docs/mail-vrijwilliger-bevestiging.html");
+console.log("docs/mail-vrijwilliger-bevestiging.txt");
+

@@ -2,6 +2,26 @@
 
 De aanmelding (`#/aanmelden`, `src/features/volunteers/SignupPage.tsx`) is een gesprek met Oma Coby. Ze stelt zich voor, vraagt één ding tegelijk en reageert kort op elk antwoord. Eerdere antwoorden blijven als chat erboven staan, elk met *Wijzig*. De logica staat los in `signupFlow.ts`.
 
+## Bevestigingsmail en melding aan de planning (27 november)
+
+Het oude Google Formulier stuurde de invuller een kopie van de antwoorden. De aanmeldpagina schrijft rechtstreeks in
+de Sheet, dus die kopie viel weg. Nu stuurt het Apps Script na het opslaan zelf twee mails (`sendVolunteerMails_`):
+
+- **Bevestiging aan de vrijwilliger**: per taak de gekozen dagen met de tijd, het maximum aantal dagen, of ze ook
+  elders ingedeeld mogen worden, en wat er nu gebeurt (rooster en herinneringen via WhatsApp). Antwoorden gaan naar
+  de planning. Voorbeeld: `docs/mail-vrijwilliger-bevestiging.html` (maken met `node apps-script/mail-preview.mjs`).
+- **Melding aan de planning** (`planning@omacobysoliebollenbar.nl`): naam, contact, taken, dagen en de opmerking.
+  Antwoorden gaan naar de vrijwilliger.
+
+Instellingen (tabblad Instellingen): `vrijwilligers_email` (waar antwoorden heen gaan) en `vrijwilligers_melding_naar`
+(wie de melding krijgt; een lege waarde zet de melding uit). De tijden in de mail staan in `VOLUNTEER_MAIL` in
+`Code.gs` en zijn dezelfde als `SHIFT_TIMES` en `BAR_EVENTS` in `src/config.ts`: pas ze op beide plekken aan.
+
+De mail gaat weg vanuit het Google-account waaronder de web-app draait. Het adres komt van een openbaar formulier;
+daarom staat in de bevestiging alleen vaste tekst, de voornaam en de dagen die het script herkent. De opmerking gaat
+alleen naar de planning. Mislukt de mail, dan is de aanmelding toch opgeslagen; het bedankscherm noemt de mail
+alleen als hij echt is verstuurd. Wijzigen kan nog niet in het formulier: dat gaat via een antwoord op de mail.
+
 ## Feedback van Mark, 26 november (avond)
 
 - **Eén keer dagen kiezen, daarna je diensten.** Bij *Ik weet welk type taak ik wil doen* vroeg Oma de dagen per taak

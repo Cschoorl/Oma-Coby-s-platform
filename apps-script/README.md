@@ -12,7 +12,7 @@ Het script:
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier, barter en pop-up); het script schrijft daar alleen bij **Bewerken** en bij een **nieuwe bestelling of pop-upvoorraad** uit het beheer;
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
-  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wijzigingslog` en `Pop-up verkoop`;
+  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wijzigingslog`, `Pop-up verkoop` en `Rooster` (de planning: wie staat wanneer, zie hieronder);
 - ontvangt zakelijke aanvragen van het bestelformulier (`#/bestellen`), stuurt de klant een kopie en info@ een melding,
   en telt bevestigde aanvragen mee als order (zie `docs/zakelijk-bestellen.md`);
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
@@ -98,7 +98,7 @@ in dezelfde kolommen en hetzelfde formaat als het formulier ("Vrijdag 18 decembe
 - De aanmeldpagina zet vijf extra kolommen achteraan zodra ze voor het eerst gevuld worden: *Hoe aangemeld*,
   *Mag ingedeeld worden waar nodig*, *Maximaal aantal dagen*, *Herinnering 24 uur van tevoren* en *Rijbewijs*
   (zie `docs/vrijwilligers-aanmelding.md`). Rijen uit het Google Formulier laten die leeg.
-- De agenda in het dashboard wordt gevuld uit deze aanmeldingen (beschikbaarheid, niet het definitieve rooster).
+- De pagina's Vrijwilligers en Rooster lezen de beschikbaarheid uit deze aanmeldingen. Het definitieve rooster staat in het tabblad `Rooster`.
 - Inpakkers en bezorgers zien alleen namen en dagen; telefoon, e-mail en opmerkingen ziet alleen beheer.
 - De dagen op de aanmeldpagina staan in `src/config.ts` (`SIGNUP_OPTIONS`), het aantal benodigde mensen per
   taak per dag(deel) in `STAFFING_TARGETS`. Daarmee kleurt de bezettingskalender en stelt de aanmeldpagina
@@ -121,7 +121,7 @@ in de plaats ervan delen.
   - `taak` is `inpakken`, `autokoerier` of `oliebollenbar`. De fietskoerier doet niet meer mee; regels met `fietskoerier` worden overgeslagen.
   - `dagdeel` is `ochtend`, `middag`, `avond` of leeg (hele dag).
   - `datum` mag ook "26 december" zijn.
-  - `nodig` leeg = standaard (4).
+  - `nodig` leeg = standaard (4); `0` = niemand nodig op dat moment. De pagina **Rooster** vult deze kolom als de planner per dag instelt hoeveel mensen er nodig zijn (en voegt een regel toe als het moment er nog niet staat).
   - Het script vult de agenda de eerste keer met 15–24 en 27–31 december. Pas hem daarna gewoon in de Sheet aan: de aanmeldpagina en de bezettingskalender volgen direct.
   - Aanmeldingen bewaren de gekozen tekst ("Woensdag 30 december: middag"). Verander je een moment waarvoor al mensen zijn aangemeld, dan tellen die niet meer mee voor het nieuwe moment.
 - **Historie**: één regel per dag van eerdere jaren: `jaar`, `datum` (JJJJ-MM-DD), `bestellingen`, `oliebollen`, `omzet`.
@@ -228,6 +228,28 @@ Onder **Vrijwilligers → Na de actie** kan beheer met één knop (na het typen 
 - namen in de dashboardtabbladen, IBANs in `Kosten`, de routes, de opgezochte adressen in `Locaties`, en de bonfoto's in de Drive-map.
 
 Aantallen, bedragen en datums blijven staan, zodat de tussenstand van volgend jaar kan vergelijken. Maak eventueel eerst een kopie van de Sheet.
+
+## Rooster (wie staat wanneer)
+
+Op de pagina **Rooster** (alleen beheer) stelt de planner per dag in hoeveel mensen een dienst nodig heeft en zet
+vrijwilligers op een dienst. Het script bewaart dat op twee plekken:
+
+- **Tabblad `Rooster`**: één regel per ingeplande dienst, met de definitieve tijden. Dit is de planningssheet.
+
+  | id | datum | weekdag | taak | dagdeel | begintijd | eindtijd | vrijwilliger | locatie | opmerking | ingepland_door | bijgewerkt_op |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | R3f9a1c2 | 2026-12-07 | maandag | inpakken | | 07:00 | 09:30 | Ria de Vries | | | Raquel | 2026-11-30 10:12:00 |
+  | R8b21d04 | 2026-12-09 | woensdag | oliebollenbar | | 13:00 | 17:30 | Lotte Bos | Olieborrel, Het Amstelhuis | | Raquel | 2026-11-30 10:14:00 |
+
+  - Het script houdt het tabblad op volgorde van dag en begintijd.
+  - Met de hand bijwerken mag: pas een tijd aan, of typ een regel erbij met `datum`, `taak`, `begintijd`, `eindtijd`
+    en `vrijwilliger` (laat `id` leeg; het platform vult hem in zodra je de dienst daar wijzigt).
+  - De vrijwilliger staat er met naam, niet met een rijnummer: dat verschuift als iemand een aanmelding verwijdert.
+  - *Persoonsgegevens verwijderen* (pagina Vrijwilligers) leegt ook dit tabblad.
+- **Kolom `nodig` in het tabblad `Agenda`**: hoeveel mensen een dienst op een dag nodig heeft (`setNeeded`).
+
+Acties (alleen beheer): `saveShift` (inplannen, verplaatsen, tijden wijzigen), `removeShift` en `setNeeded`.
+Zie `docs/rooster.md` voor het scherm.
 
 ## Realtime
 

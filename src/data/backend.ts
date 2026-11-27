@@ -10,6 +10,9 @@ import type {
   CostStatus,
   DeliveryState,
   DashboardState,
+  NeededInput,
+  RosterShift,
+  RosterShiftInput,
   OrderMeta,
   PackingPart,
   PackingState,
@@ -24,7 +27,7 @@ import type {
 import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus, Partypot } from "../types/business";
-import { BUSINESS_DEFAULTS, PARTYPOT_GOAL } from "../config";
+import { BAR_EVENTS, BUSINESS_DEFAULTS, PARTYPOT_GOAL, isoDayLabel } from "../config";
 import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { repairCounts, repairVolunteer } from "../lib/volunteerDays";
@@ -241,6 +244,22 @@ export interface Backend {
   /** Public: the Partypot so far, form and Shopify contributions together, and its goal (euros). */
   getPartypot(): Promise<Partypot>;
   setBusinessStatus(session: Session, id: string, status: BusinessStatus, reason: string): Promise<void>;
+  /** Beheer › Rooster: plan someone on a shift, or change a planned shift (day, task, times). */
+  saveShift(session: Session, shift: RosterShiftInput): Promise<SavedVersion | void>;
+  removeShift(session: Session, id: string): Promise<SavedVersion | void>;
+  /** Beheer › Rooster: how many people a shift needs, for one or more days at once. */
+  setNeeded(session: Session, entries: NeededInput[]): Promise<SavedVersion | void>;
+}
+
+const ROSTER_TIME = /^\d{1,2}:\d{2}$/;
+
+/** The same checks as the script (saveShift): a real day, a task, times and a name. */
+function checkShift(shift: RosterShiftInput, others: RosterShift[]) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(shift.date)) throw new Error("Kies een dag.");
+  if (!shift.name.trim()) throw new Error("Kies een vrijwilliger.");
+  if (!ROSTER_TIME.test(shift.start) || !ROSTER_TIME.test(shift.end)) throw new Error("Vul de tijden in als 7:00 en 9:30.");
+  const same = others.find((r) => r.id !== shift.id && r.date === shift.date && r.role === shift.role && r.part === shift.part && r.name.trim().toLowerCase() === shift.name.trim().toLowerCase());
+  if (same) throw new Error(`${shift.name} staat al op deze dienst.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +381,7 @@ function createAppsScriptBackend(url: string): Backend {
         ...rest,
         delivery: rest.delivery ?? {},
         agenda: rest.agenda ?? [],
+        roster: rest.roster ?? [],
         kmRate: rest.kmRate ?? null,
         costs: (rest.costs ?? []).map(withCostDefaults),
         routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
@@ -478,6 +498,17 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async setBusinessStatus(session, id, status, reason) {
       await call("setBusinessStatus", withSession(session, { id, status, reason }));
+    },
+    async saveShift(session, shift) {
+      // "name" in a request is who is logged in; the volunteer on the shift goes as "volunteer".
+      const { name, ...rest } = shift;
+      return call<SavedVersion>("saveShift", withSession(session, { ...rest, volunteer: name }));
+    },
+    async removeShift(session, id) {
+      return call<SavedVersion>("removeShift", withSession(session, { id }));
+    },
+    async setNeeded(session, entries) {
+      return call<SavedVersion>("setNeeded", withSession(session, { entries }));
     }
   };
 }
@@ -515,7 +546,7 @@ export function isValidIban(value: string): boolean {
 
 export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
 
-const DEMO_KEY = "omacoby-demo-v5";
+const DEMO_KEY = "omacoby-demo-v6";
 
 interface DemoStore {
   version: number;
@@ -538,6 +569,9 @@ interface DemoStore {
   bakedMigrated?: boolean;
   /** Orders and pop-up stock added on the platform (demo). */
   createdOrders: Order[];
+  /** Beheer › Rooster: the planned shifts, and how many people a shift needs where that differs from the default. */
+  roster: RosterShift[];
+  agenda: AgendaSlot[];
 }
 
 const none: RoleAvailability = { wants: false, days: [] };
@@ -577,7 +611,7 @@ function demoVolunteers(): Volunteer[] {
       remark: "Liefst samen met Bram",
       roles: { inpakken: none, fietskoerier: none, autokoerier: { wants: true, days: ["Donderdag 31 december: middag"] }, oliebollenbar: { wants: true, days: ["Woensdag 30 december"] } }
     },
-    ...DEMO_HELPERS.map(([name, inpakken, auto, bar, planning], i): Volunteer => ({
+    ...DEMO_HELPERS.map(([name, inpakken, auto, bar, planning, afternoons], i): Volunteer => ({
       ...base,
       id: `demo-${i + 4}`,
       name,
@@ -587,8 +621,8 @@ function demoVolunteers(): Volunteer[] {
       roles: {
         inpakken: inpakken.length ? { wants: true, days: inpakken.map((d) => demoDay(d)) } : none,
         fietskoerier: none,
-        autokoerier: auto.length ? { wants: true, days: auto.map((d) => `${demoDay(d)}: ochtend`) } : none,
-        oliebollenbar: bar.length ? { wants: true, days: bar.map((d) => demoDay(d)) } : none
+        autokoerier: auto.length ? { wants: true, days: auto.flatMap((d) => [`${demoDay(d)}: ochtend`, ...(afternoons ? [`${demoDay(d)}: middag`] : [])]) } : none,
+        oliebollenbar: bar.length ? { wants: true, days: bar.map(demoEvent).filter(Boolean) } : none
       },
       planning
     }))
@@ -597,28 +631,45 @@ function demoVolunteers(): Volunteer[] {
 
 /** "Dinsdag 15 december" for a December day of the demo season. */
 function demoDay(day: number): string {
-  const names = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
-  return `${names[new Date(2026, 11, day, 12).getDay()]} ${day} december`;
+  return isoDayLabel(`2026-12-${String(day).padStart(2, "0")}`);
 }
 
-/** Name, inpak days, bezorg days, bar days and planning answers, so the overviews have something to show. */
-const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["planning"]]> = [
-  ["Ria de Vries", [15, 16, 17, 22, 23], [], [], { mode: "taak", flexible: true, maxShifts: 4, reminder: "whatsapp" }],
-  ["Henk de Boer", [], [18, 19, 21, 22, 23, 24], [], { mode: "taak", flexible: false, maxShifts: 3, driving: "auto", reminder: "whatsapp" }],
-  ["Fatima El Amrani", [23, 24, 30, 31], [], [27, 28], { mode: "dag", flexible: true, maxShifts: 4, reminder: "mail" }],
-  ["Truus Dekker", [15, 16, 17, 18, 19, 20, 21, 22, 23, 24], [], [], { mode: "flexibel", flexible: true, maxShifts: 6, reminder: "whatsapp" }],
-  ["Ahmed Yilmaz", [], [22, 23, 24, 29, 30, 31], [], { mode: "taak", flexible: true, maxShifts: 4, driving: "auto", reminder: "whatsapp" }],
-  ["Sanne Mulder", [19, 20], [], [19, 20, 27], { mode: "dag", flexible: true, maxShifts: 3, reminder: "geen" }],
-  ["Kees Smit", [29, 30, 31], [29, 30, 31], [], { mode: "dag", flexible: true, maxShifts: 2, driving: "rijbewijs", reminder: "mail" }],
-  ["Lotte Bos", [], [], [20, 21, 27, 28], { mode: "taak", flexible: false, maxShifts: 3, reminder: "whatsapp" }],
-  ["Noor Kaya", [22, 23, 24], [], [], { mode: "taak", flexible: true, maxShifts: 3, reminder: "whatsapp" }],
-  ["Wim Peters", [], [15, 16, 17, 18], [], { mode: "taak", flexible: false, maxShifts: 4, driving: "auto", reminder: "geen" }],
-  ["Ineke Vos", [30, 31], [], [30], { mode: "dag", flexible: true, maxShifts: 2, reminder: "whatsapp" }],
-  ["Jan Bakker", [15, 22, 29], [15, 22, 29], [], { mode: "flexibel", flexible: true, maxShifts: 3, driving: "auto", reminder: "mail" }]
+/** The option of the bar event on a December day, as the signup writes it; "" when there is none. */
+function demoEvent(day: number): string {
+  const event = BAR_EVENTS.find((e) => e.date === `2026-12-${String(day).padStart(2, "0")}`);
+  return event ? `${isoDayLabel(event.date)} (${event.name})` : "";
+}
+
+/**
+ * Name, inpak days, bezorg days, bar days (event days) and planning answers, so the overviews have something to
+ * show. All on season days (7–11, 14–18, 21–24 and 28–31 December). The last one: also the afternoon when bezorgen.
+ */
+const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["planning"], boolean?]> = [
+  ["Ria de Vries", [7, 8, 9, 15, 16, 17, 22, 23], [], [], { mode: "taak", flexible: true, maxShifts: 4 }],
+  ["Henk de Boer", [], [7, 8, 10, 18, 21, 22, 23, 24], [], { mode: "taak", flexible: false, maxShifts: 3, driving: "auto" }, true],
+  ["Fatima El Amrani", [9, 10, 23, 24, 30, 31], [], [9, 18], { mode: "dag", flexible: true, maxShifts: 4 }],
+  ["Truus Dekker", [7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24], [], [], { mode: "flexibel", flexible: true, maxShifts: 6 }],
+  ["Ahmed Yilmaz", [], [8, 9, 11, 22, 23, 24, 29, 30, 31], [], { mode: "taak", flexible: true, maxShifts: 4, driving: "auto" }, true],
+  ["Sanne Mulder", [10, 11, 18], [], [18, 19, 20], { mode: "dag", flexible: true, maxShifts: 3 }],
+  ["Kees Smit", [29, 30, 31], [29, 30, 31], [], { mode: "dag", flexible: true, maxShifts: 2, driving: "rijbewijs" }],
+  ["Lotte Bos", [], [], [9, 19, 20, 30, 31], { mode: "taak", flexible: false, maxShifts: 3 }],
+  ["Noor Kaya", [7, 11, 22, 23, 24], [], [], { mode: "taak", flexible: true, maxShifts: 3 }],
+  ["Wim Peters", [], [7, 9, 10, 15, 16, 17, 18], [], { mode: "taak", flexible: false, maxShifts: 4, driving: "auto" }],
+  ["Ineke Vos", [30, 31], [], [30, 31], { mode: "dag", flexible: true, maxShifts: 2 }],
+  ["Jan Bakker", [8, 15, 22, 29], [8, 15, 22, 29], [], { mode: "flexibel", flexible: true, maxShifts: 3, driving: "auto" }, true]
 ];
 
+/** Two planned shifts on the first day, so the rooster shows what a planned shift looks like. */
+function demoRoster(): RosterShift[] {
+  const base = { date: "2026-12-07", part: "", location: "", note: "", by: "Raquel", at: "2026-11-27 10:00:00" };
+  return [
+    { ...base, id: "R-demo-1", role: "inpakken", start: "7:00", end: "9:30", name: "Ria de Vries" },
+    { ...base, id: "R-demo-2", role: "autokoerier", part: "ochtend", start: "9:00", end: "12:30", name: "Henk de Boer" }
+  ];
+}
+
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [], roster: demoRoster(), agenda: [] };
 }
 
 function readStore(): DemoStore {
@@ -785,8 +836,9 @@ function createDemoBackend(notice?: string): Backend {
         pricePerPiece: 0.95,
         kmRate: 0.23,
         delivery: store.delivery,
-        // Demo uses the default agenda from config.ts.
-        agenda: [],
+        // Demo uses the days and times from config.ts; the agenda only holds what Beheer › Rooster set as needed.
+        agenda: store.agenda ?? [],
+        roster: store.roster ?? [],
         business: admin ? store.business : [],
         // Like the script: everyone sees what changed, contact details only beheer.
         changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "contactPerson", "phone", "email", "locationName", "confirmation", "deliveryContactName", "deliveryContactPhone"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
@@ -860,7 +912,7 @@ function createDemoBackend(notice?: string): Backend {
           }
         }
       }
-      return { counts, agenda: [] };
+      return { counts, agenda: readStore().agenda ?? [] };
     },
     async setDeliveryContact(session, orderId, input) {
       await delay(200);
@@ -1245,6 +1297,7 @@ function createDemoBackend(notice?: string): Backend {
       const result = { volunteers: store.volunteers.length, orders: 0, costs: store.costs.length, receipts: 0 };
       mutate((s) => {
         s.volunteers = [];
+        s.roster = [];
         s.costs = s.costs.map((c) => ({ ...c, createdBy: "", iban: "", reviewedBy: "" }));
         s.routes = {};
         for (const m of Object.values(s.meta)) Object.assign(m, { noteOverride: "", confirmationText: "", courier: "", updatedBy: "" });
@@ -1298,6 +1351,33 @@ function createDemoBackend(notice?: string): Backend {
         const b = store.business.find((x) => x.id === id);
         if (!b) throw new Error("Aanvraag niet gevonden.");
         Object.assign(b, { status, reason: status === "afgewezen" ? reason.trim() : "", handledBy: status === "nieuw" ? "" : session.name, handledAt: status === "nieuw" ? "" : nowStamp() });
+      });
+    },
+    async saveShift(session, shift) {
+      await delay(150);
+      mutate((store) => {
+        store.roster ??= [];
+        checkShift(shift, store.roster);
+        const saved: RosterShift = { ...shift, name: shift.name.trim(), note: shift.note.trim(), by: session.name, at: nowStamp() };
+        const at = store.roster.findIndex((r) => r.id === shift.id);
+        if (at === -1) store.roster.push(saved);
+        else store.roster[at] = saved;
+      });
+    },
+    async removeShift(_session, id) {
+      await delay(150);
+      mutate((store) => {
+        store.roster = (store.roster ?? []).filter((r) => r.id !== id);
+      });
+    },
+    async setNeeded(_session, entries) {
+      await delay(150);
+      if (!entries.every((e) => Number.isInteger(e.needed) && e.needed >= 0 && e.needed <= 99)) throw new Error("Vul een heel aantal van 0 tot 99 in.");
+      mutate((store) => {
+        store.agenda = [
+          ...(store.agenda ?? []).filter((a) => !entries.some((e) => e.date === a.date && e.role === a.role && e.part === a.part)),
+          ...entries.map((e) => ({ ...e, time: "", location: "" }))
+        ];
       });
     }
   };

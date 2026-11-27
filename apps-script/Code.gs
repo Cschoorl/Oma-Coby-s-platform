@@ -2746,12 +2746,33 @@ function volunteerTime_(value) {
 const VOLUNTEER_ROLE_NAMES = { inpakken: 'Inpakken', fietskoerier: 'Fietskoerier', autokoerier: 'Autokoerier', oliebollenbar: 'Oliebollenbar' };
 
 /** "Inpakken\n- Maandag 7 december, 7:00–9:30\n…" for each task they want. */
-function volunteerChoicesText_(roles, times) {
+/**
+ * The confirmation goes to an address typed into a public form, so it only repeats what looks like our own options:
+ * "Maandag 7 december", "Maandag 7 december: ochtend" or "Woensdag 9 december (Olieborrel, Het Amstelhuis)".
+ * No links, no @, no other free text: then nobody can use the form to send their own text to someone else.
+ */
+const VOLUNTEER_DAY_PATTERN = /^(Maandag|Dinsdag|Woensdag|Donderdag|Vrijdag|Zaterdag|Zondag) \d{1,2} (januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)(: (ochtend|middag|avond|vroeg))?( \([A-Za-zÀ-ÿ0-9 ,&'’.-]{1,60}\))?$/;
+
+function volunteerKnownDay_(day) {
+  const text = String(day || '').trim();
+  return VOLUNTEER_DAY_PATTERN.test(text) ? text : '';
+}
+
+/** Only the letters of the first name, for the greeting and the subject. */
+function volunteerFirstName_(name) {
+  return String(name || '').trim().split(/\s+/)[0].replace(/[^A-Za-zÀ-ÿ'’-]/g, '').slice(0, 30) || 'vrijwilliger';
+}
+
+/** `safe`: for the confirmation to the volunteer, only days that look like ours. The notice to planning gets everything. */
+function volunteerChoicesText_(roles, times, safe) {
   return VOLUNTEER_ROLES.filter(function (role) { return roles[role] && roles[role].wants; }).map(function (role) {
     const roleTimes = Array.isArray(times[role]) ? times[role] : [];
-    const days = (roles[role].days || []).slice(0, 60).map(function (day, n) {
+    const days = [];
+    (roles[role].days || []).slice(0, 60).forEach(function (day, n) {
+      const text = safe ? volunteerKnownDay_(day) : String(day).slice(0, 120);
+      if (!text) return;
       const time = volunteerTime_(roleTimes[n]);
-      return '- ' + String(day).slice(0, 120) + (time ? ', ' + time : '');
+      days.push('- ' + text + (time ? ', ' + time : ''));
     });
     return VOLUNTEER_ROLE_NAMES[role] + '\n' + (days.length ? days.join('\n') : '- Nog geen dag gekozen');
   }).join('\n\n');
@@ -2797,8 +2818,8 @@ function sendVolunteerMails_(values, roles, times) {
   }
   const planning = String(settings.vrijwilligers_melding_naar || CONFIG.VOLUNTEERS_NOTIFY).trim();
   const sender = String(settings.vrijwilligers_afzender || CONFIG.VOLUNTEERS_FROM).trim();
-  const first = values.name.split(/\s+/)[0];
-  const choices = volunteerChoicesText_(roles, times);
+  const first = volunteerFirstName_(values.name);
+  const choices = volunteerChoicesText_(roles, times, false);
   const details = [
     values.flexible ? 'Mag ook ergens anders ingedeeld worden: ' + values.flexible : '',
     values.maxShifts ? 'Maximaal: ' + values.maxShifts : '',
@@ -2806,6 +2827,15 @@ function sendVolunteerMails_(values, roles, times) {
     'Telefoon: ' + values.phone,
     values.city ? 'Woonplaats: ' + values.city : '',
     values.address ? 'Adres: ' + values.address : ''
+  ].filter(String).join('\n');
+  // The confirmation repeats only what cannot carry someone else's text: our days, and phone and city if they look normal.
+  const safeChoices = volunteerChoicesText_(roles, times, true);
+  const safeDetails = [
+    values.flexible ? 'Mag ook ergens anders ingedeeld worden: ' + values.flexible : '',
+    values.maxShifts ? 'Maximaal: ' + values.maxShifts : '',
+    values.driving ? 'Rijbewijs: ' + values.driving : '',
+    /^[+\d][\d\s()-]{5,19}$/.test(values.phone) ? 'Telefoon: ' + values.phone : '',
+    /^[A-Za-zÀ-ÿ' -]{2,40}$/.test(values.city) ? 'Woonplaats: ' + values.city : ''
   ].filter(String).join('\n');
 
   let mailed = false;
@@ -2824,9 +2854,9 @@ function sendVolunteerMails_(values, roles, times) {
           '',
           'Dankjewel dat je wilt helpen! Je aanmelding is binnen en je zit nu officieel in mijn team. Dit heb je opgegeven:',
           '',
-          choices,
+          safeChoices,
           '',
-          details,
+          safeDetails,
           '',
           'Wat nu? Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster. Via WhatsApp hoor je dan waar en wanneer ik je verwacht.',
           '',

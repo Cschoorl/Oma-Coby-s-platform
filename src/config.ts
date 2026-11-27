@@ -135,7 +135,8 @@ export function applyAgenda(slots: AgendaSlot[]): void {
   Object.assign(OPTION_TIMES, DEFAULT_TIMES);
   for (const k of Object.keys(OPTION_TARGETS)) delete OPTION_TARGETS[k];
   for (const slot of slots) {
-    if (!slot.needed) continue;
+    // 0 is a real answer (nobody needed that moment); only an empty cell falls back to the default.
+    if (slot.needed == null) continue;
     // Same day and dagdeel; the bar's options carry the event name, which the agenda row need not repeat.
     const label = agendaLabel({ ...slot, location: "" }).toLowerCase();
     const option = SIGNUP_OPTIONS[slot.role]?.find((o) => o.toLowerCase() === label || o.toLowerCase().startsWith(`${label} (`));

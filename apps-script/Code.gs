@@ -253,7 +253,9 @@ const TABS = {
   // Beheer › Bakkerij: every time the bake counts were shared, with what was passed on.
   // Beheer › Bakkerij: every approval of baked counts (a correction is a new row; nothing is overwritten).
   bakeApprovals: ['Bakkerij goedkeuringen', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'benodigd_met', 'benodigd_zonder', 'soort', 'toelichting', 'door', 'goedgekeurd_op']],
-  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op', 'opmerking']]
+  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op', 'opmerking']],
+  // Beheer › Rooster: one row per planned shift, with the final times. This is the planning sheet.
+  roster: ['Rooster', ['id', 'datum', 'weekdag', 'taak', 'dagdeel', 'begintijd', 'eindtijd', 'vrijwilliger', 'locatie', 'opmerking', 'ingepland_door', 'bijgewerkt_op']]
 };
 
 const PERMISSIONS = {
@@ -291,7 +293,10 @@ const PERMISSIONS = {
   businessInfo: ['public'],
   partypot: ['public'],
   submitBusinessOrder: ['public'],
-  setBusinessStatus: ['beheer']
+  setBusinessStatus: ['beheer'],
+  saveShift: ['beheer'],
+  removeShift: ['beheer'],
+  setNeeded: ['beheer']
 };
 
 // ---------------------------------------------------------------------------
@@ -900,6 +905,7 @@ function buildFullState_() {
     kmRate: null,
     delivery: {},
     agenda: readAgenda_(),
+    roster: readRoster_(),
     // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
     business: readBusiness_(),
     changes: [],
@@ -1563,14 +1569,16 @@ function defaultAgendaRows_() {
 /** The signup moments from the Agenda tab; rows with an unknown task or date are skipped. */
 function readAgenda_() {
   return readTab_('agenda').map(function (r) {
-    const needed = num_(r.nodig);
+    // 0 is a real answer (nobody needed that moment); only an empty or unreadable cell gives the default.
+    const raw = String(r.nodig === null || r.nodig === undefined ? '' : r.nodig).trim();
+    const needed = /^\d+([.,]\d+)?$/.test(raw) ? Math.round(num_(raw)) : null;
     return {
       date: dutchDate_(isoDate_(r.datum), CONFIG.SEASON_YEAR),
       role: String(r.taak || '').trim().toLowerCase(),
       part: String(r.dagdeel || '').trim().toLowerCase(),
       time: r.tijd instanceof Date ? hhmm_(r.tijd.getHours() * 60 + r.tijd.getMinutes()) : String(r.tijd || '').trim(),
       location: String(r.locatie || '').trim(),
-      needed: needed > 0 ? needed : null
+      needed: needed
     };
   }).filter(function (a) { return a.date && VOLUNTEER_ROLES.indexOf(a.role) !== -1; });
 }
@@ -1613,6 +1621,8 @@ function anonymize_() {
   blank('business', ['contactpersoon', 'telefoon', 'email', 'factuur_email', 'opmerking', 'behandeld_door']);
   out.costs = blank('costs', ['ingevoerd_door', 'iban', 'beoordeeld_door']);
   clearRows_(sheet_('routes'));
+  // The rooster holds the names of volunteers.
+  clearRows_(sheet_('roster'));
   // Looked-up addresses include volunteers' home addresses.
   clearRows_(sheet_('places'));
   // The change log holds names, addresses and remarks.
@@ -3309,6 +3319,181 @@ Object.assign(HANDLERS, {
         ? { afl_contact_naam: '', afl_contact_telefoon: '', afl_contact_opmerking: '', afl_contact_eigen: '', bijgewerkt_door: by, bijgewerkt_op: now_() }
         : { afl_contact_naam: next.name, afl_contact_telefoon: next.phone, afl_contact_opmerking: next.note, afl_contact_eigen: 'ja', bijgewerkt_door: by, bijgewerkt_op: now_() });
       logChanges_(log);
+      return bump_();
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Beheer › Rooster: wie staat wanneer. Elke ingeplande dienst is één regel in het tabblad Rooster, met de
+// definitieve tijden; dat tabblad is de planningssheet en mag ook met de hand worden bijgewerkt. Hoeveel mensen
+// een dienst nodig heeft, staat in de kolom "nodig" van het tabblad Agenda (setNeeded).
+
+const ROSTER_PARTS = ['', 'ochtend', 'middag', 'avond'];
+const ROSTER_WEEKDAYS = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+
+/** "07:00", "7.00" or a time cell → "7:00"; "" when it is no time. */
+function rosterTime_(v) {
+  const m = String(v === null || v === undefined ? '' : v).trim().match(/^(\d{1,2})[:.](\d{2})/);
+  return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? Number(m[1]) + ':' + m[2] : '';
+}
+
+/** The planned shifts. A row typed into the Sheet by hand has no id yet and gets its row number until it is saved. */
+function readRoster_() {
+  return readTab_('roster').map(function (r, i) {
+    return {
+      id: String(r.id || 'rij-' + (i + 2)),
+      date: dutchDate_(isoDate_(r.datum), CONFIG.SEASON_YEAR),
+      role: String(r.taak || '').trim().toLowerCase(),
+      part: String(r.dagdeel || '').trim().toLowerCase(),
+      start: rosterTime_(r.begintijd),
+      end: rosterTime_(r.eindtijd),
+      name: String(r.vrijwilliger || '').trim(),
+      location: String(r.locatie || '').trim(),
+      note: String(r.opmerking || '').trim(),
+      by: String(r.ingepland_door || ''),
+      at: String(r.bijgewerkt_op || '')
+    };
+  }).filter(function (r) { return r.date && r.name && VOLUNTEER_ROLES.indexOf(r.role) !== -1; });
+}
+
+/** The tab with its rows, for finding and writing a shift. Dates and times stay text, so they sort and read back as written. */
+function rosterTable_() {
+  const sheet = sheet_('roster');
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  if (!prop_('ROSTER_TEXT_COLUMNS')) {
+    ['datum', 'begintijd', 'eindtijd'].forEach(function (h) {
+      const col = headers.indexOf(h);
+      if (col !== -1) sheet.getRange(1, col + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
+    });
+    setProp_('ROSTER_TEXT_COLUMNS', '1');
+  }
+  return { sheet: sheet, headers: headers, values: values };
+}
+
+/** Index of the shift in table.values, or -1. "rij-7" is a row without an id (typed into the Sheet). */
+function rosterIndex_(table, id) {
+  const col = table.headers.indexOf('id');
+  for (let i = 1; i < table.values.length; i++) if (keyOf_(table.values[i][col]) === id) return i;
+  const m = /^rij-(\d+)$/.exec(id);
+  const at = m ? Number(m[1]) - 1 : -1;
+  return at >= 1 && at < table.values.length && !keyOf_(table.values[at][col]) ? at : -1;
+}
+
+/** Keeps the tab in the order of the days and the times, so it reads as a planning. */
+function sortRoster_(table) {
+  const rows = table.sheet.getLastRow() - 1;
+  const date = table.headers.indexOf('datum');
+  const start = table.headers.indexOf('begintijd');
+  if (rows < 2 || date === -1 || start === -1) return;
+  table.sheet.getRange(2, 1, rows, table.sheet.getLastColumn()).sort([{ column: date + 1, ascending: true }, { column: start + 1, ascending: true }]);
+}
+
+Object.assign(HANDLERS, {
+  saveShift: function (body) {
+    const by = requireName_(body.name);
+    const date = String(body.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies een dag.');
+    const role = String(body.role || '').trim().toLowerCase();
+    if (VOLUNTEER_ROLES.indexOf(role) === -1) throw new Error('Onbekende taak.');
+    const part = String(body.part || '').trim().toLowerCase();
+    if (ROSTER_PARTS.indexOf(part) === -1) throw new Error('Onbekend dagdeel.');
+    const start = rosterTime_(body.start);
+    const end = rosterTime_(body.end);
+    if (!start || !end) throw new Error('Vul de tijden in als 7:00 en 9:30.');
+    // body.name is who is logged in; the volunteer on the shift comes as body.volunteer.
+    const volunteer = String(body.volunteer || '').trim();
+    if (!volunteer) throw new Error('Kies een vrijwilliger.');
+    const pad = function (t) { return t.length < 5 ? '0' + t : t; };
+    return withLock_(function () {
+      const table = rosterTable_();
+      const cell = function (row, h) { const c = table.headers.indexOf(h); return c === -1 ? '' : row[c]; };
+      let id = String(body.id || '').trim();
+      const at = id ? rosterIndex_(table, id) : -1;
+      for (let i = 1; i < table.values.length; i++) {
+        const row = table.values[i];
+        if (i !== at && dutchDate_(isoDate_(cell(row, 'datum')), CONFIG.SEASON_YEAR) === date && String(cell(row, 'taak')).trim().toLowerCase() === role &&
+          String(cell(row, 'dagdeel')).trim().toLowerCase() === part && String(cell(row, 'vrijwilliger')).trim().toLowerCase() === volunteer.toLowerCase()) {
+          throw new Error(volunteer + ' staat al op deze dienst.');
+        }
+      }
+      if (!id || /^rij-\d+$/.test(id)) id = 'R' + Utilities.getUuid().slice(0, 8);
+      const d = date.split('-').map(Number);
+      const values = {
+        id: id, datum: date, weekdag: ROSTER_WEEKDAYS[new Date(d[0], d[1] - 1, d[2], 12).getDay()], taak: role, dagdeel: part,
+        begintijd: pad(start), eindtijd: pad(end), vrijwilliger: volunteer, locatie: String(body.location || '').trim(),
+        opmerking: String(body.note || '').trim(), ingepland_door: by, bijgewerkt_op: now_()
+      };
+      // Columns someone added to the tab by hand keep what is in them.
+      const old = at === -1 ? [] : table.values[at];
+      const row = table.headers.map(function (h, i) { return values[h] !== undefined ? values[h] : (old[i] === undefined ? '' : old[i]); });
+      if (at === -1) table.sheet.appendRow(row);
+      else table.sheet.getRange(at + 1, 1, 1, row.length).setValues([row]);
+      sortRoster_(table);
+      return bump_();
+    });
+  },
+  removeShift: function (body) {
+    requireName_(body.name);
+    return withLock_(function () {
+      const table = rosterTable_();
+      const at = rosterIndex_(table, String(body.id || '').trim());
+      // Already gone (someone else removed it): nothing to do.
+      if (at === -1) return bump_();
+      // Sheets refuses to delete the only row under a frozen header: clear it instead.
+      if (table.values.length === 2) table.sheet.getRange(2, 1, 1, table.sheet.getLastColumn()).clearContent();
+      else table.sheet.deleteRow(at + 1);
+      return bump_();
+    });
+  },
+  setNeeded: function (body) {
+    requireName_(body.name);
+    const entries = (body.entries || []).map(function (e) {
+      const date = String(e.date || '').trim();
+      const role = String(e.role || '').trim().toLowerCase();
+      const part = String(e.part || '').trim().toLowerCase();
+      const needed = Number(e.needed);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies een dag.');
+      if (VOLUNTEER_ROLES.indexOf(role) === -1) throw new Error('Onbekende taak.');
+      if (ROSTER_PARTS.indexOf(part) === -1) throw new Error('Onbekend dagdeel.');
+      if (!(needed >= 0 && needed <= 99 && Math.floor(needed) === needed)) throw new Error('Vul een heel aantal van 0 tot 99 in.');
+      return { date: date, role: role, part: part, needed: needed };
+    });
+    if (entries.length === 0) throw new Error('Niets om op te slaan.');
+    return withLock_(function () {
+      const sheet = sheet_('agenda');
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+      const col = { date: headers.indexOf('datum'), role: headers.indexOf('taak'), part: headers.indexOf('dagdeel'), needed: headers.indexOf('nodig') };
+      if (col.date === -1 || col.role === -1 || col.needed === -1) throw new Error('Het tabblad Agenda mist de kolom datum, taak of nodig.');
+      const added = [];
+      let changed = false;
+      entries.forEach(function (e) {
+        let found = false;
+        // Every row of that day, task and dagdeel: the Agenda may hold the same moment twice.
+        for (let i = 1; i < values.length; i++) {
+          const row = values[i];
+          if (dutchDate_(isoDate_(row[col.date]), CONFIG.SEASON_YEAR) !== e.date || String(row[col.role]).trim().toLowerCase() !== e.role) continue;
+          if ((col.part === -1 ? '' : String(row[col.part]).trim().toLowerCase()) !== e.part) continue;
+          row[col.needed] = e.needed;
+          found = true;
+          changed = true;
+        }
+        if (!found) {
+          const row = headers.map(function () { return ''; });
+          row[col.date] = e.date;
+          row[col.role] = e.role;
+          if (col.part !== -1) row[col.part] = e.part;
+          row[col.needed] = e.needed;
+          added.push(row);
+        }
+      });
+      // One write for the column and one for the new rows: a click on "alle dagen" changes some twenty rows.
+      if (changed && values.length > 1) {
+        sheet.getRange(2, col.needed + 1, values.length - 1, 1).setValues(values.slice(1).map(function (row) { return [row[col.needed]]; }));
+      }
+      if (added.length) sheet.getRange(sheet.getLastRow() + 1, 1, added.length, headers.length).setValues(added);
       return bump_();
     });
   }

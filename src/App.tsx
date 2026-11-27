@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { backend, type Session } from "./data/backend";
 import type { DashboardState, Role } from "./types/dashboard";
-import { AgendaPage } from "./features/agenda/AgendaPage";
 import { LoginPage } from "./features/auth/LoginPage";
 import { CostsPage } from "./features/costs/CostsPage";
 import { OrdersAdminPage } from "./features/orders/OrdersAdminPage";
@@ -9,6 +8,7 @@ import { PackingPage } from "./features/packing/PackingPage";
 import { BakeryPage } from "./features/bakery/BakeryPage";
 import { PackingSlipsPage } from "./features/packing/PackingSlipsPage";
 import { CourierPage } from "./features/routes/CourierPage";
+import { RoosterPage } from "./features/rooster/RoosterPage";
 import { RoutesPage } from "./features/routes/RoutesPage";
 import { StatsPage } from "./features/stats/StatsPage";
 import { SignupPage } from "./features/volunteers/SignupPage";
@@ -18,7 +18,7 @@ import { BusinessOrderPage, LangSwitch } from "./features/business/BusinessOrder
 import { Notice, Skeleton, Toaster } from "./components/ui";
 import { Avatar, setAvatarRoster } from "./components/Avatar";
 import logoUrl from "./assets/logo-oliebollenbar.svg";
-import { CONTACT_EMAIL, applyAgenda } from "./config";
+import { applyAgenda } from "./config";
 import { navigate, useRoute } from "./lib/router";
 import { loadSession, saveSession } from "./lib/session";
 import { clearSnapshots, useDashboard } from "./lib/useDashboard";
@@ -39,10 +39,10 @@ const NAV: NavItem[] = [
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/zakelijk", label: "Zakelijk", description: "Aanvragen van het zakelijke bestelformulier nakijken, bevestigen of afwijzen.", roles: ["beheer"] },
   { path: "/tussenstand", label: "Tussenstand", description: "Hoe ver zijn we op weg naar het doel?", roles: ["beheer"] },
-  { path: "/agenda", label: "Agenda", description: "Waar nog plek is en wie er op een dag is.", roles: ["beheer"] },
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
   { path: "/vrijwilligers", label: "Vrijwilligers", description: "Wie kan wanneer: per vrijwilliger en per dag, met contactgegevens.", roles: ["beheer"] },
+  { path: "/rooster", label: "Rooster", description: "Wie staat wanneer: per dag instellen hoeveel mensen er nodig zijn en vrijwilligers op een dienst zetten.", roles: ["beheer"] },
   { path: "/bakkerij", label: "Bakkerij", description: "De bestellijst voor morgen naar de bakker sturen, en goedkeuren wat er echt gebakken is.", roles: ["beheer"] },
   { path: "/bezorger", label: "Bezorgen", description: "Je stops van vandaag, in de beste volgorde.", roles: ["bezorger"] },
   {
@@ -75,7 +75,7 @@ const menuGlyph: Record<string, string> = {
   "/bezorger": "✓",
   "/tussenstand": "%",
   "/vrijwilligers": "♥",
-  "/agenda": "#",
+  "/rooster": "#",
   "/kosten": "€"
 };
 
@@ -124,7 +124,8 @@ function App() {
 
   useEffect(() => {
     if (ORDER_FORM_ONLY) return;
-    if (session && !PUBLIC.includes(route.path) && !current) navigate(HOME[session.role]);
+    // The rooster used to be the page Agenda: old links still arrive.
+    if (session && !PUBLIC.includes(route.path) && !current) navigate(route.path === "/agenda" && session.role === "beheer" ? "/rooster" : HOME[session.role]);
   }, [session, route.path, current]);
 
   useEffect(() => setMenuOpen(false), [route.path]);
@@ -205,8 +206,8 @@ function App() {
       case "/pakbonnen":
         page = <PackingSlipsPage state={state} date={route.params.get("datum")} />;
         break;
-      case "/agenda":
-        page = <AgendaPage volunteers={state.volunteers} contactEmail={CONTACT_EMAIL} me={session.name} />;
+      case "/rooster":
+        page = <RoosterPage state={state} session={session} run={run} />;
         break;
     }
   }

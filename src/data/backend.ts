@@ -250,20 +250,76 @@ interface RawState extends Omit<DashboardState, "orders"> {
   rows: Record<string, unknown>[];
 }
 
+/** Longest URL we send as one GET. */
+const MAX_GET_URL = 1800;
+/** At most this many GET parts for one request; anything bigger (receipt photos) goes as one POST. */
+const MAX_PARTS = 40;
+
+/**
+ * `text` cut into pieces that, as a JSON string in a URL, stay within `budget` characters each (quotes and
+ * backslashes count as escaped). Never splits a character.
+ */
+export function splitForUrl(text: string, budget: number): string[] {
+  const pieces: string[] = [];
+  let piece = "";
+  let size = 0;
+  for (const char of text) {
+    const length = encodeURIComponent(JSON.stringify(char).slice(1, -1)).length;
+    if (size + length > budget && piece) {
+      pieces.push(piece);
+      piece = "";
+      size = 0;
+    }
+    piece += char;
+    size += length;
+  }
+  if (piece) pieces.push(piece);
+  return pieces;
+}
+
 function createAppsScriptBackend(url: string): Backend {
+  const urlFor = (json: string) => `${url}${url.includes("?") ? "&" : "?"}p=${encodeURIComponent(json)}`;
+
+  /** One GET with the JSON in ?p=; checks that the script answered with ok. */
+  async function getPart(json: string): Promise<void> {
+    const response = await fetch(urlFor(json));
+    let body: { ok: boolean; error?: string };
+    try {
+      body = await response.json();
+    } catch {
+      throw new Error("De Google Sheet gaf geen geldig antwoord. Staat het script goed in Apps Script en is het opnieuw geïmplementeerd?");
+    }
+    // An older Code.gs does not know "part" yet.
+    if (!body.ok && body.error?.startsWith("Onbekende actie")) {
+      throw new Error("Het script in Apps Script is te oud. Plak de nieuwste Code.gs in Apps Script en kies Implementeren → Implementaties beheren → Nieuwe versie.");
+    }
+    if (!body.ok) throw new Error(body.error ?? "Onbekende fout.");
+  }
+
   async function call<T>(action: string, payload: Record<string, unknown>): Promise<T> {
     const json = JSON.stringify({ action, ...payload });
-    // Small requests go as GET (?p=...): a GET survives Google's redirects, a POST may arrive as an
-    // empty GET. Large ones (receipt photos, long confirmation texts) need POST.
-    const getUrl = `${url}${url.includes("?") ? "&" : "?"}p=${encodeURIComponent(json)}`;
+    // Requests go as GET (?p=...): a POST may arrive at the script as an empty GET after Google's redirects,
+    // a GET never does. A request too long for one URL goes in parts that the script puts back together;
+    // only something really big (a receipt photo) still goes as one POST.
+    const getUrl = urlFor(json);
+    const id = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+    const overhead = urlFor(JSON.stringify({ action: "part", id, n: 99, text: "" })).length;
+    const pieces = getUrl.length <= MAX_GET_URL ? [] : splitForUrl(json, MAX_GET_URL - overhead - 20);
     let response: Response;
     try {
-      response =
-        getUrl.length <= 1800
-          ? await fetch(getUrl)
-          : // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
-            await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: json });
-    } catch {
+      if (getUrl.length <= MAX_GET_URL) response = await fetch(getUrl);
+      else if (pieces.length <= MAX_PARTS) {
+        // Five at a time: Apps Script handles only so many requests at once.
+        for (let from = 0; from < pieces.length; from += 5) {
+          await Promise.all(pieces.slice(from, from + 5).map((text, i) => getPart(JSON.stringify({ action: "part", id, n: from + i, text }))));
+        }
+        response = await fetch(urlFor(JSON.stringify({ action: "parts", id, total: pieces.length })));
+      } else {
+        // text/plain keeps this a "simple" request, so Apps Script needs no CORS preflight.
+        response = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: json });
+      }
+    } catch (err) {
+      if (err instanceof Error && !(err instanceof TypeError)) throw err;
       throw new Error("Geen verbinding met de Google Sheet. Controleer je internet en of de web-app op toegang \"Iedereen\" staat.");
     }
     if (!response.ok) throw new Error(`De Google Sheet gaf een fout (${response.status}).`);

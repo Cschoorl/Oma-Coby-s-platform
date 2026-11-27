@@ -305,11 +305,48 @@ function doPost(e) {
   return handle_((e && e.postData && e.postData.contents) || '{}');
 }
 
+/** Keeps one part of a long request for 10 minutes. Anyone may send parts; the joined request is checked as usual. */
+function storePart_(body) {
+  const id = String(body.id || '');
+  const n = Number(body.n);
+  const text = String(body.text || '');
+  if (!/^[a-z0-9]{8,40}$/.test(id) || !(n >= 0 && n < 40 && n === Math.floor(n)) || text.length > 4000) {
+    throw new Error('Ongeldig deel van een verzoek.');
+  }
+  CacheService.getScriptCache().put('deel-' + id + '-' + n, text, 600);
+  return { stored: n };
+}
+
+/** The parts of a long request put back together, in order; removed from the cache once used. */
+function joinParts_(body) {
+  const id = String(body.id || '');
+  const total = Number(body.total);
+  if (!/^[a-z0-9]{8,40}$/.test(id) || !(total >= 1 && total <= 40 && total === Math.floor(total))) {
+    throw new Error('Ongeldig verzoek.');
+  }
+  const keys = [];
+  for (let n = 0; n < total; n++) keys.push('deel-' + id + '-' + n);
+  const cache = CacheService.getScriptCache();
+  const parts = cache.getAll(keys);
+  if (keys.some(function (k) { return typeof parts[k] !== 'string'; })) {
+    throw new Error('Het verzoek kwam niet helemaal aan. Probeer het nog een keer.');
+  }
+  cache.removeAll(keys);
+  const raw = keys.map(function (k) { return parts[k]; }).join('');
+  const action = String(JSON.parse(raw).action || '');
+  // Parts never contain parts.
+  if (action === 'part' || action === 'parts') throw new Error('Ongeldig verzoek.');
+  return raw;
+}
+
 function handle_(raw) {
   resetMemo_();
   try {
     const body = JSON.parse(raw);
     const action = String(body.action || '');
+    // A request too long for one URL comes in parts (see call() in src/data/backend.ts).
+    if (action === 'part') return json_({ ok: true, data: storePart_(body) });
+    if (action === 'parts') return handle_(joinParts_(body));
     const allowed = PERMISSIONS[action];
     if (!allowed) return json_({ ok: false, error: 'Onbekende actie: ' + action });
 

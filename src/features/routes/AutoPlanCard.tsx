@@ -5,10 +5,8 @@ import type { Order } from "../../types/order";
 import { Badge, Card, Notice, OliebolLoader, SectionTitle, fieldLabel, formatDayLabel, inputClass, primaryButton, secondaryButton, toast } from "../../components/ui";
 import { PLANNING } from "../../config";
 import { effectiveCourier, stopAddress } from "../../utils/orderUtils";
-import { describeWindow, makePlan, type Plan, type PlanRun } from "./planner";
+import { describeWindow, makePlan, type Plan } from "./planner";
 import { courierAvailability, homeAddress, toHhmm } from "./routeUtils";
-
-const vehicleLabel: Record<PlanRun["vehicle"], string> = { fiets: "fiets", bakfiets: "bakfiets", auto: "auto" };
 
 interface AutoPlanCardProps {
   state: DashboardState;
@@ -17,12 +15,12 @@ interface AutoPlanCardProps {
   orders: Order[];
   run: (change: () => Promise<unknown>) => Promise<void>;
   /** After applying: calculate the real routes with Google Maps, trip by trip. */
-  onApplied: (trips: Array<{ courier: string; part: string; mode: "driving" | "bicycling"; startTime: string; endAddress: string; orders: Order[] }>) => Promise<void>;
+  onApplied: (trips: Array<{ courier: string; part: string; startTime: string; endAddress: string; orders: Order[] }>) => Promise<void>;
   isDemo: boolean;
 }
 
 /**
- * Makes a proposal for who delivers what: by dagdeel and transport people signed up with, the
+ * Makes a proposal for who delivers what: by the dagdeel people signed up for as autokoerier, the
  * time per stop, every trip starting at the loods and the last trip ending near home.
  */
 export function AutoPlanCard({ state, session, date, orders, run, onApplied, isDemo }: AutoPlanCardProps) {
@@ -63,7 +61,6 @@ export function AutoPlanCard({ state, session, date, orders, run, onApplied, isD
       const trips = plan.runs.map((r) => ({
         courier: r.courier,
         part: r.part,
-        mode: (r.vehicle === "auto" ? "driving" : "bicycling") as "driving" | "bicycling",
         startTime: toHhmm(r.depart),
         endAddress: r.endsAtHome ? r.homeAddress : "",
         orders: r.stops.map((s) => s.order)
@@ -84,7 +81,7 @@ export function AutoPlanCard({ state, session, date, orders, run, onApplied, isD
     <Card>
       <SectionTitle
         title="Automatisch indelen"
-        subtitle={`Een voorstel voor ${formatDayLabel(date)}: wie wanneer kan (dagdeel, fiets of auto), ${perStop} minuten per stop, elke rit vanaf de loods en de laatste rit eindigt zo dicht mogelijk bij huis.`}
+        subtitle={`Een voorstel voor ${formatDayLabel(date)}: wie wanneer kan, ${perStop} minuten per stop, elke rit vanaf de loods en de laatste rit eindigt zo dicht mogelijk bij huis.`}
       />
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1">
@@ -161,7 +158,7 @@ export function AutoPlanCard({ state, session, date, orders, run, onApplied, isD
                       {r.part ? <span className="font-sans text-sm font-normal text-oliebol"> · {r.part}</span> : null}
                     </p>
                     <p className="text-xs text-muted">
-                      {vehicleLabel[r.vehicle]} · {describeWindow(r)} · {r.stops.length} {r.stops.length === 1 ? "stop" : "stops"} · {r.pieces} van max. {r.capacity} bollen
+                      {describeWindow(r)} · {r.stops.length} {r.stops.length === 1 ? "stop" : "stops"} · {r.pieces} van max. {r.capacity} bollen
                     </p>
                   </div>
                   <Badge tone={r.finish > r.end ? "aandacht" : "klaar"}>± {Math.round(r.km)} km · klaar {toHhmm(r.finish)}</Badge>

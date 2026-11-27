@@ -2,7 +2,7 @@ import type { ChangeEntry, DashboardState, RouteInfo, Volunteer } from "../../ty
 import { routeChangedAfter } from "../../lib/orderChanges";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
-import { OPTION_TIMES, PLANNING } from "../../config";
+import { OPTION_TIMES, PLANNING, ROUTE_START_TIMES } from "../../config";
 
 /** One route per courier, day and dagdeel ("rit"); the dagdeel is left out when it is unknown. */
 export function routeKey(date: string, courier: string, part = ""): string {
@@ -11,14 +11,12 @@ export function routeKey(date: string, courier: string, part = ""): string {
 
 export const PARTS = ["ochtend", "middag", "avond"] as const;
 
-/** Bike when the courier only signed up as fietskoerier (or the old remarks say so); otherwise car. */
-export function guessMode(orders: Order[], volunteer?: Volunteer, isoDate?: string): "driving" | "bicycling" {
-  if (volunteer && isoDate) {
-    const on = transportOn(volunteer, isoDate);
-    if (on.length === 1) return on[0] === "fiets" ? "bicycling" : "driving";
-  }
-  if (volunteer) return volunteer.roles.fietskoerier.wants && !volunteer.roles.autokoerier.wants ? "bicycling" : "driving";
-  return orders.some((o) => /fietskoerier:\s*ja/i.test(o.extras ?? "")) ? "bicycling" : "driving";
+/**
+ * We deliver by car only. A route saved while the bike was still an option (vervoer "bicycling" in the Sheet)
+ * has bike directions and bike times: it counts as stale until it is calculated again.
+ */
+export function isBikeRoute(route?: RouteInfo): boolean {
+  return route?.mode === "bicycling";
 }
 
 const MONTHS = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
@@ -48,25 +46,24 @@ export function optionPart(option: string): string {
   return option.toLowerCase().match(/:\s*(ochtend|middag|avond)/)?.[1] ?? "";
 }
 
-export type Transport = "fiets" | "auto";
-
-/** What a volunteer signed up with on this day (and dagdeel, when known). */
-export function transportOn(v: Volunteer, isoDate: string, part = ""): Transport[] {
+/**
+ * Signed up as autokoerier on this day (and dagdeel, when known). A signup as fietskoerier (from an earlier
+ * season or the old form) no longer counts: transport is car only.
+ */
+export function signedUpOn(v: Volunteer, isoDate: string, part = ""): boolean {
   const day = formDay(isoDate);
   const fits = (o: string) => mentionsDay(o, day) && (!part || !optionPart(o) || optionPart(o) === part);
-  const out: Transport[] = [];
-  if (v.roles.fietskoerier.wants && v.roles.fietskoerier.days.some(fits)) out.push("fiets");
-  if (v.roles.autokoerier.wants && v.roles.autokoerier.days.some(fits)) out.push("auto");
-  return out;
+  return v.roles.autokoerier.wants && v.roles.autokoerier.days.some(fits);
 }
 
 /**
  * Courier volunteers for a delivery: first who signed up for that day and dagdeel (when the order
- * has one), then the other couriers.
+ * has one), then the other couriers. Someone who only ever signed up as fietskoerier stays in the
+ * second group, so beheer can still ask them to drive.
  */
 export function courierCandidates(volunteers: Volunteer[], isoDate: string, part = ""): { available: Volunteer[]; others: Volunteer[] } {
   const couriers = volunteers.filter((v) => v.roles.fietskoerier.wants || v.roles.autokoerier.wants);
-  const isAvailable = (v: Volunteer) => transportOn(v, isoDate, part).length > 0;
+  const isAvailable = (v: Volunteer) => signedUpOn(v, isoDate, part);
   const byName = (a: Volunteer, b: Volunteer) => a.name.localeCompare(b.name);
   return { available: couriers.filter(isAvailable).sort(byName), others: couriers.filter((v) => !isAvailable(v)).sort(byName) };
 }
@@ -92,9 +89,11 @@ export function orderedStops(orders: Order[], route?: RouteInfo): Order[] {
 /**
  * A route is stale when its stops no longer match the orders, or (with the change log) when an
  * address, date or delivery choice of one of its stops was edited after it was calculated.
+ * A route that was calculated for the bike is stale too.
  */
 export function isRouteStale(orders: Order[], route?: RouteInfo, changes?: ChangeEntry[]): boolean {
   if (!route) return false;
+  if (isBikeRoute(route)) return true;
   const ids = new Set(orders.map((o) => o.id));
   if (route.orderIds.length !== ids.size || route.orderIds.some((id) => !ids.has(id))) return true;
   return changes ? routeChangedAfter({ changes }, route) : false;
@@ -152,7 +151,6 @@ export function homeAddress(v?: Volunteer): string {
 
 export interface Availability {
   part: string;
-  transport: Transport[];
   /** Working window in minutes after midnight. */
   start: number;
   end: number;
@@ -168,6 +166,15 @@ export function toHhmm(minutes: number): string {
   return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
 
+/** Travel time in hours and whole minutes: 45 → "45 min", 60 → "1 uur", 87.4 → "1 uur 27 min". */
+export function formatTravelTime(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} uur` : `${hours} uur ${rest} min`;
+}
+
 /** Window of a signup option: the Agenda time ("09:00–12:00") when set, else the default for the dagdeel. */
 function optionWindow(option: string, part: string): [number, number] {
   const time = OPTION_TIMES[option.trim().toLowerCase()] ?? "";
@@ -177,23 +184,31 @@ function optionWindow(option: string, part: string): [number, number] {
   return [toMinutes(time) || toMinutes(a), toMinutes(b)];
 }
 
-/** Dagdelen a courier signed up for on a day, with bike and/or car and the working window. */
+/** Dagdelen a courier signed up for on a day (as autokoerier), with the working window. */
 export function courierAvailability(v: Volunteer, isoDate: string): Availability[] {
+  if (!v.roles.autokoerier.wants) return [];
   const day = formDay(isoDate);
   const byPart = new Map<string, Availability>();
-  const add = (option: string, kind: Transport) => {
-    if (!mentionsDay(option, day)) return;
+  for (const option of v.roles.autokoerier.days) {
+    if (!mentionsDay(option, day)) continue;
     const part = optionPart(option);
     const [start, end] = optionWindow(option, part);
-    const slot = byPart.get(part) ?? { part, transport: [], start, end };
-    if (!slot.transport.includes(kind)) slot.transport.push(kind);
+    const slot = byPart.get(part) ?? { part, start, end };
     slot.start = Math.min(slot.start, start);
     slot.end = Math.max(slot.end, end);
     byPart.set(part, slot);
-  };
-  if (v.roles.fietskoerier.wants) v.roles.fietskoerier.days.forEach((o) => add(o, "fiets"));
-  if (v.roles.autokoerier.wants) v.roles.autokoerier.days.forEach((o) => add(o, "auto"));
+  }
   return Array.from(byPart.values()).sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Departure of a trip that has no saved route yet: the start of the dagdeel the courier signed up
+ * for, else the default for the dagdeel.
+ */
+export function defaultStart(volunteers: Volunteer[], isoDate: string, courier: string, part: string): string {
+  const v = findVolunteer(volunteers, courier);
+  const slot = v ? courierAvailability(v, isoDate).find((a) => a.part === part) : undefined;
+  return slot ? toHhmm(slot.start) : ROUTE_START_TIMES[part] ?? ROUTE_START_TIMES[""];
 }
 
 /** Time window of an order from "tussen 9:00 en 12:30", "vóór 10:00", "na 14:00" or the planned time. */

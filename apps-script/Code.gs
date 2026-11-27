@@ -253,7 +253,7 @@ const TABS = {
   // Beheer › Bakkerij: every time the bake counts were shared, with what was passed on.
   // Beheer › Bakkerij: every approval of baked counts (a correction is a new row; nothing is overwritten).
   bakeApprovals: ['Bakkerij goedkeuringen', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'benodigd_met', 'benodigd_zonder', 'soort', 'toelichting', 'door', 'goedgekeurd_op']],
-  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op']]
+  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op', 'opmerking']]
 };
 
 const PERMISSIONS = {
@@ -984,7 +984,7 @@ function buildFullState_() {
   state.bakeShares = readTab_('bakeShares').filter(function (r) { return r.id && r.leverdatum; }).map(function (r) {
     return {
       id: String(r.id), date: isoDate_(r.leverdatum) || String(r.leverdatum), withRaisins: num_(r.met), withoutRaisins: num_(r.zonder),
-      total: num_(r.totaal), channel: String(r.kanaal || ''), by: String(r.door || ''), at: String(r.verzonden_op || '')
+      total: num_(r.totaal), channel: String(r.kanaal || ''), by: String(r.door || ''), at: String(r.verzonden_op || ''), note: String(r.opmerking || '')
     };
   }).reverse();
 
@@ -3143,7 +3143,8 @@ Object.assign(HANDLERS, {
 // telefoon). Elke keer delen komt als regel in "Bakkerij doorgegeven"; zo ziet het platform of de
 // aantallen sindsdien veranderd zijn.
 
-const BAKE_SHARE_CHANNELS = ['whatsapp', 'email', 'deelmenu'];
+// 'gekopieerd': het bericht is gekopieerd en met de hand in een chat geplakt.
+const BAKE_SHARE_CHANNELS = ['whatsapp', 'email', 'deelmenu', 'gekopieerd'];
 
 Object.assign(HANDLERS, {
   logBakeShare: function (body) {
@@ -3157,7 +3158,11 @@ Object.assign(HANDLERS, {
     return withLock_(function () {
       const sheet = sheet_('bakeShares');
       const id = 'B' + Utilities.getUuid().slice(0, 8);
-      const values = { id: id, leverdatum: date, met: met, zonder: zonder, totaal: met + zonder, kanaal: channel, door: name, verzonden_op: now_() };
+      // De opmerking voor de bakker die in het bericht meeging (hooguit 500 tekens).
+      const typed = String(body.note || '').trim().slice(0, 500);
+      // Een opmerking die met = of + begint blijft tekst, geen formule.
+      const note = /^[=+]/.test(typed) ? "'" + typed : typed;
+      const values = { id: id, leverdatum: date, met: met, zonder: zonder, totaal: met + zonder, kanaal: channel, door: name, verzonden_op: now_(), opmerking: note };
       sheet.appendRow(TABS.bakeShares[1].map(function (h) { return values[h]; }));
       return bump_();
     });
@@ -3225,7 +3230,9 @@ Object.assign(HANDLERS, {
     const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
     const neededMet = body.neededWithRaisins === undefined || body.neededWithRaisins === '' ? '' : checkEditValue_('withRaisins', body.neededWithRaisins);
     const neededZonder = body.neededWithoutRaisins === undefined || body.neededWithoutRaisins === '' ? '' : checkEditValue_('withoutRaisins', body.neededWithoutRaisins);
-    const note = String(body.note || '').trim().slice(0, 500);
+    const typed = String(body.note || '').trim().slice(0, 500);
+      // Een opmerking die met = of + begint blijft tekst, geen formule.
+      const note = /^[=+]/.test(typed) ? "'" + typed : typed;
     return withLock_(function () {
       migrateBaked_();
       const latest = readBakeApprovals_().filter(function (a) { return a.date === date; })[0];

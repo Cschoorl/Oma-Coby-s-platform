@@ -170,30 +170,23 @@ export const STAFFING_TARGETS: Record<VolunteerRole, number> = {
   oliebollenbar: 4
 };
 
-/**
- * Above this many oliebollen on one bike route the routes page warns that a car may be needed.
- * Rough guess; adjust once the team knows what fits on a (bak)fiets.
- */
-export const BIKE_MAX_PIECES = 300;
-
 /** Departure time per dagdeel when a route has none yet. */
 export const ROUTE_START_TIMES: Record<string, string> = { ochtend: "09:00", middag: "12:00", avond: "17:00", "": "09:00" };
 
 /**
  * Automatic planning (Routes → Automatisch indelen). Rough numbers on purpose: the planner
- * only divides the stops, Google Maps then calculates the real route.
+ * only divides the stops, Google Maps then calculates the real route. Transport is car only
+ * (besluit 23 november): the bike and the bakfiets are gone.
  */
 export const PLANNING = {
   /** Minutes per stop: parking, a chat, handing over. */
   minutesPerStop: 15,
   /** Working window per dagdeel when the Agenda tab gives no time ("09:00–12:00"). */
   partWindows: { ochtend: ["09:00", "12:00"], middag: ["12:00", "15:00"], avond: ["17:00", "20:00"], "": ["09:00", "15:00"] } as Record<string, [string, string]>,
-  /** Oliebollen per trip. */
-  capacity: { fiets: BIKE_MAX_PIECES, bakfiets: 600, auto: 1500 },
-  /** Bikes stay within this distance (km, straight line) of the loods. */
-  bikeMaxKm: 12,
+  /** Oliebollen per trip, in one car. */
+  capacity: 1500,
   /** Average speed in km/h over the road; the road is about 1.3× the straight line. */
-  speed: { fiets: 15, autoStad: 30, autoSnelweg: 70 },
+  speed: { autoStad: 30, autoSnelweg: 70 },
   roadFactor: 1.3
 };
 

@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { salesOf } from "../../lib/categories";
 import type { DashboardState } from "../../types/dashboard";
-import { Card, Icon, Notice, SectionTitle, Segmented, StatStrip, formatEuro, formatNumber, todayIso, type Delta } from "../../components/ui";
-import { DiscoBallIcon, Discozaal, oudjesFor } from "./Discozaal";
-import { OLIEBOLLEN_PER_OUDJE } from "../../config";
+import { Badge, Card, Icon, Notice, SectionTitle, Segmented, StatStrip, Sticker, fieldLabel, formatEuro, formatNumber, todayIso, type BadgeTone, type Delta } from "../../components/ui";
+import { DiscoBallIcon, Discozaal, Rollatorbalk, oudjesFor } from "./Discozaal";
+import { GOAL_OLIEBOLLEN } from "../../config";
 import { ShareStand } from "./ShareStand";
 import type { StandData } from "./exportStand";
 
@@ -120,12 +120,12 @@ export function StatsPage({ state }: { state: DashboardState }) {
     const pct = Math.round(((current - previous) / previous) * 100);
     return { tone: pct > 0 ? "up" : pct < 0 ? "down" : "flat", text: `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct)}%` };
   };
-  // Before the season starts, "same period" last year is often 0; then also show the whole season.
+  // One short line under a number: last year in the same period. Before the season starts that is often 0;
+  // then the whole season says more. Both stand side by side in the table at the bottom.
   const lastHint = (previous: number, metric: Metric, format: (n: number) => string = formatNumber) => {
     if (!pastSeasons[0]) return undefined;
     const whole = cumulativeUpTo(pastSeasons[0], 0, metric);
-    const base = `${pastSeasons[0].year}: ${format(previous)}`;
-    return cutoff > 0 && whole !== previous ? `${base} · hele seizoen ${format(whole)}` : base;
+    return cutoff > 0 && previous === 0 && whole > 0 ? `heel ${pastSeasons[0].year}: ${format(whole)}` : `${pastSeasons[0].year}: ${format(previous)}`;
   };
 
   const seasonOliebollen = thisSeason ? cumulativeUpTo(thisSeason, 0, "oliebollen") : 0;
@@ -140,47 +140,41 @@ export function StatsPage({ state }: { state: DashboardState }) {
 
   const periodLabel = cutoff === 0 ? "hele seizoen t/m 31 december" : `t/m ${cutoff} ${cutoff === 1 ? "dag" : "dagen"} voor oudjaarsdag`;
 
+  // Where the action stands now. Packing includes the pop-up stock: it has to go along too.
+  const packedOrders = state.orders.filter((o) => state.packing[o.id]?.packedBy);
+  const piecesPacked = packedOrders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
+  const buyers = state.orders.filter((o) => o.category !== "popup");
+  const deliveries = buyers.filter((o) => o.fulfilment === "bezorgen");
+  const delivered = deliveries.filter((o) => state.delivery[o.id]).length;
+  const approvedCosts = state.costs.filter((c) => c.status === "goedgekeurd" || c.status === "uitbetaald").reduce((sum, c) => sum + c.amount, 0);
+
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <p className="-mt-2 text-sm text-muted">
-        Seizoen {currentYear}, {periodLabel}. Telt op besteldatum (of leverdatum als die ontbreekt).
-      </p>
-      {pastSeasons.length === 0 ? (
-        <Notice tone="warning">
-          Er zijn nog geen cijfers van voorgaande jaren. Vul het tabblad <code>Historie</code> in de Sheet (jaar, datum, bestellingen, oliebollen, omzet) om te vergelijken.
-        </Notice>
-      ) : null}
+      <GoalCard year={currentYear} oliebollen={seasonOliebollen} delta={delta(now.oliebollen, last.oliebollen)} lastYear={pastSeasons[0]?.year} />
 
       <StatStrip
         items={[
           { label: "Bestellingen", value: formatNumber(now.orders), hint: lastHint(last.orders, "orders"), delta: delta(now.orders, last.orders) },
-          { label: "Oliebollen verkocht", value: formatNumber(now.oliebollen), hint: lastHint(last.oliebollen, "oliebollen"), delta: delta(now.oliebollen, last.oliebollen) },
           {
             label: revenueSource === "estimate" ? "Omzet (schatting)" : "Omzet",
             value: revenueSource === "none" ? "—" : formatEuro(now.revenue),
-            hint:
-              revenueSource === "none"
-                ? "Geen bedragen of prijs in de Sheet"
-                : revenueSource === "estimate"
-                  ? `Oliebollen × ${formatEuro(state.pricePerPiece ?? 0)}${last.hasRevenue ? ` · ${lastHint(last.revenue, "revenue", formatEuro)}` : ""}`
-                  : last.hasRevenue
-                    ? lastHint(last.revenue, "revenue", formatEuro)
-                    : undefined,
+            hint: revenueSource === "none" ? "geen bedragen in de Sheet" : `na kosten ${formatEuro(now.revenue - approvedCosts)}`,
             delta: revenueSource !== "none" && last.hasRevenue ? delta(now.revenue, last.revenue) : undefined
-          }
+          },
+          { label: "Ingepakt", value: `${formatNumber(packedOrders.length)} / ${formatNumber(state.orders.length)}`, hint: `${formatNumber(piecesPacked)} oliebollen` },
+          { label: "Bezorgd", value: `${formatNumber(delivered)} / ${formatNumber(deliveries.length)}`, hint: `${formatNumber(buyers.length - deliveries.length)} afhalen` }
         ]}
       />
 
-      <ProgressCard state={state} revenue={revenueSource === "none" ? null : now.revenue} revenueIsEstimate={revenueSource === "estimate"} />
+      {pastSeasons.length === 0 ? (
+        <Notice tone="warning">
+          Nog geen cijfers van eerdere jaren. Vul het tabblad <code>Historie</code> in de Sheet om te vergelijken.
+        </Notice>
+      ) : null}
 
       <Card>
         <SectionTitle
-          title={view === "disco" ? "Discozaal" : `${metricLabel[metric]} opgeteld per dag`}
-          subtitle={
-            view === "disco"
-              ? `Per ${OLIEBOLLEN_PER_OUDJE} verkochte oliebollen danst er een oudje bij.`
-              : "Horizontaal: dagen tot oudjaarsdag. Beweeg over de grafiek voor de waarden."
-          }
+          title={view === "disco" ? "Discozaal" : `${metricLabel[metric]} per dag opgeteld`}
           action={
             <Segmented
               label="Weergave"
@@ -206,9 +200,8 @@ export function StatsPage({ state }: { state: DashboardState }) {
         />
         {view === "disco" ? <Discozaal oliebollen={seasonOliebollen} /> : <CumulativeChart seasons={seasons.slice(0, 3)} metric={metric} cutoff={cutoff} />}
         {/* Sharing closes the card: one clear action, in feest at 24px so the light text stays readable. */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-lijn pt-4">
-          <p className="text-sm text-muted">Deel de stand van vandaag als kaartje, voor de groepsapp of Instagram.</p>
-          <button type="button" className="inline-flex min-h-[48px] items-center gap-2 rounded-md bg-feest px-5 font-display text-2xl uppercase leading-none tracking-wide text-meel transition hover:bg-feest-hover active:translate-y-px" onClick={openShare}>
+        <div className="mt-4 flex justify-end border-t border-lijn pt-4">
+          <button type="button" title="De stand van vandaag als kaartje, voor de groepsapp of Instagram" className="inline-flex min-h-[48px] items-center gap-2 rounded-md bg-feest px-5 font-display text-2xl uppercase leading-none tracking-wide text-meel transition hover:bg-feest-hover active:translate-y-px" onClick={openShare}>
             <Icon name="share" className="h-5 w-5" />
             Deel stand
           </button>
@@ -217,7 +210,7 @@ export function StatsPage({ state }: { state: DashboardState }) {
       {sharing ? <ShareStand data={sharing} onClose={() => setSharing(null)} /> : null}
 
       <Card>
-        <SectionTitle title="Per seizoen" subtitle={`Zelfde periode (${periodLabel}) naast het hele seizoen t/m 31 december.`} />
+        <SectionTitle title="Per seizoen" />
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead>
@@ -254,44 +247,58 @@ export function StatsPage({ state }: { state: DashboardState }) {
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-xs text-muted">Zelfde periode: {periodLabel}. Telt op besteldatum; zonder besteldatum op leverdatum.</p>
       </Card>
     </div>
   );
 }
 
-/** Where the action stands now: packed, delivered, and revenue against approved costs. */
-function ProgressCard({ state, revenue, revenueIsEstimate }: { state: DashboardState; revenue: number | null; revenueIsEstimate: boolean }) {
-  // Sold to a known buyer; pop-up stock is shown apart (it only counts once sold).
-  const orders = state.orders.filter((o) => o.category !== "popup");
-  const popups = state.orders.filter((o) => o.category === "popup");
-  const popupPieces = popups.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-  const popupSold = popups.reduce((sum, o) => sum + salesOf(o, state, null).oliebollen, 0);
-  const piecesTotal = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-  // Packing includes the pop-up stock: it has to go along too.
-  const packed = state.orders.filter((o) => state.packing[o.id]?.packedBy).length;
-  const piecesPacked = state.orders.filter((o) => state.packing[o.id]?.packedBy).reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-  const deliveries = orders.filter((o) => o.fulfilment === "bezorgen");
-  const delivered = deliveries.filter((o) => state.delivery[o.id]).length;
-  const approved = state.costs.filter((c) => c.status === "goedgekeurd" || c.status === "uitbetaald").reduce((sum, c) => sum + c.amount, 0);
-  const pending = state.costs.filter((c) => c.status === "ingediend").reduce((sum, c) => sum + c.amount, 0);
+const deltaBadge: Record<Delta["tone"], BadgeTone> = { up: "klaar", down: "probleem", flat: "zacht" };
 
+/**
+ * The goal of the season, first thing on the page: how many oliebollen are sold of the 40.000, as a number,
+ * a percentage and the rollator on her way; underneath what that means in oudjes and what is still to go.
+ */
+function GoalCard({ year, oliebollen, delta, lastYear }: { year: number; oliebollen: number; delta?: Delta; lastYear?: number }) {
+  const reached = oliebollen >= GOAL_OLIEBOLLEN;
+  // Rounded down, so 100% only shows when the goal is really reached.
+  const pct = Math.floor((oliebollen / GOAL_OLIEBOLLEN) * 100);
   return (
-    <StatStrip
-      items={[
-        {
-          label: "Besteld",
-          value: formatNumber(orders.length),
-          hint: `${formatNumber(piecesTotal)} oliebollen${popups.length ? ` · pop-ups: ${formatNumber(popupSold)} van ${formatNumber(popupPieces)} verkocht` : ""}`
-        },
-        { label: "Ingepakt", value: `${packed} / ${state.orders.length}`, hint: `${formatNumber(piecesPacked)} oliebollen${popups.length ? " (incl. pop-upvoorraad)" : ""}` },
-        { label: "Bezorgd", value: `${delivered} / ${deliveries.length}`, hint: `${orders.length - deliveries.length} worden afgehaald` },
-        {
-          label: "Omzet min kosten",
-          value: revenue === null ? "n.v.t." : formatEuro(revenue - approved),
-          hint: `${revenue === null ? "omzet onbekend" : `omzet ${formatEuro(revenue)}${revenueIsEstimate ? " (schatting)" : ""}`} · kosten ${formatEuro(approved)}${pending ? ` (+ ${formatEuro(pending)} te beoordelen)` : ""}`
-        }
-      ]}
-    />
+    <Card>
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+        <div>
+          <p className={fieldLabel}>Doel {year}</p>
+          <p className="mt-1 font-serif font-bold tabular-nums text-krent">
+            <span className="text-[44px] leading-none sm:text-[60px]">{formatNumber(oliebollen)}</span>{" "}
+            <span className="whitespace-nowrap text-lg text-oliebol sm:text-2xl">van {formatNumber(GOAL_OLIEBOLLEN)} oliebollen</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-1">
+          {reached ? (
+            <Sticker tone="kerst">Doel gehaald!</Sticker>
+          ) : (
+            <p className="font-serif text-[32px] font-bold leading-none tabular-nums text-krent sm:text-[40px]">{oliebollen > 0 && pct === 0 ? "<1" : pct}%</p>
+          )}
+          {delta && lastYear ? (
+            <span title={`Vergeleken met dezelfde periode in ${lastYear}`}>
+              <Badge tone={deltaBadge[delta.tone]}>
+                {delta.text.startsWith("was") ? `${delta.text} in ${lastYear}` : `${delta.text} t.o.v. ${lastYear}`}
+              </Badge>
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <Rollatorbalk oliebollen={oliebollen} />
+      <p className="mt-3 text-sm text-oliebol">
+        <b className="tabular-nums text-krent">{formatNumber(oudjesFor(oliebollen))}</b> van {formatNumber(oudjesFor(GOAL_OLIEBOLLEN))} oudjes op de dansvloer
+        {reached ? null : (
+          <>
+            {" "}
+            · nog <b className="tabular-nums text-krent">{formatNumber(GOAL_OLIEBOLLEN - oliebollen)}</b> oliebollen te gaan
+          </>
+        )}
+      </p>
+    </Card>
   );
 }
 

@@ -187,11 +187,11 @@ Let op: "verzonden" betekent dat Gmail de mail heeft aangenomen. Een mail die la
 
 ## Bakkerij (beheer)
 
-De pagina **Bakkerij** (alleen beheer) opent op de leverdag van morgen: een dag van tevoren zet je de bestellijst klaar en stuur je hem naar de bakker. Je deelt de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon. Elke keer delen legt het script vast (`logBakeShare`, alleen beheer) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email` of `deelmenu`), `door`, `verzonden_op`. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
+De pagina **Bakkerij** (alleen beheer) opent op de leverdag van morgen: een dag van tevoren zet je de bestellijst klaar en stuur je hem naar de bakker. Je deelt de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon, of je kopieert het bericht en plakt het zelf in een chat. In het veld **Opmerking voor de bakker** typ je wat erbij moet; dat gaat in het bericht mee. Elke keer delen legt het script vast (`logBakeShare`, alleen beheer) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email`, `deelmenu` of `gekopieerd`), `door`, `verzonden_op`, `opmerking`. De kolom `opmerking` voegt het script zelf toe aan een bestaand tabblad. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
 
 Optioneel in **Instellingen**: `bakkerij_whatsapp` (telefoonnummer, bijv. `06 12345678`) en `bakkerij_email`. Dan gaat het bericht meteen naar de bakkerij; anders kies je bij het delen zelf de ontvanger.
 
-Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd.
+Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd. Na kopiëren leg je het zelf vast met "Verstuurd? Leg vast als doorgegeven".
 
 ## Contact bij aflevering
 

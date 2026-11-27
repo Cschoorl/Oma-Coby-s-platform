@@ -6,8 +6,8 @@ import { Badge, Card, CopyButton, EmptyState, Icon, Notice, OliebolLoader, Secti
 import { Avatar } from "../../components/Avatar";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
-import { courierAvailability, courierCandidates, courierRuns, couriersOn, deliveryOrders, findVolunteer, guessMode, homeAddress, isRouteStale, orderPart, orderedStops, runRoute, toHhmm, transportOn, whatsappNumber } from "./routeUtils";
-import { BIKE_MAX_PIECES, PLANNING, ROUTE_START_TIMES } from "../../config";
+import { courierCandidates, courierRuns, couriersOn, defaultStart, deliveryOrders, findVolunteer, formatTravelTime, homeAddress, isBikeRoute, isRouteStale, orderPart, orderedStops, runRoute, signedUpOn, whatsappNumber } from "./routeUtils";
+import { PLANNING } from "../../config";
 import { AutoPlanCard } from "./AutoPlanCard";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
@@ -28,8 +28,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   // One flag for the whole run, so the loader does not restart between couriers.
   const [computingAll, setComputingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Per trip ("courier|dagdeel"): vehicle and departure chosen on this page.
-  const [modes, setModes] = useState<Record<string, "driving" | "bicycling">>({});
+  // Per trip ("courier|dagdeel"): the departure chosen on this page.
   const [startTimes, setStartTimes] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -66,25 +65,23 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   const dayRoutes = trips.map((t) => t.route).filter(Boolean);
   const totalKm = dayRoutes.reduce((sum, r) => sum + (r?.km ?? 0), 0);
   const staleTrips = trips.filter((t) => isRouteStale(t.orders, t.route, state.changes));
+  // Calculated while the bike was still an option; the others are stale because something changed.
+  const bikeTrips = staleTrips.filter((t) => isBikeRoute(t.route));
+  const changedTrips = staleTrips.filter((t) => !isBikeRoute(t.route));
   const delivered = dayDeliveries.filter((o) => state.delivery[o.id]).length;
 
   const tripKey = (courier: string, part: string) => `${courier}|${part}`;
-  const modeFor = (courier: string, part: string, orders: Order[]) =>
-    modes[tripKey(courier, part)] ?? routeOf(courier, part)?.mode ?? guessMode(orders, findVolunteer(state.volunteers, courier), date);
   const routeOf = (courier: string, part: string) => trips.find((t) => t.courier === courier && t.part === part)?.route;
   const startFor = (courier: string, part: string) => {
     if (startTimes[tripKey(courier, part)]) return startTimes[tripKey(courier, part)];
     const saved = routeOf(courier, part)?.startTime;
     if (saved) return saved;
-    // The start of the dagdeel the courier signed up for, else the default for the dagdeel.
-    const v = findVolunteer(state.volunteers, courier);
-    const slot = v ? courierAvailability(v, date).find((a) => a.part === part) : undefined;
-    return slot ? toHhmm(slot.start) : ROUTE_START_TIMES[part] ?? ROUTE_START_TIMES[""];
+    return defaultStart(state.volunteers, date, courier, part);
   };
   /** The last trip of the day ends at the courier's home, when the address is known. */
   const endFor = (courier: string, last: boolean) => (last ? homeAddress(findVolunteer(state.volunteers, courier)) : "");
 
-  async function computeTrip(trip: { courier: string; part: string; mode: "driving" | "bicycling"; startTime: string; endAddress: string; orders: Order[] }) {
+  async function computeTrip(trip: { courier: string; part: string; startTime: string; endAddress: string; orders: Order[] }) {
     const id = tripKey(trip.courier, trip.part);
     setBusy(id);
     setError(null);
@@ -94,7 +91,8 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
           date,
           courier: trip.courier,
           part: trip.part,
-          mode: trip.mode,
+          // Car only; the script still knows "bicycling" for routes saved earlier.
+          mode: "driving",
           startTime: trip.startTime,
           endAddress: trip.endAddress,
           minutesPerStop: PLANNING.minutesPerStop,
@@ -111,7 +109,6 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
   const tripRequest = (t: (typeof trips)[number]) => ({
     courier: t.courier,
     part: t.part,
-    mode: modeFor(t.courier, t.part, t.orders),
     startTime: startFor(t.courier, t.part),
     endAddress: endFor(t.courier, t.last),
     orders: t.orders
@@ -140,11 +137,19 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
         ]}
       />
 
-      {staleTrips.length > 0 ? (
+      {changedTrips.length > 0 ? (
         <Notice tone="warning">
-          Na het berekenen zijn er bezorgingen bijgekomen, vervallen, verschoven of aangepast bij {Array.from(new Set(staleTrips.map((t) => t.courier))).join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
-          <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void computeMany(staleTrips.map(tripRequest))}>
+          Na het berekenen zijn er bezorgingen bijgekomen, vervallen, verschoven of aangepast bij {Array.from(new Set(changedTrips.map((t) => t.courier))).join(", ")}. De volgorde en tijden kloppen daar niet meer.{" "}
+          <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void computeMany(changedTrips.map(tripRequest))}>
             Deze routes opnieuw berekenen
+          </button>
+        </Notice>
+      ) : null}
+      {bikeTrips.length > 0 ? (
+        <Notice tone="warning">
+          De {bikeTrips.length === 1 ? "route" : "routes"} van {Array.from(new Set(bikeTrips.map((t) => t.courier))).join(", ")} {bikeTrips.length === 1 ? "is" : "zijn"} nog voor de fiets berekend. We bezorgen alleen met de auto.{" "}
+          <button type="button" className="font-bold underline underline-offset-4" disabled={busy !== null} onClick={() => void computeMany(bikeTrips.map(tripRequest))}>
+            Opnieuw berekenen voor de auto
           </button>
         </Notice>
       ) : null}
@@ -181,23 +186,20 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             const { courier, part, orders, route } = trip;
             const id = tripKey(courier, part);
             const stale = isRouteStale(orders, route, state.changes);
-            const mode = modeFor(courier, part, orders);
             const stops = orderedStops(orders, route);
-            const mapsUrl = route?.mapsUrl || mapsRouteUrlForOrders(stops);
+            // A route once calculated for the bike has bike directions: then the plain car route past the stops.
+            const mapsUrl = (!isBikeRoute(route) && route?.mapsUrl) || mapsRouteUrlForOrders(stops);
             const volunteer = findVolunteer(state.volunteers, courier);
             const link = appLink(`/bezorger?naam=${encodeURIComponent(courier)}&datum=${date}`);
             const pieces = orders.reduce((sum, o) => sum + o.withRaisins + o.withoutRaisins, 0);
-            const transport = volunteer ? transportOn(volunteer, date, part) : [];
             const warnings = [
-              volunteer && mode === "driving" && !volunteer.roles.autokoerier.wants ? `${courier} heeft zich niet als autokoerier aangemeld.` : "",
-              volunteer && mode === "bicycling" && !volunteer.roles.fietskoerier.wants ? `${courier} heeft zich niet als fietskoerier aangemeld.` : "",
-              volunteer && transport.length === 0 ? `${courier} heeft zich niet voor ${part ? `de ${part} van ` : ""}deze dag aangemeld.` : "",
-              mode === "bicycling" && pieces > BIKE_MAX_PIECES ? `${pieces} oliebollen is veel voor de fiets (richtlijn: max. ${BIKE_MAX_PIECES}). Overweeg een auto.` : ""
+              volunteer && !volunteer.roles.autokoerier.wants ? `${courier} heeft zich niet als autokoerier aangemeld.` : "",
+              volunteer && volunteer.roles.autokoerier.wants && !signedUpOn(volunteer, date, part) ? `${courier} heeft zich niet voor ${part ? `de ${part} van ` : ""}deze dag aangemeld.` : ""
             ].filter(Boolean);
             const done = orders.filter((o) => state.delivery[o.id]).length;
             const message = [
               `Hoi ${courier}! Je bezorgroute voor ${formatDayLabel(date)}${part ? ` (${part})` : ""}:`,
-              `${orders.length} stops, ${pieces} oliebollen${route ? `, ${route.km.toLocaleString("nl-NL")} km (± ${route.minutes} min)` : ""}.`,
+              `${orders.length} stops, ${pieces} oliebollen${route ? `, ${route.km.toLocaleString("nl-NL")} km (± ${formatTravelTime(route.minutes)})` : ""}.`,
               route?.startTime && !stale ? `Vertrek ${route.startTime} vanaf de loods in Aalsmeer.` : "",
               "",
               `Alle adressen, aantallen en opmerkingen: ${link}`,
@@ -228,20 +230,11 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                   <div className="flex flex-wrap items-center gap-2">
                     {route ? (
                       <Badge tone={stale ? "aandacht" : "klaar"}>
-                        {route.km.toLocaleString("nl-NL")} km · ± {route.minutes} min{stale ? " · verouderd" : ""}
+                        {route.km.toLocaleString("nl-NL")} km · ± {formatTravelTime(route.minutes)}{stale ? " · verouderd" : ""}
                       </Badge>
                     ) : (
                       <Badge>Nog niet berekend</Badge>
                     )}
-                    <select
-                      className={`${inputClass} !w-auto py-1 text-xs`}
-                      value={mode}
-                      onChange={(e) => setModes((m) => ({ ...m, [id]: e.target.value as "driving" | "bicycling" }))}
-                      aria-label={`Vervoer ${courier}${part ? ` ${part}` : ""}`}
-                    >
-                      <option value="driving">Auto</option>
-                      <option value="bicycling">Fiets</option>
-                    </select>
                     <label className="flex items-center gap-1 text-xs text-muted">
                       Vertrek
                       <input
@@ -330,19 +323,11 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
   const [otherFor, setOtherFor] = useState<string | null>(null);
   const [otherName, setOtherName] = useState("");
 
-  const transportLabel = (name: string, part = "") => {
-    const v = findVolunteer(state.volunteers, name);
-    if (!v) return "";
-    const on = transportOn(v, date, part);
-    const kinds = on.length ? on : [v.roles.fietskoerier.wants ? "fiets" : "", v.roles.autokoerier.wants ? "auto" : ""].filter(Boolean);
-    return kinds.map((k) => (k === "fiets" && v.cargoBike ? "bakfiets" : k)).join("/");
-  };
-
   return (
     <Card>
       <SectionTitle
         title="Bezorgers indelen"
-        subtitle={`${available.length} koeriers hebben zich voor ${formatDayLabel(date)} aangemeld. Per bezorging staan bovenaan wie in dat dagdeel kan, met fiets of auto.`}
+        subtitle={`${available.length} koeriers hebben zich voor ${formatDayLabel(date)} aangemeld. Per bezorging staan bovenaan wie in dat dagdeel kan.`}
       />
       {orders.length === 0 ? <p className="text-sm text-muted">Geen bezorgingen op deze dag.</p> : null}
       <div className="overflow-x-auto">
@@ -409,7 +394,7 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
                         <optgroup label={part ? `Beschikbaar in de ${part}` : "Beschikbaar deze dag"}>
                           {fits.map((v) => (
                             <option key={v.id} value={v.name}>
-                              {v.name} ({transportLabel(v.name, part)})
+                              {v.name}
                             </option>
                           ))}
                         </optgroup>
@@ -418,7 +403,8 @@ function CourierAssignment({ state, date, orders, busy, onAssign }: CourierAssig
                         <optgroup label="Niet aangemeld voor dit moment">
                           {others.map((v) => (
                             <option key={v.id} value={v.name}>
-                              {v.name} ({transportLabel(v.name)})
+                              {v.name}
+                              {v.roles.autokoerier.wants ? "" : " (alleen als fietskoerier aangemeld)"}
                             </option>
                           ))}
                         </optgroup>

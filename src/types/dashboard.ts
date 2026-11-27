@@ -286,7 +286,10 @@ export interface BakeShare {
   withRaisins: number;
   withoutRaisins: number;
   total: number;
-  channel: "whatsapp" | "email" | "deelmenu";
+  /** "gekopieerd": the message was copied and pasted into a chat by hand. */
+  channel: "whatsapp" | "email" | "deelmenu" | "gekopieerd";
+  /** The remark for the baker that went along in the message; "" or missing when there was none. */
+  note?: string;
   by: string;
   /** "2026-12-29 16:05:00". */
   at: string;

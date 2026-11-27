@@ -38,7 +38,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/zakelijk", label: "Zakelijk", description: "Aanvragen van het zakelijke bestelformulier nakijken, bevestigen of afwijzen.", roles: ["beheer"] },
-  { path: "/tussenstand", label: "Tussenstand", description: "Bestellingen, oliebollen en omzet tegenover eerdere jaren. Achter de discobal-knop: de discozaal.", roles: ["beheer"] },
+  { path: "/tussenstand", label: "Tussenstand", description: "Hoe ver zijn we op weg naar het doel?", roles: ["beheer"] },
   { path: "/agenda", label: "Agenda", description: "Waar nog plek is en wie er op een dag is.", roles: ["beheer"] },
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
@@ -291,7 +291,6 @@ function App() {
       <main className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6">
         {current ? (
           <div className="grid gap-1 print:hidden">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">#{current.path}</p>
             <h1 className="font-display text-[40px] uppercase leading-none tracking-wide text-krent">{current.label}</h1>
             <p className="text-sm text-oliebol">{current.description}</p>
           </div>

@@ -153,6 +153,8 @@ export interface VolunteerSignup {
   remark: string;
   consent: boolean;
   planning?: SignupPlanning;
+  /** Per task the time of each chosen option ("7:00–9:30"), in the order of roles[task].days; for the confirmation mail. */
+  times?: Partial<Record<VolunteerRole, string[]>>;
 }
 
 export interface ReceiptResult {
@@ -223,7 +225,8 @@ export interface Backend {
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
   geocode(session: Session, addresses: string[]): Promise<GeocodeResult>;
   computeRoute(session: Session, request: RouteRequest): Promise<RouteInfo>;
-  registerVolunteer(signup: VolunteerSignup): Promise<void>;
+  /** Saves the signup and mails a confirmation; `mailed` says whether that mail went out. */
+  registerVolunteer(signup: VolunteerSignup): Promise<{ mailed: boolean }>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
   saveCost(session: Session, cost: CostInput): Promise<void>;
   setDelivered(session: Session, orderId: string, delivered: boolean): Promise<SavedVersion | void>;
@@ -381,7 +384,8 @@ function createAppsScriptBackend(url: string): Backend {
       return call<RouteInfo>("computeRoute", withSession(session, { ...request }));
     },
     async registerVolunteer(signup) {
-      await call("registerVolunteer", { ...signup });
+      const result = await call<{ mailed?: boolean } | null>("registerVolunteer", { ...signup });
+      return { mailed: Boolean(result?.mailed) };
     },
     async extractReceipt(session, imageBase64, mediaType) {
       return call<ReceiptResult>("extractReceipt", withSession(session, { imageBase64, mediaType }));
@@ -1129,6 +1133,8 @@ function createDemoBackend(notice?: string): Backend {
           planning: signup.planning
         });
       });
+      // Demo: no mail is sent.
+      return { mailed: false };
     },
     async extractReceipt() {
       await delay(900);

@@ -7,7 +7,7 @@ import { Card, Notice, Sticker, fieldLabel, ghostButton, inputClass, primaryButt
 import omaUrl from "../../assets/oma-coby.jpg";
 import omaAvatarUrl from "../../assets/oma-coby-lijst.png";
 import { AddressSearch, CitySearch } from "../business/AddressSearch";
-import { CONTACT_EMAIL, SHIFT_TIMES, SIGNUP_OPTIONS, applyAgenda } from "../../config";
+import { CONTACT_EMAIL, SHIFT_TIMES, SIGNUP_OPTIONS, applyAgenda, optionTime } from "../../config";
 
 const until = (range: string) => range.replace("–", " tot ");
 /** Bezorgen by car: ca. 9:00 to 15:00, ochtend until 12:30, middag until 15:00. */
@@ -148,6 +148,8 @@ export function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  /** Whether the confirmation mail went out; the thank-you screen only promises it when it did. */
+  const [mailed, setMailed] = useState(false);
   const composerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -673,7 +675,7 @@ export function SignupPage() {
     setBusy(true);
     setError(null);
     try {
-      await backend.registerVolunteer({
+      const result = await backend.registerVolunteer({
         name: `${firstName.trim()} ${lastName.trim()}`.trim(),
         address,
         city,
@@ -688,8 +690,12 @@ export function SignupPage() {
           flexible: flexibleNow,
           maxShifts,
           driving: roles.autokoerier.wants && a.driving && a.driving !== "nee" ? a.driving : undefined
-        }
+        },
+        times: Object.fromEntries(
+          (Object.keys(roles) as VolunteerRole[]).filter((r) => roles[r].wants).map((r) => [r, roles[r].days.map((d) => optionTime(r, d))])
+        )
       });
+      setMailed(result.mailed);
       setDone(true);
       rollOliebol();
     } catch (err) {
@@ -710,9 +716,14 @@ export function SignupPage() {
         <div className="grid content-center gap-2 p-5 sm:p-7">
           <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Dankjewel, {first}!</h1>
           <p className="text-krent">Fijn dat je wilt helpen. Je zit nu officieel in mijn team. Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster en laat ik je weten waar en wanneer ik je verwacht.</p>
+          {mailed ? (
+            <p className="text-sm text-krent">
+              Ik heb je net een mail gestuurd met alles wat je hebt opgegeven, naar <b>{email.trim()}</b>. Niks gekregen? Kijk even bij je spam.
+            </p>
+          ) : null}
           <p className="text-sm text-krent">Je rooster en je herinneringen stuur ik vooral via WhatsApp, op {phone.trim()}. Houd je telefoon dus in de gaten.</p>
           <p className="text-sm text-muted">
-            Vragen of iets wijzigen? Mail naar{" "}
+            {mailed ? "Iets wijzigen? Antwoord op mijn mail, of mail naar" : "Vragen of iets wijzigen? Mail naar"}{" "}
             <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>
               {CONTACT_EMAIL}
             </a>

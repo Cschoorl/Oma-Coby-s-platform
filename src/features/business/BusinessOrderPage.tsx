@@ -8,6 +8,7 @@ import { DiscoHall, DiscoOudje } from "../stats/Discozaal";
 import heroUrl from "../../assets/mark-en-oma-coby.jpg";
 import { LogoBanner, WaaromMuziek } from "./Voorgangers";
 import { AddressSearch } from "./AddressSearch";
+import { useDistanceKm } from "./distance";
 import { useEmailCheck } from "../../lib/emailCheck";
 import {
   areaFor,
@@ -788,7 +789,12 @@ function PartyBuilder({ input, totals, info, onCount, onGuests, countError, gues
         {countError ? <p className="text-xs font-bold text-feest-ink">! {countError}</p> : null}
       </div>
       <div className="grid gap-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)] sm:items-start">
-        <Field id="f-guests" label={t.guests} hint={t.guestsHint} error={guestsError}>
+        <Field
+          id="f-guests"
+          label={t.guests}
+          hint={t.guestsHint(t.num(info.party.largeFrom), t.euroRound(info.party.fee), t.euroRound(info.party.feeLarge))}
+          error={guestsError}
+        >
           <input
             id="f-guests"
             inputMode="numeric"
@@ -806,6 +812,12 @@ function PartyBuilder({ input, totals, info, onCount, onGuests, countError, gues
             <dt className="font-bold text-krent">{t.totalExclVat}</dt>
             <dd className="font-serif text-xl font-bold tabular-nums text-krent">{t.euro(totals.party + totals.bollen)}</dd>
           </div>
+          {/* De sprong van de feestprijs vanaf largeFrom gasten, met de reden erbij. */}
+          {input.guests >= info.party.largeFrom ? (
+            <p aria-live="polite" className="mt-1 rounded-md bg-gouwe-50 px-2.5 py-1.5 text-xs text-gouwe-ink">
+              {t.partyLarge(t.num(input.guests), t.euroRound(info.party.feeLarge - info.party.fee))}
+            </p>
+          ) : null}
         </dl>
       </div>
     </div>
@@ -913,7 +925,10 @@ function PartyLines({ input, info }: { input: BusinessOrderInput; info: Business
   const credit = partyCredit(input.guests, total, info);
   return (
     <>
-      <Line label={input.guests ? t.partyGuests(t.num(input.guests)) : t.partyLine} value={t.euro(partyBaseFee(input.guests, info))} />
+      <Line
+        label={!input.guests ? t.partyLine : input.guests >= info.party.largeFrom ? t.partyGuestsLarge(t.num(input.guests)) : t.partyGuests(t.num(input.guests))}
+        value={t.euro(partyBaseFee(input.guests, info))}
+      />
       <Line label={t.partyCreditLine(t.num(total), perBol(t, info.party.credit))} value={`− ${t.euro(credit)}`} />
     </>
   );
@@ -954,7 +969,9 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
       <div className="my-1.5 border-t border-lijn" />
       {pkg?.key === "feest" ? <PartyLines input={input} info={info} /> : null}
       <Line label={t.bollenLine(t.num(totals.oliebollen), t.euro(info.price))} value={t.euro(totals.bollen)} />
-      <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={!input.area ? "–" : totals.deliveryLater ? t.deliveryLater : t.euro(totals.delivery)} />
+      <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={input.area ? t.euro(totals.delivery) : "–"} />
+      {/* Zone 3: de kilometers komen er nog bij en zitten niet in het totaal. */}
+      {totals.deliveryLater ? <Line label={totals.deliveryEstimate ? t.kmLineAbout(t.euro(totals.deliveryEstimate)) : t.kmLine} value={t.deliveryLater} /> : null}
       {totals.surcharge ? <Line label={t.moment[input.moment]} value={t.euro(totals.surcharge)} /> : null}
       <Line label={t.subtotal} value={t.euro(totals.subtotal)} muted />
       {pkg?.key === "feest" ? (
@@ -1104,11 +1121,19 @@ export function BusinessOrderPage() {
     return () => io.disconnect();
   }, [done]);
 
-  // Bezorgkosten volgen uit postcode en plaats; de klant kiest ze niet zelf (het Apps Script rekent ze ook zo na).
+  // Bezorgkosten volgen uit de plaats (de zones); de klant kiest ze niet zelf (het Apps Script rekent ze ook zo na).
   const now = previewNow() ?? new Date();
   const only = donationOnly(input);
-  const area = only ? "" : areaFor(input.postalCode, input.city, info.regionPostcodes);
-  const order: BusinessOrderInput = { ...input, area, fulfilment: only ? "donatie" : "bezorgen", invoiceEmail: sameInvoice ? input.email : input.invoiceEmail };
+  const area = only ? "" : areaFor(input.city, info.zones);
+  // Zone 3 onder fixedDeliveryFrom: bovenop het vaste tarief komen de kilometers. Die schatten we vanaf de bakkerij uit de postcode.
+  const km = useDistanceKm(input.postalCode, area === "zone3" && input.withRaisins + input.withoutRaisins < info.fixedDeliveryFrom);
+  const order: BusinessOrderInput = {
+    ...input,
+    area,
+    distanceKm: km ?? undefined,
+    fulfilment: only ? "donatie" : "bezorgen",
+    invoiceEmail: sameInvoice ? input.email : input.invoiceEmail
+  };
   const totals = businessTotals(order, info);
   const errors = validateBusiness(order, info, now, t.validation);
   // With the same address, a wrong e-mail is one mistake, not two.
@@ -1412,6 +1437,19 @@ export function BusinessOrderPage() {
           }}
         >
           <div className="grid gap-8">
+          {/* Tot wanneer bestellen en tot wanneer leveren (besluit 23 november): uit de sluitingstijd en de laatste leverdag. */}
+          <dl className="grid gap-x-8 gap-y-3 rounded-md bg-vul px-3.5 py-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="font-bold text-krent">{t.untilOrderQ}</dt>
+              <dd className="text-oliebol">{t.untilOrderA(t.closeText(info), t.lead(info))}</dd>
+            </div>
+            {info.deliveryDays.length ? (
+              <div>
+                <dt className="font-bold text-krent">{t.untilDeliverQ}</dt>
+                <dd className="text-oliebol">{t.untilDeliverA(t.longDay(info.deliveryDays[info.deliveryDays.length - 1]))}</dd>
+              </div>
+            ) : null}
+          </dl>
           <div id="stappen" className="grid scroll-mt-6 gap-2">
             <p className="text-xs font-bold text-oliebol" aria-live="polite">
               {t.stepOf(steps.indexOf(step) + 1, steps.length)}
@@ -1604,16 +1642,48 @@ export function BusinessOrderPage() {
                       <span className="grid">
                         <span className="text-sm font-bold">{t.area[area]}</span>
                         <span className="text-xs text-oliebol">
-                          {/^\d{4}/.test(input.postalCode.trim()) ? t.postcodeShort(input.postalCode.trim().slice(0, 4)) : input.city.trim()} · {t.areaSub[area]}
+                          {input.city.trim()} ·{" "}
+                          {totals.deliveryLater ? t.areaPerKm(t.euro(info.fees.zone3), t.euro(info.perKm)) : area === "zone3" ? t.areaFixedFrom(t.num(info.fixedDeliveryFrom)) : t.areaFixed}
                         </span>
                       </span>
-                      <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">{totals.deliveryLater ? t.deliveryLater : t.euro(totals.delivery)}</span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">
+                        {totals.deliveryLater
+                          ? t.feePlus(t.euro(totals.delivery), totals.deliveryEstimate ? t.about(t.euro(totals.deliveryEstimate)) : t.kilometers)
+                          : t.euro(totals.delivery)}
+                      </span>
                     </>
                   ) : (
                     <span className="text-sm text-oliebol">{t.areaEmpty}</span>
                   )}
                 </div>
-                <p className="text-xs text-oliebol">{totals.deliveryLater ? t.deliveryLaterHint(t.num(info.fixedDeliveryFrom), t.euro(info.fees.buiten)) : t.areaHint}</p>
+                <p className="text-xs text-oliebol">
+                  {totals.deliveryLater ? (
+                    <>
+                      {totals.deliveryKm && totals.deliveryEstimate
+                        ? t.deliveryEstimate(t.num(totals.deliveryKm), t.euro(info.perKm), t.euro(totals.deliveryEstimate))
+                        : t.deliveryLaterIntro(t.euro(info.fees.zone3), t.euro(info.perKm))}{" "}
+                      {t.deliveryLaterHint(t.euro(info.fees.zone3), t.num(info.fixedDeliveryFrom))}
+                    </>
+                  ) : (
+                    t.areaHint
+                  )}
+                </p>
+                {/* De zones met hun plaatsen, uit de instellingen: zo ziet de klant vooraf waar hij onder valt. */}
+                <details className="text-xs text-oliebol">
+                  <summary className="flex min-h-[44px] cursor-pointer items-center font-bold underline decoration-lijn-2 underline-offset-4 hover:text-krent">{t.zonesTitle}</summary>
+                  <dl className="grid gap-1.5 pb-1">
+                    {(["zone1", "zone2"] as const).map((z) => (
+                      <div key={z}>
+                        <dt className="inline font-bold text-krent">{t.zoneLine(t.area[z], t.euro(info.fees[z]))}:</dt>{" "}
+                        <dd className="inline">{info.zones[z].join(", ")}</dd>
+                      </div>
+                    ))}
+                    <div>
+                      <dt className="inline font-bold text-krent">{t.zoneLine(t.area.zone3, t.zoneRest(t.euro(info.fees.zone3), t.euro(info.perKm)))}:</dt>{" "}
+                      <dd className="inline">{t.zoneRestPlaces}</dd>
+                    </div>
+                  </dl>
+                </details>
               </div>
 
               <div className="grid gap-2">
@@ -1932,6 +2002,10 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
     ...(party ? ([[t.rowParty, t.rowPartyValue(t.num(input.guests))]] as Array<[string, ReactNode]>) : []),
     ...(input.donation ? ([[t.rowDonated, t.rowDonatedValue(t.euro(totals.donation))]] as Array<[string, ReactNode]>) : []),
     ...(only ? [] : ([[t.rowVisit, <>{t.longDay(input.date)}, {t.moment[input.moment].toLowerCase()}<br />{input.street}, {input.postalCode} {input.city}</>]] as Array<[string, ReactNode]>)),
+    // Zone 3: de kilometers zitten nog niet in het bedrag, dus dat zeggen we erbij.
+    ...(totals.deliveryLater
+      ? ([[t.rowDelivery, totals.deliveryKm && totals.deliveryEstimate ? t.rowDeliveryAbout(t.num(totals.deliveryKm), t.euro(totals.deliveryEstimate)) : t.rowDeliveryLater]] as Array<[string, ReactNode]>)
+      : []),
     [t.onInvoice, <b className="text-krent">{t.euro(totals.invoice)}</b>]
   ];
   return (

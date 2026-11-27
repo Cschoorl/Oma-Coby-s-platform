@@ -6,8 +6,11 @@
  */
 export type BusinessFulfilment = "bezorgen" | "afhalen" | "donatie";
 
-/** Binnen Amsterdam/Aalsmeer (fietsafstand) of daarbuiten: dat bepaalt de bezorgkosten. */
-export type BusinessArea = "regio" | "buiten";
+/**
+ * Bezorgzone (besluit 23 november): zone 1 en zone 2 hebben een vast tarief en een lijst plaatsen (BusinessInfo.zones);
+ * zone 3 is alles daarbuiten: op aanvraag, per kilometer vanaf de bakkerij.
+ */
+export type BusinessArea = "zone1" | "zone2" | "zone3";
 
 /**
  * Bezorgmoment: standaard tussen 9:00 en 15:00 (regulier, zonder toeslag), of op aanvraag vóór 10:00 tegen een toeslag.
@@ -54,14 +57,17 @@ export interface BusinessInfo {
   minimum: number;
   /** Maximaal aantal oliebollen per bestelling (MET + ZONDER); meer gaat via de mail. */
   maximum: number;
+  /** Vast bezorgtarief per zone, excl. btw. In zone 3 komen daar onder fixedDeliveryFrom oliebollen de kilometers bovenop. */
   fees: Record<BusinessArea, number>;
+  /** De plaatsen van zone 1 en zone 2. Een plaats die in geen van beide staat, is zone 3. */
+  zones: Record<"zone1" | "zone2", string[]>;
+  /** Zone 3 onder fixedDeliveryFrom: euro per kilometer excl. btw bovenop fees.zone3, enkele reis vanaf de bakkerij in Aalsmeer. */
+  perKm: number;
   /**
-   * Buiten de regio geldt het vaste tarief (fees.buiten) pas vanaf zo veel oliebollen (Polonaisepartner, 500).
-   * Daaronder rekenen we de bezorgkosten achteraf per kilometer (besluit Mark, 19 november).
+   * In zone 3 betaal je vanaf zo veel oliebollen (Polonaisepartner, 500) alleen het vaste tarief (fees.zone3).
+   * Daaronder komt er perKm per kilometer bovenop, op aanvraag en vastgesteld in de bevestiging (besluiten 19, 23 en 27 november).
    */
   fixedDeliveryFrom: number;
-  /** Postcodes met het lage bezorgtarief, bijv. "1000-1109, 1430-1433" (Amsterdam, Aalsmeer en Kudelstaart). */
-  regionPostcodes: string;
   surcharges: Record<BusinessMoment, number>;
   /** Bestellen kan tot en met zo veel werkdagen vóór de leverdag (3: maandag bestellen, donderdag bezorgd). */
   leadWorkdays: number;
@@ -84,7 +90,7 @@ export interface BusinessInfo {
 
 /**
  * Feestpartner: een feest op locatie met band. Totaal = feestprijs − credit per oliebol + de oliebollen tegen de gewone
- * stuksprijs. Vanaf largeFrom gasten komt er intern een muzikant bij en geldt feeLarge; de klant ziet alleen het bedrag.
+ * stuksprijs. Vanaf largeFrom gasten komt er een muzikant bij en geldt feeLarge; het formulier legt dat uit.
  */
 export interface BusinessParty extends BusinessPackage {
   key: "feest";
@@ -116,6 +122,11 @@ export interface BusinessOrderInput {
   fulfilment: BusinessFulfilment;
   area: BusinessArea | "";
   moment: BusinessMoment;
+  /**
+   * Zone 3 met kilometerprijs: kilometers enkele reis vanaf de bakkerij. Het formulier schat ze (hemelsbreed × 1,3); het Apps Script
+   * zet er bij het versturen de rijafstand voor in de plaats. Leeg als de afstand niet bekend is.
+   */
+  distanceKm?: number;
   /** YYYY-MM-DD */
   date: string;
   /** Alleen nog in oude aanvragen met afhalen. */
@@ -153,8 +164,14 @@ export interface BusinessTotals {
   oliebollen: number;
   bollen: number;
   delivery: number;
-  /** Buiten de regio en onder fixedDeliveryFrom: bezorgkosten op nacalculatie per kilometer (delivery is dan 0). */
+  /**
+   * Zone 3 onder fixedDeliveryFrom: bovenop het vaste tarief (delivery, wel in het bedrag) komt de kilometerprijs.
+   * Die is op aanvraag en zit nog niet in het bedrag.
+   */
   deliveryLater: boolean;
+  /** Bij deliveryLater, als de afstand bekend is: de kilometers en de geschatte kilometerprijs excl. btw (km × perKm). */
+  deliveryKm?: number;
+  deliveryEstimate?: number;
   surcharge: number;
   /** Feestprijs excl. btw bij Feestpartner, anders 0. */
   party: number;

@@ -5,6 +5,19 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 
 ## De pagina voor de klant
 
+> **Meeting 23 november 2026** (verwerkt). Waar de tekst hieronder iets anders zegt, geldt dit blok.
+> - **Feestpartner vanaf 510** oliebollen in plaats van 501, omdat we per 10 verkopen: 510 oliebollen maakt € 1.990.
+> - **Uitleg bij de feestprijs**: onder "Hoeveel gasten verwacht je?" staat altijd dat er vanaf 60 gasten een extra
+>   muzikant bij komt en de feestprijs dan € 3.100 is in plaats van € 2.500. Vul je 60 of meer in, dan staat het ook in
+>   de prijsopbouw ("met extra muzikant", "daarom is de feestprijs € 600 hoger") en in de bevestigingsmail.
+> - **Stap 2** opent met "Alle doordeweekse dagen vanaf maandag 7 december tot en met de eerste week van januari."
+> - **Bezorgzones** in plaats van "regio of daarbuiten": zie *Bezorgkosten* hieronder.
+> - **Blokje boven het formulier**: "Tot wanneer kan ik bestellen?" (de sluitingstijd, `zakelijk_sluiting`: maandag
+>   28 december 12:00, en minimaal 3 werkdagen van tevoren) en "Tot wanneer leveren jullie?" (de laatste dag uit
+>   Zakelijke dagen: vrijdag 8 januari). Beide volgen de instellingen.
+> - **Linkpreview**: `index.html` heeft een titel, tekst en foto (`public/delen.jpg`, 1200 × 630) voor WhatsApp en
+>   LinkedIn. Die apps lezen niets na de `#`, dus elke link naar het platform krijgt dezelfde preview.
+
 > **Feedback 10 november 2026** (verwerkt): prijs € 2,29 excl. btw (€ 2,50 incl.); pakketten heten **Danspartner**,
 > **Polonaisepartner** en **Feestpartner** (de sleutels in code en Instellingen blijven `brons`, `zilver`, `goud`); bij
 > Polonaisepartner vervangt *Oma Coby's Oliebal (limited edition) voor in de kerstboom* het kaartje van Oma; nieuw blok
@@ -16,8 +29,9 @@ Het Google Formulier "Aanvraagformulier zakelijke bestelling 2026" van Mark, als
 > Waar de tekst hieronder iets anders zegt, geldt dit blok.
 
 > **Feestpartner (13 november 2026).** Het vierde pakket, onder de drie, met een gouden rand en de Oliebollenbokaal.
-> Vanaf 501 oliebollen; feest op locatie met band voor € 2.500 excl. btw (vanaf 60 gasten € 3.100, intern een muzikant
-> extra). Van de feestprijs gaat € 1 per oliebol af, tot € 0: 501 oliebollen maakt € 1.999, 800 maakt € 1.700. Formulier,
+> Vanaf 510 oliebollen (was 501; we verkopen per 10); feest op locatie met band voor € 2.500 excl. btw (vanaf 60 gasten
+> € 3.100, er komt dan een muzikant bij; het formulier legt dat uit). Van de feestprijs gaat € 1 per oliebol af, tot € 0:
+> 510 oliebollen maakt € 1.990, 800 maakt € 1.700. Formulier,
 > overzicht en mail tonen de feestprijs en de korting als twee regels. Btw: 21% over het feest, 9% over oliebollen en
 > bezorgen. Instellingen: `zakelijk_feest_minimum`, `_prijs`, `_prijs_groot`, `_gasten_groot`, `_korting`, `_btw`.
 > Naar de klant heet het "korting"; we noemen het goede-doelendeel niet (zie het impactverhaal hieronder).
@@ -143,11 +157,50 @@ en in Max' Google Drive in de map *Oma Coby – Zakelijk bestellen*.
 
 ## Bezorgkosten
 
-De postcode bepaalt het tarief: **1000–1199** (Groot-Amsterdam: ook Diemen, Duivendrecht, Amstelveen, Ouderkerk en
-Badhoevedorp, maar ook Volendam en Edam, 113x) en **1430–1433** (Aalsmeer en Kudelstaart) betalen het lage tarief
-(`zakelijk_bezorgen_regio`, € 10), alle andere postcodes het hoge (`zakelijk_bezorgen_buiten`, € 25). Zonder postcode
-kijkt het formulier naar de plaats (Amsterdam, Aalsmeer of Kudelstaart = laag). Weesp (138x) valt erbuiten. Andere
-postcodes? Zet in **Instellingen** de sleutel `zakelijk_postcodes_regio`, bijvoorbeeld `1000-1199, 1380-1384, 1430-1433`.
+Drie zones (besluit 23 november; zone 3 aangepast op 27 november). De **plaats** bepaalt de zone; de klant kiest hem
+niet zelf.
+
+| Zone | Tarief excl. btw | Plaatsen |
+|---|---|---|
+| Zone 1 | € 10 | Aalsmeer, Kudelstaart, Amsterdam (en Amstelveen, Diemen, Duivendrecht, Ouderkerk aan de Amstel en Weesp: die betaalden via hun postcode al € 10) |
+| Zone 2 | € 25 | Haarlem, Zaandam, Noordwijk, Leiden, Alphen aan den Rijn, Utrecht, Hilversum, Huizen, Almere |
+| Zone 3 | € 25 plus € 0,35 per km | elke andere plaats (Den Haag, Rotterdam, Nieuwegein, Amersfoort, Beverwijk, Purmerend, …) |
+
+- **Een plaats van zone wisselen**: de lijsten staan in `BUSINESS_DEFAULTS.zones` (`src/config.ts`) en
+  `CONFIG.BUSINESS.zones` (`apps-script/Code.gs`), één plaats per regel; houd die twee gelijk. Zonder nieuwe versie kan
+  het ook in **Instellingen**: `zakelijk_zone1_plaatsen` en `zakelijk_zone2_plaatsen` (plaatsen met een komma ertussen;
+  de hele lijst, niet alleen de wijziging). Een wijk of dorp dat met de plaatsnaam begint ("Amsterdam Zuidoost",
+  "Almere Haven") telt mee, "Haarlemmermeer" is geen Haarlem, en "'s-Gravenhage" lezen we als "Den Haag".
+- **Zone 3 is € 25 plus de kilometers** (Max, 27 november: de kilometerprijs komt er bovenop, zodat zone 3 nooit
+  goedkoper is dan zone 2). De € 25 (`zakelijk_bezorgen_zone3_vast`) zit in het bedrag van de bestelling. De
+  kilometers zijn op aanvraag en zitten er nog niet in: € 0,35 per km (`zakelijk_bezorgen_per_km`), enkele reis vanaf
+  de bakkerij (Aalsmeerderweg 85, Aalsmeer), vastgesteld in de bevestiging. Het formulier toont vooraf een schatting:
+  hemelsbreed vanaf de bakkerij maal 1,3 (zoals de routeplanner), met het midden van de postcode van PDOK. Bij het
+  versturen rekent het Apps Script de **rijafstand** uit met de ingebouwde Maps-dienst (dezelfde als voor de routes;
+  geen API-sleutel nodig) en zet die in de Sheet.
+- **Vanaf 500 oliebollen** (Polonaisepartner, `zakelijk_bezorgen_vast_vanaf`) rekenen we in zone 3 geen kilometers:
+  alleen de vaste € 25 (besluit Mark, 19 november).
+- **In de Sheet** (Zakelijke aanvragen): `bezorgomgeving` (Zone 1, Zone 2 of Zone 3), en bij zone 3 met kilometers
+  `bezorgen_nacalculatie` ("Ja, per km (rijafstand)", of "(schatting van het formulier)" als Google geen route vond),
+  `bezorg_km` (kilometers enkele reis) en `kilometerprijs_schatting` (km × € 0,35, excl. btw; komt bovenop de € 25 en
+  zit niet in `bedrag_excl_btw`). Het script zet de twee nieuwe kolommen er zelf bij. Typ je in
+  `kilometerprijs_schatting` het afgesproken bedrag, dan toont de pagina Zakelijk dat bedrag.
+- **Beheer** ziet bij een aanvraag de zone met het tarief en, bij zone 3 met kilometers, de schatting en de herinnering
+  dat de kilometers niet in het bedrag zitten. De **bevestigingsmail** noemt de zone, de plaats en het tarief, en bij
+  zone 3 een eigen regel "Kilometers zone 3 (± 58 km × € 0,35): op aanvraag, ± € 20,30"; het bedrag volgt in de
+  bevestiging.
+- Rijen van vóór de zones: "Amsterdam/Aalsmeer" telt als zone 1, "Buiten Amsterdam" als zone 3. Bij zo'n oude rij onder
+  de 500 oliebollen zat er nog geen € 25 in het bedrag; de pagina Zakelijk toont dat ook zo. Bewerkt beheer zo'n
+  bestelling, dan wordt het bedrag opnieuw berekend met de regels van nu. De oude sleutels `zakelijk_bezorgen_regio` en
+  `zakelijk_bezorgen_buiten` werken nog zolang `zakelijk_bezorgen_zone1` en `zakelijk_bezorgen_zone3_vast` er niet
+  staan; `zakelijk_postcodes_regio` telt niet meer.
+
+Voorbeelden (excl. btw): 100 oliebollen naar Amsterdam € 229 + € 10 = € 239; naar Haarlem € 229 + € 25 = € 254; naar
+Rotterdam € 229 + € 25 = € 254, en de kilometers komen er op aanvraag bij (± 58 km × € 0,35 = € 20,30, dus samen
+± € 45,30 bezorgen); 500 oliebollen naar Rotterdam € 1.145 + € 25 = € 1.170, zonder kilometers.
+
+Het script rekent de zone bij versturen zelf opnieuw uit (`areaFor_`); wat de browser meestuurt telt niet. Past beheer
+bij een zakelijke bestelling de plaats aan, dan worden zone en bedrag opnieuw berekend, en bij zone 3 de rijafstand.
 
 ## Bezorgdagen en deadline
 
@@ -182,9 +235,6 @@ LinkedIn, Instagram, pers of nieuws, Google, anders). Een link met `?via=naam` (
 `wall_of_fame`, `certificaat`, `naam_certificaat`, `linkedin_badge`, `herkomst`, `ambassadeur`, `via_link`; het script
 zet ze er zelf bij.
 
-Het script rekent het gebied bij versturen zelf opnieuw uit (`areaFor_`); wat de browser meestuurt telt niet. Past beheer bij
-een zakelijke bestelling de postcode of plaats aan, dan worden gebied en bedrag opnieuw berekend.
-
 ## Rekenen
 
 `businessTotals` in `src/features/business/business.ts` en `businessTotals_` in `apps-script/Code.gs` rekenen hetzelfde;
@@ -200,6 +250,13 @@ Rekenvoorbeeld: 110 MET + 40 ZONDER (Polonaisepartner), bezorgen in Diemen, 20 g
 17 ouderen.
 
 ## Nog afstemmen met Mark
+
+- Bezorgzones (23 november): valt **Den Haag** onder € 25 (nu zone 3) en hoort **Almere** bij zone 2 (nu wel)? Eén
+  regel in de lijsten, of `zakelijk_zone2_plaatsen` in Instellingen.
+- Plaatsen vlak bij Aalsmeer die in geen lijst staan (Uithoorn, Hoofddorp, Schiphol) zijn zone 3 en betalen € 25 plus
+  een paar kilometer, meer dan Amsterdam (€ 10). In zone 1 of 2 zetten?
+- Amstelveen, Diemen, Duivendrecht, Ouderkerk aan de Amstel en Weesp staan in zone 1 omdat ze al € 10 betaalden.
+  Volendam, Edam en Badhoevedorp (ook 11xx) niet meer: die zijn nu zone 3.
 
 - De extra's per pakket komen uit de ladder in het bouwplan; bevestigen dat ze zo kloppen (de kerstballen bij Zilver en
   de bezorging door heel Nederland bij Goud staan er nog niet in).

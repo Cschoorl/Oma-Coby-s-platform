@@ -57,15 +57,15 @@ export interface BusinessInfo {
   minimum: number;
   /** Maximaal aantal oliebollen per bestelling (MET + ZONDER); meer gaat via de mail. */
   maximum: number;
-  /** Vast bezorgtarief per zone, excl. btw. zone3 is het vaste tarief vanaf fixedDeliveryFrom oliebollen. */
+  /** Vast bezorgtarief per zone, excl. btw. In zone 3 komen daar onder fixedDeliveryFrom oliebollen de kilometers bovenop. */
   fees: Record<BusinessArea, number>;
   /** De plaatsen van zone 1 en zone 2. Een plaats die in geen van beide staat, is zone 3. */
   zones: Record<"zone1" | "zone2", string[]>;
-  /** Zone 3 onder fixedDeliveryFrom: euro per kilometer excl. btw, enkele reis vanaf de bakkerij in Aalsmeer. */
+  /** Zone 3 onder fixedDeliveryFrom: euro per kilometer excl. btw bovenop fees.zone3, enkele reis vanaf de bakkerij in Aalsmeer. */
   perKm: number;
   /**
-   * In zone 3 geldt het vaste tarief (fees.zone3) pas vanaf zo veel oliebollen (Polonaisepartner, 500).
-   * Daaronder is het op aanvraag: perKm per kilometer, vastgesteld in de bevestiging (besluiten Mark, 19 en 23 november).
+   * In zone 3 betaal je vanaf zo veel oliebollen (Polonaisepartner, 500) alleen het vaste tarief (fees.zone3).
+   * Daaronder komt er perKm per kilometer bovenop, op aanvraag en vastgesteld in de bevestiging (besluiten 19, 23 en 27 november).
    */
   fixedDeliveryFrom: number;
   surcharges: Record<BusinessMoment, number>;
@@ -123,7 +123,7 @@ export interface BusinessOrderInput {
   area: BusinessArea | "";
   moment: BusinessMoment;
   /**
-   * Zone 3 op aanvraag: kilometers enkele reis vanaf de bakkerij. Het formulier schat ze (hemelsbreed × 1,3); het Apps Script
+   * Zone 3 met kilometerprijs: kilometers enkele reis vanaf de bakkerij. Het formulier schat ze (hemelsbreed × 1,3); het Apps Script
    * zet er bij het versturen de rijafstand voor in de plaats. Leeg als de afstand niet bekend is.
    */
   distanceKm?: number;
@@ -164,9 +164,12 @@ export interface BusinessTotals {
   oliebollen: number;
   bollen: number;
   delivery: number;
-  /** Zone 3 onder fixedDeliveryFrom: bezorgkosten op aanvraag per kilometer; ze zitten niet in het bedrag (delivery is 0). */
+  /**
+   * Zone 3 onder fixedDeliveryFrom: bovenop het vaste tarief (delivery, wel in het bedrag) komt de kilometerprijs.
+   * Die is op aanvraag en zit nog niet in het bedrag.
+   */
   deliveryLater: boolean;
-  /** Bij deliveryLater, als de afstand bekend is: de kilometers en de geschatte bezorgkosten excl. btw (km × perKm). */
+  /** Bij deliveryLater, als de afstand bekend is: de kilometers en de geschatte kilometerprijs excl. btw (km × perKm). */
   deliveryKm?: number;
   deliveryEstimate?: number;
   surcharge: number;

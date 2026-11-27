@@ -215,7 +215,8 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   // Grote bedrijven bestellen ruim meer dan 500; boven de 10.000 stemmen we het eerst af.
   maximum: 10000,
   // Bezorgzones (besluit 23 november). Zone 1 en 2: een vast tarief. Zone 3 is elke plaats die hieronder niet staat:
-  // op aanvraag, € 0,35 per km (perKm), behalve vanaf 500 oliebollen (fixedDeliveryFrom), dan vast fees.zone3.
+  // € 25 (fees.zone3) plus € 0,35 per km (perKm, op aanvraag); vanaf 500 oliebollen (fixedDeliveryFrom) alleen de € 25.
+  // De kilometers komen er bovenop zodat zone 3 nooit goedkoper is dan zone 2 (Max, 27 november).
   fees: { zone1: 10, zone2: 25, zone3: 25 },
   // Eén plaats per regel: verplaats of verwijder de regel om een plaats van zone te laten wisselen. Een wijk of dorp dat met
   // de plaatsnaam begint ("Amsterdam Zuidoost", "Almere Haven") telt mee; "'s-Gravenhage" lezen we als "Den Haag".

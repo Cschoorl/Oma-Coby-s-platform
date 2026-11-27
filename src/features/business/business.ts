@@ -201,9 +201,10 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const bollen = cents(oliebollen * info.price);
   // Niets te bezorgen zonder oliebollen.
   const bezorgen = input.fulfilment === "bezorgen" && oliebollen > 0;
-  // Zone 3 onder fixedDeliveryFrom: op aanvraag per kilometer, dus nog niet in het bedrag. De schatting staat er los bij.
+  // Elke zone heeft een vast tarief. In zone 3 komt daar onder fixedDeliveryFrom de kilometerprijs bovenop: die is op
+  // aanvraag en zit nog niet in het bedrag; de schatting staat er los bij.
   const deliveryLater = bezorgen && input.area === "zone3" && oliebollen < info.fixedDeliveryFrom;
-  const delivery = bezorgen && input.area && !deliveryLater ? info.fees[input.area] : 0;
+  const delivery = bezorgen && input.area ? info.fees[input.area] : 0;
   const km = deliveryLater && input.distanceKm && input.distanceKm > 0 ? Math.round(input.distanceKm) : 0;
   const surcharge = bezorgen ? info.surcharges[input.moment] ?? 0 : 0;
   // Feestpartner: de feestprijs (min € 1 per oliebol) komt bovenop de oliebollen, met een eigen btw-tarief.

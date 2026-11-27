@@ -267,12 +267,12 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
                       ""
                     ) : b.totals.deliveryLater ? (
                       <>
-                        {areaName(b.area)}, op aanvraag:{" "}
+                        {areaName(b.area)}: {formatEuro(b.totals.delivery)} plus kilometers,{" "}
                         {b.totals.deliveryKm && b.totals.deliveryEstimate
                           ? `geschat ${formatEuro(b.totals.deliveryEstimate)} (${formatNumber(b.totals.deliveryKm)} km enkele reis vanaf de bakkerij)`
-                          : "per km vanaf de bakkerij; de afstand is niet uitgerekend"}
+                          : "de afstand is niet uitgerekend"}
                         <br />
-                        <span className="text-xs text-muted">Niet in het bedrag. Noem de bezorgkosten in je bevestiging en zet ze zelf op de factuur.</span>
+                        <span className="text-xs text-muted">De kilometers zitten niet in het bedrag. Noem ze in je bevestiging en zet ze zelf op de factuur.</span>
                       </>
                     ) : (
                       `${areaName(b.area)}: ${formatEuro(b.totals.delivery)}`

@@ -116,8 +116,9 @@ const CONFIG = {
     maximum: 10000,
     /**
      * Bezorgzones (besluit 23 november). Zone 1 en 2: een vast tarief en een lijst plaatsen. Zone 3 is elke andere plaats:
-     * op aanvraag, perKm per kilometer (enkele reis vanaf START_ADDRESS), behalve vanaf fixedDeliveryFrom oliebollen, dan
-     * vast fees.zone3 (besluit Mark, 19 november). Zelfde getallen en plaatsen als BUSINESS_DEFAULTS in src/config.ts.
+     * fees.zone3 plus perKm per kilometer (enkele reis vanaf START_ADDRESS, op aanvraag); vanaf fixedDeliveryFrom oliebollen
+     * alleen fees.zone3 (besluit Mark, 19 november). De kilometers komen er bovenop, zodat zone 3 nooit goedkoper is dan
+     * zone 2 (Max, 27 november). Zelfde getallen en plaatsen als BUSINESS_DEFAULTS in src/config.ts.
      * Instellingen: zakelijk_bezorgen_zone1, _zone2, _zone3_vast, zakelijk_bezorgen_per_km, zakelijk_bezorgen_vast_vanaf en
      * de plaatsen in zakelijk_zone1_plaatsen en zakelijk_zone2_plaatsen (gescheiden door komma's).
      */
@@ -270,8 +271,9 @@ const TABS = {
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op',
     'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link', 'aanleiding',
     'gasten', 'feest_bedrag', 'herinneren_volgend_jaar', 'vaste_partner', 'bezorgen_nacalculatie',
-    // Zone 3 op aanvraag: kilometers enkele reis vanaf de bakkerij en de bezorgkosten daarbij (km × € 0,35), excl. btw.
-    'bezorg_km', 'bezorgkosten_schatting']],
+    // Zone 3: kilometers enkele reis vanaf de bakkerij en de kilometerprijs daarbij (km × € 0,35), excl. btw. Die komt
+    // bovenop het vaste tarief van zone 3 en zit niet in bedrag_excl_btw.
+    'bezorg_km', 'kilometerprijs_schatting']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
@@ -1777,7 +1779,7 @@ function formatCell_(date, field) {
 
 /** De zone zoals hij in de Sheet staat (kolom bezorgomgeving). Zelfde als areaLabel in business.ts. */
 const BUSINESS_AREAS = { zone1: 'Zone 1', zone2: 'Zone 2', zone3: 'Zone 3' };
-/** Rijen van vóór de zones (23 november): de regio was zone 1, daarbuiten gold wat nu voor zone 3 geldt. */
+/** Rijen van vóór de zones (23 november): de regio was zone 1, daarbuiten is nu zone 3. */
 const BUSINESS_AREAS_OLD = { 'Amsterdam/Aalsmeer': 'zone1', 'Buiten Amsterdam': 'zone3' };
 const BUSINESS_MOMENTS = { regulier: 'Tussen 9:00 en 15:00', voor10: 'Vóór 10:00 (op aanvraag)', voor9: 'Vóór 9:00' };
 /** Wat er in de Sheet staat → sleutel, ook voor oude rijen ("Tussen 9:00 en 12:30", "Vóór 10:00"). */
@@ -1816,7 +1818,7 @@ Object.assign(HANDLERS, {
     const problem = validateBusiness_(input, info);
     if (problem) throw new Error(problem);
     let totals = businessTotals_(input, info);
-    // Zone 3 op aanvraag: de rijafstand vanaf de bakkerij. Lukt dat niet, dan blijft de schatting van het formulier staan.
+    // Zone 3 met kilometerprijs: de rijafstand vanaf de bakkerij. Lukt dat niet, dan blijft de schatting van het formulier staan.
     let kmFrom = '';
     if (totals.deliveryLater) {
       const driven = businessDrivingKm_(input.street, input.postalCode, input.city);
@@ -1848,7 +1850,7 @@ Object.assign(HANDLERS, {
         aanleiding: BUSINESS_OCCASIONS[input.occasion] || '',
         herinneren_volgend_jaar: yes(input.remindNextYear), vaste_partner: yes(input.multiYear),
         bezorgen_nacalculatie: totals.deliveryLater ? 'Ja, per km (' + kmFrom + ')' : '',
-        bezorg_km: totals.deliveryKm || '', bezorgkosten_schatting: totals.deliveryEstimate || ''
+        bezorg_km: totals.deliveryKm || '', kilometerprijs_schatting: totals.deliveryEstimate || ''
       });
       bump_();
       return id;
@@ -2173,9 +2175,10 @@ function businessTotals_(i, info) {
   const oliebollen = i.withRaisins + i.withoutRaisins;
   const bollen = cents(oliebollen * info.price);
   const bezorgen = i.fulfilment === 'bezorgen' && oliebollen > 0;
-  // Zone 3 onder fixedDeliveryFrom: op aanvraag per kilometer, dus nog niet in het bedrag. De schatting staat er los bij.
+  // Elke zone heeft een vast tarief. In zone 3 komt daar onder fixedDeliveryFrom de kilometerprijs bovenop: die is op
+  // aanvraag en zit nog niet in het bedrag; de schatting staat er los bij.
   const deliveryLater = bezorgen && i.area === 'zone3' && oliebollen < info.fixedDeliveryFrom;
-  const delivery = bezorgen && i.area && !deliveryLater ? info.fees[i.area] : 0;
+  const delivery = bezorgen && i.area ? info.fees[i.area] : 0;
   const km = deliveryLater && i.distanceKm > 0 ? Math.round(i.distanceKm) : 0;
   const surcharge = bezorgen ? info.surcharges[i.moment] || 0 : 0;
   // Feestpartner: de feestprijs bovenop de oliebollen, met een eigen btw-tarief.
@@ -2300,6 +2303,8 @@ function readBusiness_() {
       donation: num_(r.donatie_bedrag), flyers: truthy_(r.flyers), fulfilment: fulfilment,
       date: isoDate_(r.leverdatum), moment: businessMomentKey_(r.bezorgmoment),
       area: key(BUSINESS_AREAS, String(r.bezorgomgeving)) || BUSINESS_AREAS_OLD[String(r.bezorgomgeving).trim()] || '',
+      // Rijen van vóór de zones: buiten de regio onder de 500 zat er nog geen vast tarief in het bedrag.
+      oldArea: !!BUSINESS_AREAS_OLD[String(r.bezorgomgeving).trim()],
       distanceKm: num_(r.bezorg_km), street: String(r.adres || ''), postalCode: String(r.postcode || ''),
       city: String(r.plaats || ''), pickupAgreed: truthy_(r.afhalen_afgestemd), remark: String(r.opmerking || ''),
       reason: String(r.reden || ''), handledBy: String(r.behandeld_door || ''), handledAt: String(r.behandeld_op || ''),
@@ -2311,8 +2316,8 @@ function readBusiness_() {
       totals: {
         oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, party: num_(r.feest_bedrag), subtotal: subtotal, vat: num_(r.btw), total: total,
         donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen),
-        // What the Sheet says wins: beheer may have typed the agreed delivery costs over the estimate.
-        deliveryEstimate: num_(r.bezorgkosten_schatting)
+        // What the Sheet says wins: beheer may have typed the agreed amount for the kilometres over the estimate.
+        deliveryEstimate: num_(r.kilometerprijs_schatting)
       }
     };
   }).map(function (b) {
@@ -2320,7 +2325,8 @@ function readBusiness_() {
     info = info || businessInfo_();
     const t = businessTotals_(b, info);
     b.totals.bollen = t.bollen;
-    b.totals.delivery = t.delivery;
+    b.totals.delivery = b.oldArea && t.deliveryLater ? 0 : t.delivery;
+    delete b.oldArea;
     b.totals.deliveryLater = t.deliveryLater;
     b.totals.deliveryKm = t.deliveryKm;
     b.totals.deliveryEstimate = t.deliveryLater ? b.totals.deliveryEstimate || t.deliveryEstimate : 0;
@@ -2399,11 +2405,12 @@ function businessMailData_(id, i, t, info) {
     }
     costs.push([numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']);
     costs.push(['Poedersuiker', 'gratis', '']);
-    // Zone 3 op aanvraag: niet in het bedrag; de schatting (km × prijs per km) staat erbij als de afstand bekend is.
-    costs.push(t.deliveryLater
-      ? ['Bezorgen, zone 3' + (t.deliveryKm ? ' (± ' + numberNl_(t.deliveryKm) + ' km × ' + euroNl_(info.perKm) + ')' : ' (' + euroNl_(info.perKm) + ' per km)'),
-        t.deliveryKm ? 'op aanvraag, ± ' + euroNl_(t.deliveryEstimate) : 'op aanvraag', '']
-      : ['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area] + ' (' + i.city + ')', euroNl_(t.delivery), '']);
+    costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area] + ' (' + i.city + ')', euroNl_(t.delivery), '']);
+    // Zone 3: de kilometers komen er nog bij en zitten niet in het bedrag; de schatting staat erbij als de afstand bekend is.
+    if (t.deliveryLater) {
+      costs.push(['Kilometers zone 3' + (t.deliveryKm ? ' (± ' + numberNl_(t.deliveryKm) + ' km × ' + euroNl_(info.perKm) + ')' : ' (' + euroNl_(info.perKm) + ' per km)'),
+        t.deliveryKm ? 'op aanvraag, ± ' + euroNl_(t.deliveryEstimate) : 'op aanvraag', '']);
+    }
     if (t.surcharge) costs.push([BUSINESS_MOMENTS[i.moment], euroNl_(t.surcharge), '']);
     costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted']);
     if (t.party) {
@@ -2450,7 +2457,7 @@ function businessMailData_(id, i, t, info) {
             : i.moment === 'voor10'
             ? ['We kijken je bestelling na', 'en laten binnen 2 werkdagen weten of vóór 10:00 lukt. Lukt het niet, dan bezorgen we tussen 9:00 en 15:00 en vervalt de toeslag.']
             : t.deliveryLater
-            ? ['We kijken je bestelling na', 'en bevestigen hem per mail. Daarin staan ook de bezorgkosten: ' + euroNl_(info.perKm) + ' per km vanaf onze bakkerij in Aalsmeer; ze zitten nog niet in het bedrag hierboven.']
+            ? ['We kijken je bestelling na', 'en bevestigen hem per mail. Daarin staan ook de kilometers: ' + euroNl_(info.perKm) + ' per km vanaf onze bakkerij in Aalsmeer, bovenop de ' + euroNl_(t.delivery) + ' bezorgkosten. Die kilometers zitten nog niet in het bedrag hierboven.']
             : ['We kijken je bestelling na', 'en bevestigen hem per mail.'],
           ['Op ' + when + ' bakken we vers', 'en komen we ' + moment + ' langs op ' + i.street + '. Met gratis poedersuiker en een kaartje met ons verhaal.'],
           ['De factuur volgt per mail', 'naar ' + i.invoiceEmail + '. Je betaalt achteraf.']
@@ -3046,17 +3053,17 @@ Object.assign(HANDLERS, {
           throw new Error('Kies een bezorgmoment: ' + BUSINESS_MOMENTS.regulier + ' of ' + BUSINESS_MOMENTS.voor10 + '.');
         }
         let t = businessTotals_(input, info);
-        // Zone 3 op aanvraag: bij een ander adres (of als de afstand er nog niet stond) de rijafstand opnieuw. Verder
-        // blijven de kolommen staan: beheer kan de afgesproken bezorgkosten over de schatting hebben gezet.
+        // Zone 3 met kilometerprijs: bij een ander adres (of als de afstand er nog niet stond) de rijafstand opnieuw. Verder
+        // blijven de kolommen staan: beheer kan het afgesproken bedrag over de schatting hebben gezet.
         const moved = !!(byField.address || byField.postalCode || byField.city);
         if (!t.deliveryLater) {
-          Object.assign(set, { bezorgen_nacalculatie: '', bezorg_km: '', bezorgkosten_schatting: '' });
+          Object.assign(set, { bezorgen_nacalculatie: '', bezorg_km: '', kilometerprijs_schatting: '' });
         } else if (moved || !b.totals.deliveryLater || !b.distanceKm) {
           input.distanceKm = businessDrivingKm_(byField.address ? byField.address.to : b.street, byField.postalCode ? byField.postalCode.to : b.postalCode, city);
           t = businessTotals_(input, info);
           Object.assign(set, {
             bezorgen_nacalculatie: 'Ja, per km (' + (t.deliveryKm ? 'rijafstand' : 'afstand onbekend') + ')',
-            bezorg_km: t.deliveryKm || '', bezorgkosten_schatting: t.deliveryEstimate || ''
+            bezorg_km: t.deliveryKm || '', kilometerprijs_schatting: t.deliveryEstimate || ''
           });
         }
         Object.assign(set, {

@@ -969,10 +969,9 @@ function Summary({ input, totals, info }: { input: BusinessOrderInput; totals: B
       <div className="my-1.5 border-t border-lijn" />
       {pkg?.key === "feest" ? <PartyLines input={input} info={info} /> : null}
       <Line label={t.bollenLine(t.num(totals.oliebollen), t.euro(info.price))} value={t.euro(totals.bollen)} />
-      <Line
-        label={!input.area ? t.delivery : totals.deliveryEstimate ? t.deliveryToAbout(t.area[input.area], t.euro(totals.deliveryEstimate)) : t.deliveryTo(t.area[input.area])}
-        value={!input.area ? "–" : totals.deliveryLater ? t.deliveryLater : t.euro(totals.delivery)}
-      />
+      <Line label={input.area ? t.deliveryTo(t.area[input.area]) : t.delivery} value={input.area ? t.euro(totals.delivery) : "–"} />
+      {/* Zone 3: de kilometers komen er nog bij en zitten niet in het totaal. */}
+      {totals.deliveryLater ? <Line label={totals.deliveryEstimate ? t.kmLineAbout(t.euro(totals.deliveryEstimate)) : t.kmLine} value={t.deliveryLater} /> : null}
       {totals.surcharge ? <Line label={t.moment[input.moment]} value={t.euro(totals.surcharge)} /> : null}
       <Line label={t.subtotal} value={t.euro(totals.subtotal)} muted />
       {pkg?.key === "feest" ? (
@@ -1126,7 +1125,7 @@ export function BusinessOrderPage() {
   const now = previewNow() ?? new Date();
   const only = donationOnly(input);
   const area = only ? "" : areaFor(input.city, info.zones);
-  // Zone 3 onder het vaste tarief: op aanvraag per kilometer. Dan schatten we de afstand vanaf de bakkerij uit de postcode.
+  // Zone 3 onder fixedDeliveryFrom: bovenop het vaste tarief komen de kilometers. Die schatten we vanaf de bakkerij uit de postcode.
   const km = useDistanceKm(input.postalCode, area === "zone3" && input.withRaisins + input.withoutRaisins < info.fixedDeliveryFrom);
   const order: BusinessOrderInput = {
     ...input,
@@ -1644,11 +1643,13 @@ export function BusinessOrderPage() {
                         <span className="text-sm font-bold">{t.area[area]}</span>
                         <span className="text-xs text-oliebol">
                           {input.city.trim()} ·{" "}
-                          {totals.deliveryLater ? t.areaPerKm(t.euro(info.perKm)) : area === "zone3" ? t.areaFixedFrom(t.num(info.fixedDeliveryFrom)) : t.areaFixed}
+                          {totals.deliveryLater ? t.areaPerKm(t.euro(info.fees.zone3), t.euro(info.perKm)) : area === "zone3" ? t.areaFixedFrom(t.num(info.fixedDeliveryFrom)) : t.areaFixed}
                         </span>
                       </span>
                       <span className="shrink-0 text-sm font-bold tabular-nums text-oliebol">
-                        {totals.deliveryEstimate ? t.about(t.euro(totals.deliveryEstimate)) : totals.deliveryLater ? t.deliveryLater : t.euro(totals.delivery)}
+                        {totals.deliveryLater
+                          ? t.feePlus(t.euro(totals.delivery), totals.deliveryEstimate ? t.about(t.euro(totals.deliveryEstimate)) : t.kilometers)
+                          : t.euro(totals.delivery)}
                       </span>
                     </>
                   ) : (
@@ -1660,8 +1661,8 @@ export function BusinessOrderPage() {
                     <>
                       {totals.deliveryKm && totals.deliveryEstimate
                         ? t.deliveryEstimate(t.num(totals.deliveryKm), t.euro(info.perKm), t.euro(totals.deliveryEstimate))
-                        : t.deliveryLaterIntro(t.euro(info.perKm))}{" "}
-                      {t.deliveryLaterHint(t.num(info.fixedDeliveryFrom), t.euro(info.fees.zone3))}
+                        : t.deliveryLaterIntro(t.euro(info.fees.zone3), t.euro(info.perKm))}{" "}
+                      {t.deliveryLaterHint(t.euro(info.fees.zone3), t.num(info.fixedDeliveryFrom))}
                     </>
                   ) : (
                     t.areaHint
@@ -1678,7 +1679,7 @@ export function BusinessOrderPage() {
                       </div>
                     ))}
                     <div>
-                      <dt className="inline font-bold text-krent">{t.zoneLine(t.area.zone3, t.zoneRest(t.euro(info.perKm)))}:</dt>{" "}
+                      <dt className="inline font-bold text-krent">{t.zoneLine(t.area.zone3, t.zoneRest(t.euro(info.fees.zone3), t.euro(info.perKm)))}:</dt>{" "}
                       <dd className="inline">{t.zoneRestPlaces}</dd>
                     </div>
                   </dl>
@@ -2001,7 +2002,7 @@ function Confirmation({ done, info, onAnother, onRestart }: { done: Done; info: 
     ...(party ? ([[t.rowParty, t.rowPartyValue(t.num(input.guests))]] as Array<[string, ReactNode]>) : []),
     ...(input.donation ? ([[t.rowDonated, t.rowDonatedValue(t.euro(totals.donation))]] as Array<[string, ReactNode]>) : []),
     ...(only ? [] : ([[t.rowVisit, <>{t.longDay(input.date)}, {t.moment[input.moment].toLowerCase()}<br />{input.street}, {input.postalCode} {input.city}</>]] as Array<[string, ReactNode]>)),
-    // Zone 3 op aanvraag: de bezorgkosten zitten niet in het bedrag, dus dat zeggen we erbij.
+    // Zone 3: de kilometers zitten nog niet in het bedrag, dus dat zeggen we erbij.
     ...(totals.deliveryLater
       ? ([[t.rowDelivery, totals.deliveryKm && totals.deliveryEstimate ? t.rowDeliveryAbout(t.num(totals.deliveryKm), t.euro(totals.deliveryEstimate)) : t.rowDeliveryLater]] as Array<[string, ReactNode]>)
       : []),

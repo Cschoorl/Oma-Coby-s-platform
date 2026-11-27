@@ -259,12 +259,20 @@ function ShiftChip({ shift, lane, onPick, p }: { shift: RosterShift; lane: Lane;
   const hints = hintsFor(shift, p.person(shift.name), lane, p.roster, p.lanesOn(shift.date));
   const ownTime = shift.start !== lane.start || shift.end !== lane.end;
   return (
-    <button
-      type="button"
+    // A span, not a button: Firefox does not start a drag on a button.
+    <span
+      role="button"
+      tabIndex={0}
       draggable
       onDragStart={(e) => p.startDrag(e, { kind: "shift", id: shift.id })}
       onDragEnd={p.endDrag}
       onClick={onPick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick();
+        }
+      }}
       title={[`${shift.name}, ${shift.start}–${shift.end}`, shift.note, ...hints].filter(Boolean).join(" · ")}
       className={`inline-flex max-w-full cursor-grab items-center gap-1 rounded-full bg-vul py-[2px] pl-[2px] pr-2 text-[11px] font-bold text-krent hover:bg-vul-2 active:cursor-grabbing ${
         p.drag?.kind === "shift" && p.drag.id === shift.id ? "opacity-50" : ""
@@ -278,7 +286,7 @@ function ShiftChip({ shift, lane, onPick, p }: { shift: RosterShift; lane: Lane;
           ~
         </span>
       ) : null}
-    </button>
+    </span>
   );
 }
 

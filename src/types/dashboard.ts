@@ -184,8 +184,42 @@ export interface AgendaSlot {
   time: string;
   /** E.g. "Pick-up Schaatsbaan" for the Oliebollenbar. */
   location: string;
-  /** People needed; null = the default for the task. */
+  /** People needed (0 = nobody); null = the default for the task. */
   needed: number | null;
+}
+
+/**
+ * One planned shift (tab "Rooster"): who works when, with the final times. The rooster, as opposed to
+ * the availability from the signup form.
+ */
+export interface RosterShift {
+  id: string;
+  /** YYYY-MM-DD */
+  date: string;
+  role: VolunteerRole;
+  /** "ochtend", "middag", "avond" or "" for the whole shift of that task. */
+  part: string;
+  /** "7:00" and "9:30": the final times, which may differ from the standard shift. */
+  start: string;
+  end: string;
+  /** The volunteer by name: the row number of a signup shifts when a row is removed from the Sheet. */
+  name: string;
+  /** Event of the Oliebollenbar, e.g. "Olieborrel, Het Amstelhuis". */
+  location: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
+/** What the planner fills in for a shift; the id is made on the platform, so a change can follow at once. */
+export type RosterShiftInput = Omit<RosterShift, "by" | "at">;
+
+/** How many people one shift needs on one day; written to the column "nodig" of the tab Agenda. */
+export interface NeededInput {
+  date: string;
+  role: VolunteerRole;
+  part: string;
+  needed: number;
 }
 
 export interface ReceiptFields {
@@ -263,6 +297,8 @@ export interface DashboardState {
   kmRate: number | null;
   delivery: Record<string, DeliveryState>;
   agenda: AgendaSlot[];
+  /** The rooster: who is planned on which shift. Names and times only, no contact details. */
+  roster: RosterShift[];
   /** Zakelijke aanvragen van het bestelformulier; alleen voor beheer. */
   business: BusinessOrder[];
   /** Wall of fame met logostatus en toestemming; alleen voor beheer (openbaar: getWallOfFame). */
@@ -289,7 +325,10 @@ export interface BakeShare {
   withRaisins: number;
   withoutRaisins: number;
   total: number;
-  channel: "whatsapp" | "email" | "deelmenu";
+  /** "gekopieerd": the message was copied and pasted into a chat by hand. */
+  channel: "whatsapp" | "email" | "deelmenu" | "gekopieerd";
+  /** The remark for the baker that went along in the message; "" or missing when there was none. */
+  note?: string;
   by: string;
   /** "2026-12-29 16:05:00". */
   at: string;

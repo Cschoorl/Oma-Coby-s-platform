@@ -10,6 +10,9 @@ import type {
   CostStatus,
   DeliveryState,
   DashboardState,
+  NeededInput,
+  RosterShift,
+  RosterShiftInput,
   OrderMeta,
   PackingPart,
   PackingState,
@@ -25,7 +28,7 @@ import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus, Partypot } from "../types/business";
 import type { PublicWall, WallEntry, WallEntryPatch } from "../types/wallOfFame";
-import { BUSINESS_DEFAULTS, PARTYPOT_GOAL } from "../config";
+import { BAR_EVENTS, BUSINESS_DEFAULTS, PARTYPOT_GOAL, isoDayLabel } from "../config";
 import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, packageSplit, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { repairCounts, repairVolunteer } from "../lib/volunteerDays";
@@ -222,7 +225,7 @@ export interface Backend {
   /** Inpakken › Opmerkingen: tick an item off as processed (or open it again). */
   setPackNoteDone(session: Session, itemId: string, orderId: string, done: boolean): Promise<SavedVersion | void>;
   /** Beheer › Bakkerij: save that the counts of a day were shared, and how. */
-  logBakeShare(session: Session, share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }): Promise<SavedVersion | void>;
+  logBakeShare(session: Session, share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"]; note?: string }): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
@@ -254,6 +257,11 @@ export interface Backend {
   searchWallLogo(session: Session, key: string): Promise<{ message: string }>;
   /** Beheer: bring the wall up to date with the confirmed requests now, without waiting for a confirmation. */
   refreshWall(session: Session): Promise<{ added: string[] }>;
+  /** Beheer › Rooster: plan someone on a shift, or change a planned shift (day, task, times). */
+  saveShift(session: Session, shift: RosterShiftInput): Promise<SavedVersion | void>;
+  removeShift(session: Session, id: string): Promise<SavedVersion | void>;
+  /** Beheer › Rooster: how many people a shift needs, for one or more days at once. */
+  setNeeded(session: Session, entries: NeededInput[]): Promise<SavedVersion | void>;
 }
 
 /** Akkoord per mail: which company, and what counts for the wall. */
@@ -265,6 +273,17 @@ export interface WallMailConsent {
   orderIds: string[];
   firstOrderAt: string;
   domain: string;
+}
+
+const ROSTER_TIME = /^\d{1,2}:\d{2}$/;
+
+/** The same checks as the script (saveShift): a real day, a task, times and a name. */
+function checkShift(shift: RosterShiftInput, others: RosterShift[]) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(shift.date)) throw new Error("Kies een dag.");
+  if (!shift.name.trim()) throw new Error("Kies een vrijwilliger.");
+  if (!ROSTER_TIME.test(shift.start) || !ROSTER_TIME.test(shift.end)) throw new Error("Vul de tijden in als 7:00 en 9:30.");
+  const same = others.find((r) => r.id !== shift.id && r.date === shift.date && r.role === shift.role && r.part === shift.part && r.name.trim().toLowerCase() === shift.name.trim().toLowerCase());
+  if (same) throw new Error(`${shift.name} staat al op deze dienst.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +405,7 @@ function createAppsScriptBackend(url: string): Backend {
         ...rest,
         delivery: rest.delivery ?? {},
         agenda: rest.agenda ?? [],
+        roster: rest.roster ?? [],
         kmRate: rest.kmRate ?? null,
         costs: (rest.costs ?? []).map(withCostDefaults),
         routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
@@ -490,7 +510,16 @@ function createAppsScriptBackend(url: string): Backend {
       // An older script without businessInfo: the form still works with the defaults from config.ts.
       try {
         // The price follows the bouwplan, also when an older script still sends the one from Instellingen.
-        return { ...BUSINESS_DEFAULTS, ...(await call<Partial<BusinessInfo>>("businessInfo", {})), price: BUSINESS_DEFAULTS.price };
+        const remote = await call<Partial<BusinessInfo>>("businessInfo", {});
+        // A script from before the delivery zones sends other fees and no zones: then the defaults fill the gaps.
+        return {
+          ...BUSINESS_DEFAULTS,
+          ...remote,
+          price: BUSINESS_DEFAULTS.price,
+          fees: { ...BUSINESS_DEFAULTS.fees, ...remote.fees },
+          zones: { ...BUSINESS_DEFAULTS.zones, ...remote.zones },
+          perKm: remote.perKm ?? BUSINESS_DEFAULTS.perKm
+        };
       } catch {
         return BUSINESS_DEFAULTS;
       }
@@ -523,6 +552,17 @@ function createAppsScriptBackend(url: string): Backend {
     },
     async refreshWall(session) {
       return call<{ added: string[] }>("refreshWall", withSession(session, {}));
+    },
+    async saveShift(session, shift) {
+      // "name" in a request is who is logged in; the volunteer on the shift goes as "volunteer".
+      const { name, ...rest } = shift;
+      return call<SavedVersion>("saveShift", withSession(session, { ...rest, volunteer: name }));
+    },
+    async removeShift(session, id) {
+      return call<SavedVersion>("removeShift", withSession(session, { id }));
+    },
+    async setNeeded(session, entries) {
+      return call<SavedVersion>("setNeeded", withSession(session, { entries }));
     }
   };
 }
@@ -560,7 +600,7 @@ export function isValidIban(value: string): boolean {
 
 export const DEMO_CODES: Record<Role, string> = { beheer: "beheer", inpakker: "inpak", bezorger: "bezorg" };
 
-const DEMO_KEY = "omacoby-demo-v5";
+const DEMO_KEY = "omacoby-demo-v6";
 
 interface DemoStore {
   version: number;
@@ -584,6 +624,9 @@ interface DemoStore {
   bakedMigrated?: boolean;
   /** Orders and pop-up stock added on the platform (demo). */
   createdOrders: Order[];
+  /** Beheer › Rooster: the planned shifts, and how many people a shift needs where that differs from the default. */
+  roster: RosterShift[];
+  agenda: AgendaSlot[];
 }
 
 const none: RoleAvailability = { wants: false, days: [] };
@@ -600,8 +643,7 @@ function demoVolunteers(): Volunteer[] {
       city: "Aalsmeer",
       phone: "0600000001",
       email: "anna@example.nl",
-      cargoBike: true,
-      roles: { inpakken: none, fietskoerier: { wants: true, days: ["Woensdag 30 december: ochtend", "Donderdag 31 december: ochtend"] }, autokoerier: none, oliebollenbar: none }
+      roles: { inpakken: none, fietskoerier: none, autokoerier: { wants: true, days: ["Woensdag 30 december: ochtend", "Donderdag 31 december: ochtend"] }, oliebollenbar: none }
     },
     {
       ...base,
@@ -624,7 +666,7 @@ function demoVolunteers(): Volunteer[] {
       remark: "Liefst samen met Bram",
       roles: { inpakken: none, fietskoerier: none, autokoerier: { wants: true, days: ["Donderdag 31 december: middag"] }, oliebollenbar: { wants: true, days: ["Woensdag 30 december"] } }
     },
-    ...DEMO_HELPERS.map(([name, inpakken, auto, bar, planning], i): Volunteer => ({
+    ...DEMO_HELPERS.map(([name, inpakken, auto, bar, planning, afternoons], i): Volunteer => ({
       ...base,
       id: `demo-${i + 4}`,
       name,
@@ -634,8 +676,8 @@ function demoVolunteers(): Volunteer[] {
       roles: {
         inpakken: inpakken.length ? { wants: true, days: inpakken.map((d) => demoDay(d)) } : none,
         fietskoerier: none,
-        autokoerier: auto.length ? { wants: true, days: auto.map((d) => `${demoDay(d)}: ochtend`) } : none,
-        oliebollenbar: bar.length ? { wants: true, days: bar.map((d) => demoDay(d)) } : none
+        autokoerier: auto.length ? { wants: true, days: auto.flatMap((d) => [`${demoDay(d)}: ochtend`, ...(afternoons ? [`${demoDay(d)}: middag`] : [])]) } : none,
+        oliebollenbar: bar.length ? { wants: true, days: bar.map(demoEvent).filter(Boolean) } : none
       },
       planning
     }))
@@ -644,28 +686,45 @@ function demoVolunteers(): Volunteer[] {
 
 /** "Dinsdag 15 december" for a December day of the demo season. */
 function demoDay(day: number): string {
-  const names = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"];
-  return `${names[new Date(2026, 11, day, 12).getDay()]} ${day} december`;
+  return isoDayLabel(`2026-12-${String(day).padStart(2, "0")}`);
 }
 
-/** Name, inpak days, bezorg days, bar days and planning answers, so the overviews have something to show. */
-const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["planning"]]> = [
-  ["Ria de Vries", [15, 16, 17, 22, 23], [], [], { mode: "taak", flexible: true, maxShifts: 4, reminder: "whatsapp" }],
-  ["Henk de Boer", [], [18, 19, 21, 22, 23, 24], [], { mode: "taak", flexible: false, maxShifts: 3, driving: "auto", reminder: "whatsapp" }],
-  ["Fatima El Amrani", [23, 24, 30, 31], [], [27, 28], { mode: "dag", flexible: true, maxShifts: 4, reminder: "mail" }],
-  ["Truus Dekker", [15, 16, 17, 18, 19, 20, 21, 22, 23, 24], [], [], { mode: "flexibel", flexible: true, maxShifts: 6, reminder: "whatsapp" }],
-  ["Ahmed Yilmaz", [], [22, 23, 24, 29, 30, 31], [], { mode: "taak", flexible: true, maxShifts: 4, driving: "auto", reminder: "whatsapp" }],
-  ["Sanne Mulder", [19, 20], [], [19, 20, 27], { mode: "dag", flexible: true, maxShifts: 3, reminder: "geen" }],
-  ["Kees Smit", [29, 30, 31], [29, 30, 31], [], { mode: "dag", flexible: true, maxShifts: 2, driving: "rijbewijs", reminder: "mail" }],
-  ["Lotte Bos", [], [], [20, 21, 27, 28], { mode: "taak", flexible: false, maxShifts: 3, reminder: "whatsapp" }],
-  ["Noor Kaya", [22, 23, 24], [], [], { mode: "taak", flexible: true, maxShifts: 3, reminder: "whatsapp" }],
-  ["Wim Peters", [], [15, 16, 17, 18], [], { mode: "taak", flexible: false, maxShifts: 4, driving: "auto", reminder: "geen" }],
-  ["Ineke Vos", [30, 31], [], [30], { mode: "dag", flexible: true, maxShifts: 2, reminder: "whatsapp" }],
-  ["Jan Bakker", [15, 22, 29], [15, 22, 29], [], { mode: "flexibel", flexible: true, maxShifts: 3, driving: "auto", reminder: "mail" }]
+/** The option of the bar event on a December day, as the signup writes it; "" when there is none. */
+function demoEvent(day: number): string {
+  const event = BAR_EVENTS.find((e) => e.date === `2026-12-${String(day).padStart(2, "0")}`);
+  return event ? `${isoDayLabel(event.date)} (${event.name})` : "";
+}
+
+/**
+ * Name, inpak days, bezorg days, bar days (event days) and planning answers, so the overviews have something to
+ * show. All on season days (7–11, 14–18, 21–24 and 28–31 December). The last one: also the afternoon when bezorgen.
+ */
+const DEMO_HELPERS: Array<[string, number[], number[], number[], Volunteer["planning"], boolean?]> = [
+  ["Ria de Vries", [7, 8, 9, 15, 16, 17, 22, 23], [], [], { mode: "taak", flexible: true, maxShifts: 4 }],
+  ["Henk de Boer", [], [7, 8, 10, 18, 21, 22, 23, 24], [], { mode: "taak", flexible: false, maxShifts: 3, driving: "auto" }, true],
+  ["Fatima El Amrani", [9, 10, 23, 24, 30, 31], [], [9, 18], { mode: "dag", flexible: true, maxShifts: 4 }],
+  ["Truus Dekker", [7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 21, 22, 23, 24], [], [], { mode: "flexibel", flexible: true, maxShifts: 6 }],
+  ["Ahmed Yilmaz", [], [8, 9, 11, 22, 23, 24, 29, 30, 31], [], { mode: "taak", flexible: true, maxShifts: 4, driving: "auto" }, true],
+  ["Sanne Mulder", [10, 11, 18], [], [18, 19, 20], { mode: "dag", flexible: true, maxShifts: 3 }],
+  ["Kees Smit", [29, 30, 31], [29, 30, 31], [], { mode: "dag", flexible: true, maxShifts: 2, driving: "rijbewijs" }],
+  ["Lotte Bos", [], [], [9, 19, 20, 30, 31], { mode: "taak", flexible: false, maxShifts: 3 }],
+  ["Noor Kaya", [7, 11, 22, 23, 24], [], [], { mode: "taak", flexible: true, maxShifts: 3 }],
+  ["Wim Peters", [], [7, 9, 10, 15, 16, 17, 18], [], { mode: "taak", flexible: false, maxShifts: 4, driving: "auto" }],
+  ["Ineke Vos", [30, 31], [], [30, 31], { mode: "dag", flexible: true, maxShifts: 2 }],
+  ["Jan Bakker", [8, 15, 22, 29], [8, 15, 22, 29], [], { mode: "flexibel", flexible: true, maxShifts: 3, driving: "auto" }, true]
 ];
 
+/** Two planned shifts on the first day, so the rooster shows what a planned shift looks like. */
+function demoRoster(): RosterShift[] {
+  const base = { date: "2026-12-07", part: "", location: "", note: "", by: "Raquel", at: "2026-11-27 10:00:00" };
+  return [
+    { ...base, id: "R-demo-1", role: "inpakken", start: "7:00", end: "9:30", name: "Ria de Vries" },
+    { ...base, id: "R-demo-2", role: "autokoerier", part: "ochtend", start: "9:00", end: "12:30", name: "Henk de Boer" }
+  ];
+}
+
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, ...demoBusinessAndWall(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, ...demoBusinessAndWall(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [], roster: demoRoster(), agenda: [] };
 }
 
 function readStore(): DemoStore {
@@ -692,12 +751,12 @@ function demoBusinessAndWall(): Pick<DemoStore, "business" | "wallOfFame"> {
 
 /** Fictitious requests from the order form, so the Zakelijk page has something to show. */
 function demoBusiness(): BusinessOrder[] {
-  const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "regio" };
+  const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "zone1" };
   const rows: Array<[string, string, BusinessOrder["status"], Partial<BusinessOrderInput>]> = [
     ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412", wallOfFame: true, email: "petra@bloemenveilingnoord.nl" }],
     ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", pakket: "zilver", wallOfFame: true, withRaisins: 110, withoutRaisins: 40, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
-    ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", pakket: "goud", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", street: "Herenweg 80", postalCode: "2101 MS", city: "Heemstede", area: "buiten", invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
-    ["Z26-0004", "2026-10-25 16:30:00", "afgewezen", { company: "Sportschool Fit", contact: "Rick Bos", withRaisins: 0, withoutRaisins: 60, date: "2026-12-24", street: "Stationsweg 4", postalCode: "3811 MP", city: "Amersfoort", area: "buiten" }]
+    ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", pakket: "goud", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", street: "Herenweg 80", postalCode: "2101 MS", city: "Heemstede", area: "zone3", invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
+    ["Z26-0004", "2026-10-25 16:30:00", "afgewezen", { company: "Sportschool Fit", contact: "Rick Bos", withRaisins: 0, withoutRaisins: 60, date: "2026-12-24", street: "Stationsweg 4", postalCode: "3811 MP", city: "Amersfoort", area: "zone3", distanceKm: 62 }]
   ];
   return rows.map(([id, createdAt, status, extra]) => {
     const input = { ...base, ...extra };
@@ -741,7 +800,7 @@ const DEMO_WALL: Array<[string, number, string, WallEntry["consent"], WallEntry[
 
 /** In the demo every company on the list has an order with the box ticked: without one, syncWall takes a form consent off the wall. */
 function demoWallOrders(): BusinessOrder[] {
-  const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "regio", fulfilment: "bezorgen", city: "Amsterdam", wallOfFame: true };
+  const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "zone1", fulfilment: "bezorgen", city: "Amsterdam", wallOfFame: true };
   return DEMO_WALL.filter(([, , , consent]) => consent === "formulier").map(([company, oliebollen, at], i) => {
     const slug = wallKey(company, seasonOf("2026-12-01")).split(":")[1];
     // Amstel ordered with a free mail address: no domain of its own, so the logo was searched by name.
@@ -905,8 +964,9 @@ function createDemoBackend(notice?: string): Backend {
         pricePerPiece: 0.95,
         kmRate: 0.23,
         delivery: store.delivery,
-        // Demo uses the default agenda from config.ts.
-        agenda: [],
+        // Demo uses the days and times from config.ts; the agenda only holds what Beheer › Rooster set as needed.
+        agenda: store.agenda ?? [],
+        roster: store.roster ?? [],
         business: admin ? store.business : [],
         wallOfFame: admin ? store.wallOfFame ?? [] : [],
         // Like the script: everyone sees what changed, contact details only beheer.
@@ -981,7 +1041,7 @@ function createDemoBackend(notice?: string): Backend {
           }
         }
       }
-      return { counts, agenda: [] };
+      return { counts, agenda: readStore().agenda ?? [] };
     },
     async setDeliveryContact(session, orderId, input) {
       await delay(200);
@@ -1158,7 +1218,7 @@ function createDemoBackend(notice?: string): Backend {
     async logBakeShare(session, share) {
       await delay(150);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(share.date)) throw new Error("Kies een leverdag.");
-      if (!["whatsapp", "email", "deelmenu"].includes(share.channel)) throw new Error("Onbekend kanaal.");
+      if (!["whatsapp", "email", "deelmenu", "gekopieerd"].includes(share.channel)) throw new Error("Onbekend kanaal.");
       mutate((store) => {
         const entry: BakeShare = { id: `B${Date.now().toString(36)}`, ...share, total: share.withRaisins + share.withoutRaisins, by: session.name, at: nowStamp() };
         store.bakeShares = [entry, ...(store.bakeShares ?? [])];
@@ -1205,7 +1265,7 @@ function createDemoBackend(notice?: string): Backend {
             else if (c.field === "email") b.email = v;
           }
           // Another address can mean other delivery costs.
-          b.area = b.fulfilment === "bezorgen" ? areaFor(b.postalCode, b.city, BUSINESS_DEFAULTS.regionPostcodes) : "";
+          b.area = b.fulfilment === "bezorgen" ? areaFor(b.city, BUSINESS_DEFAULTS.zones) : "";
           const totals = businessTotals(b, BUSINESS_DEFAULTS);
           if (totals.total !== b.totals.total) log.push({ at, kind: "bestelling", orderId, field: "amount", from: String(b.totals.total), to: String(totals.total), by: session.name, note: "opnieuw berekend" });
           b.totals = totals;
@@ -1366,6 +1426,7 @@ function createDemoBackend(notice?: string): Backend {
       const result = { volunteers: store.volunteers.length, orders: 0, costs: store.costs.length, receipts: 0 };
       mutate((s) => {
         s.volunteers = [];
+        s.roster = [];
         s.costs = s.costs.map((c) => ({ ...c, createdBy: "", iban: "", reviewedBy: "" }));
         s.routes = {};
         for (const m of Object.values(s.meta)) Object.assign(m, { noteOverride: "", confirmationText: "", courier: "", updatedBy: "" });
@@ -1399,7 +1460,7 @@ function createDemoBackend(notice?: string): Backend {
         // Same as the Apps Script: the package only while the counts still add up to it.
         // The delivery area follows from the address, whatever the browser sent.
         const only = donationOnly(rest);
-        const area = only ? "" : areaFor(rest.postalCode, rest.city, BUSINESS_DEFAULTS.regionPostcodes);
+        const area = only ? "" : areaFor(rest.city, BUSINESS_DEFAULTS.zones);
         const clean: BusinessOrderInput = {
           ...rest,
           ...(only ? { street: "", postalCode: "", city: "", date: "", fulfilment: "donatie" as const } : { fulfilment: "bezorgen" as const }),
@@ -1478,6 +1539,33 @@ function createDemoBackend(notice?: string): Backend {
         added = demoSyncWall(store);
       });
       return { added };
+    },
+    async saveShift(session, shift) {
+      await delay(150);
+      mutate((store) => {
+        store.roster ??= [];
+        checkShift(shift, store.roster);
+        const saved: RosterShift = { ...shift, name: shift.name.trim(), note: shift.note.trim(), by: session.name, at: nowStamp() };
+        const at = store.roster.findIndex((r) => r.id === shift.id);
+        if (at === -1) store.roster.push(saved);
+        else store.roster[at] = saved;
+      });
+    },
+    async removeShift(_session, id) {
+      await delay(150);
+      mutate((store) => {
+        store.roster = (store.roster ?? []).filter((r) => r.id !== id);
+      });
+    },
+    async setNeeded(_session, entries) {
+      await delay(150);
+      if (!entries.every((e) => Number.isInteger(e.needed) && e.needed >= 0 && e.needed <= 99)) throw new Error("Vul een heel aantal van 0 tot 99 in.");
+      mutate((store) => {
+        store.agenda = [
+          ...(store.agenda ?? []).filter((a) => !entries.some((e) => e.date === a.date && e.role === a.role && e.part === a.part)),
+          ...entries.map((e) => ({ ...e, time: "", location: "" }))
+        ];
+      });
     }
   };
 }

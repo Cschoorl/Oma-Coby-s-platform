@@ -24,7 +24,7 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
     status: "open",
     oliebollen_met_krenten: 30,
     oliebollen_zonder_krenten: 20,
-    extra_notities: "Fietskoerier: Ja | Woensdag 30 december: ochtend, Donderdag 31 december: ochtend"
+    extra_notities: "Autokoerier: Ja | Woensdag 30 december: ochtend, Donderdag 31 december: ochtend"
   },
   {
     order_id: "ORDER-002",
@@ -65,7 +65,7 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
     status: "open",
     oliebollen_met_krenten: 12,
     oliebollen_zonder_krenten: 18,
-    extra_notities: "Fietskoerier: Ja | Woensdag 30 december: ochtend"
+    extra_notities: "Autokoerier: Ja | Woensdag 30 december: ochtend"
   },
   {
     order_id: "ORDER-004",
@@ -105,7 +105,7 @@ const mockSheetRows: GoogleSheetOrderRow[] = [
     status: "open",
     oliebollen_met_krenten: 50,
     oliebollen_zonder_krenten: 25,
-    extra_notities: "Fietskoerier: Ja | Donderdag 31 december: ochtend"
+    extra_notities: "Autokoerier: Ja | Donderdag 31 december: ochtend"
   },
   {
     order_id: "ORDER-006",

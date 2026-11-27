@@ -82,6 +82,12 @@ const CONFIG = {
    */
   VOLUNTEERS_NOTIFY: 'planning@omacobysoliebollenbar.nl',
   /**
+   * Afzender van de vrijwilligersmails. Werkt alleen als dit adres in Gmail van het account achter dit script
+   * onder Instellingen → Accounts → "Verzenden als" staat; anders gaat de mail vanaf dat account zelf.
+   * Instelling: vrijwilligers_afzender.
+   */
+  VOLUNTEERS_FROM: 'planning@omacobysoliebollenbar.nl',
+  /**
    * Zakelijk bestellen (#/bestellen). Standaardprijzen en -dagen; overschrijf ze in het tabblad
    * Instellingen (zakelijk_minimum, zakelijk_dagen_vooraf, …; de prijs niet) en in het tabblad Zakelijke dagen.
    * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
@@ -95,26 +101,56 @@ const CONFIG = {
      */
     packages: [['brons', 'Schuifelpartner', 50], ['zilver', 'Danspartner', 150], ['goud', 'Polonaisepartner', 500]],
     /**
-     * Feestpartner: feest op locatie met band, vanaf 501 oliebollen. Alleen als de klant hem kiest, nooit vanzelf op aantal.
-     * Totaal = feestprijs − € 1 per oliebol (het goede-doelendeel, tot € 0) + de oliebollen. Vanaf largeFrom gasten de hogere
-     * prijs (intern een muzikant extra). Btw over de feestprijs: 21% tot het definitief is afgestemd.
+     * Feestpartner: feest op locatie met band, vanaf 510 oliebollen (we verkopen per 10, besluit 23 november). Alleen als de
+     * klant hem kiest, nooit vanzelf op aantal. Totaal = feestprijs − € 1 per oliebol (het goede-doelendeel, tot € 0) + de
+     * oliebollen: 510 oliebollen maakt € 1.990. Vanaf largeFrom gasten de hogere prijs (er komt een muzikant bij; het formulier
+     * en de mail leggen dat uit). Btw over de feestprijs: 21% tot het definitief is afgestemd.
      * Instellingen: zakelijk_feest_minimum, _prijs, _prijs_groot, _gasten_groot, _korting, _btw.
      */
-    party: { name: 'Feestpartner', minimum: 501, fee: 2500, feeLarge: 3100, largeFrom: 60, credit: 1, vatPercent: 21 },
+    party: { name: 'Feestpartner', minimum: 510, fee: 2500, feeLarge: 3100, largeFrom: 60, credit: 1, vatPercent: 21 },
     /** Bandpartner (een eigen muziekmiddag) staat niet meer op het formulier; oude rijen houden hun naam (readBusiness_). */
     adoptions: [],
     vatPercent: 9,
     minimum: 50,
     /** Hooguit zo veel oliebollen per bestelling; meer gaat via de mail. Instelling: zakelijk_maximum. */
     maximum: 10000,
-    fees: { regio: 10, buiten: 25 },
     /**
-     * Buiten de regio geldt het vaste tarief pas vanaf zo veel oliebollen; daaronder op nacalculatie per kilometer
-     * (besluit Mark, 19 november). Instelling: zakelijk_bezorgen_vast_vanaf.
+     * Bezorgzones (besluit 23 november). Zone 1 en 2: een vast tarief en een lijst plaatsen. Zone 3 is elke andere plaats:
+     * fees.zone3 plus perKm per kilometer (enkele reis vanaf START_ADDRESS, op aanvraag); vanaf fixedDeliveryFrom oliebollen
+     * alleen fees.zone3 (besluit Mark, 19 november). De kilometers komen er bovenop, zodat zone 3 nooit goedkoper is dan
+     * zone 2 (Max, 27 november). Zelfde getallen en plaatsen als BUSINESS_DEFAULTS in src/config.ts.
+     * Instellingen: zakelijk_bezorgen_zone1, _zone2, _zone3_vast, zakelijk_bezorgen_per_km, zakelijk_bezorgen_vast_vanaf en
+     * de plaatsen in zakelijk_zone1_plaatsen en zakelijk_zone2_plaatsen (gescheiden door komma's).
      */
+    fees: { zone1: 10, zone2: 25, zone3: 25 },
+    zones: {
+      zone1: [
+        'Aalsmeer',
+        'Kudelstaart',
+        'Amsterdam',
+        // Betaalden via hun postcode (10xx, 11xx, 1380–1384) al het lage tarief en liggen tussen Aalsmeer en Amsterdam.
+        'Amstelveen',
+        'Diemen',
+        'Duivendrecht',
+        'Ouderkerk aan de Amstel',
+        'Weesp'
+      ],
+      zone2: [
+        'Haarlem',
+        'Zaandam',
+        'Noordwijk',
+        'Leiden',
+        'Alphen aan den Rijn',
+        'Utrecht',
+        'Hilversum',
+        'Huizen',
+        // Open vraag aan Mark: hoort Almere bij zone 2?
+        'Almere'
+        // Open vraag aan Mark: valt Den Haag onder € 25? Zo ja, zet hier 'Den Haag'.
+      ]
+    },
+    perKm: 0.35,
     fixedDeliveryFrom: 500,
-    /** Postcodes met het lage bezorgtarief: Groot-Amsterdam (10xx, 11xx), Weesp, Aalsmeer en Kudelstaart. Instelling: zakelijk_postcodes_regio. */
-    regionPostcodes: '1000-1199, 1380-1384, 1430-1433',
     /** Standaard 9:00–15:00 zonder toeslag; vóór 10:00 is een aanvraag (besluit 11 november). Vóór 9:00 bieden we niet aan; voor9 staat er alleen voor oude aanvragen. */
     surcharges: { regulier: 0, voor10: 20, voor9: 20 },
     /** Doel van de Partypot in euro's. Instelling: partypot_doel. */
@@ -237,7 +273,10 @@ const TABS = {
     'leverdatum', 'bezorgmoment', 'bezorgomgeving', 'adres', 'postcode', 'plaats', 'afhalen_afgestemd', 'opmerking', 'oliebollen',
     'bedrag_excl_btw', 'btw', 'bedrag_incl_btw', 'donatie_bedrag', 'factuurbedrag', 'ouderen', 'reden', 'behandeld_door', 'behandeld_op',
     'pakket', 'wall_of_fame', 'certificaat', 'naam_certificaat', 'linkedin_badge', 'herkomst', 'ambassadeur', 'via_link', 'aanleiding',
-    'gasten', 'feest_bedrag', 'herinneren_volgend_jaar', 'vaste_partner', 'bezorgen_nacalculatie']],
+    'gasten', 'feest_bedrag', 'herinneren_volgend_jaar', 'vaste_partner', 'bezorgen_nacalculatie',
+    // Zone 3: kilometers enkele reis vanaf de bakkerij en de kilometerprijs daarbij (km × € 0,35), excl. btw. Die komt
+    // bovenop het vaste tarief van zone 3 en zit niet in bedrag_excl_btw.
+    'bezorg_km', 'kilometerprijs_schatting']],
   // Wall of fame: one row per company per season, with consent (see docs/wall-of-fame.md).
   wallOfFame: ['Wall of fame', ['sleutel', 'seizoen', 'naam_op_muur', 'onderneming', 'ordernummers', 'pakket', 'oliebollen', 'ouderen',
     'eerste_bestelling', 'vroegboeker', 'toestemming', 'zichtbaar', 'domein', 'logo_url', 'logo_status', 'inkt', 'logo_bron',
@@ -254,7 +293,9 @@ const TABS = {
   // Beheer › Bakkerij: every time the bake counts were shared, with what was passed on.
   // Beheer › Bakkerij: every approval of baked counts (a correction is a new row; nothing is overwritten).
   bakeApprovals: ['Bakkerij goedkeuringen', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'benodigd_met', 'benodigd_zonder', 'soort', 'toelichting', 'door', 'goedgekeurd_op']],
-  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op']]
+  bakeShares: ['Bakkerij doorgegeven', ['id', 'leverdatum', 'met', 'zonder', 'totaal', 'kanaal', 'door', 'verzonden_op', 'opmerking']],
+  // Beheer › Rooster: one row per planned shift, with the final times. This is the planning sheet.
+  roster: ['Rooster', ['id', 'datum', 'weekdag', 'taak', 'dagdeel', 'begintijd', 'eindtijd', 'vrijwilliger', 'locatie', 'opmerking', 'ingepland_door', 'bijgewerkt_op']]
 };
 
 const PERMISSIONS = {
@@ -293,6 +334,9 @@ const PERMISSIONS = {
   partypot: ['public'],
   submitBusinessOrder: ['public'],
   setBusinessStatus: ['beheer'],
+  saveShift: ['beheer'],
+  removeShift: ['beheer'],
+  setNeeded: ['beheer'],
   wallOfFame: ['public'],
   saveWallEntry: ['beheer'],
   addWallEntry: ['beheer'],
@@ -803,7 +847,8 @@ const HANDLERS = {
       values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
     }
 
-    return withLock_(function () {
+    // Save first, under the lock; the mails go after, outside it.
+    withLock_(function () {
       const sheet = volunteerSheet_();
       let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
       let index = volunteerIndex_(headers);
@@ -909,6 +954,7 @@ function buildFullState_() {
     kmRate: null,
     delivery: {},
     agenda: readAgenda_(),
+    roster: readRoster_(),
     // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
     business: readBusiness_(),
     wallOfFame: readWall_(),
@@ -994,7 +1040,7 @@ function buildFullState_() {
   state.bakeShares = readTab_('bakeShares').filter(function (r) { return r.id && r.leverdatum; }).map(function (r) {
     return {
       id: String(r.id), date: isoDate_(r.leverdatum) || String(r.leverdatum), withRaisins: num_(r.met), withoutRaisins: num_(r.zonder),
-      total: num_(r.totaal), channel: String(r.kanaal || ''), by: String(r.door || ''), at: String(r.verzonden_op || '')
+      total: num_(r.totaal), channel: String(r.kanaal || ''), by: String(r.door || ''), at: String(r.verzonden_op || ''), note: String(r.opmerking || '')
     };
   }).reverse();
 
@@ -1574,14 +1620,16 @@ function defaultAgendaRows_() {
 /** The signup moments from the Agenda tab; rows with an unknown task or date are skipped. */
 function readAgenda_() {
   return readTab_('agenda').map(function (r) {
-    const needed = num_(r.nodig);
+    // 0 is a real answer (nobody needed that moment); only an empty or unreadable cell gives the default.
+    const raw = String(r.nodig === null || r.nodig === undefined ? '' : r.nodig).trim();
+    const needed = /^\d+([.,]\d+)?$/.test(raw) ? Math.round(num_(raw)) : null;
     return {
       date: dutchDate_(isoDate_(r.datum), CONFIG.SEASON_YEAR),
       role: String(r.taak || '').trim().toLowerCase(),
       part: String(r.dagdeel || '').trim().toLowerCase(),
       time: r.tijd instanceof Date ? hhmm_(r.tijd.getHours() * 60 + r.tijd.getMinutes()) : String(r.tijd || '').trim(),
       location: String(r.locatie || '').trim(),
-      needed: needed > 0 ? needed : null
+      needed: needed
     };
   }).filter(function (a) { return a.date && VOLUNTEER_ROLES.indexOf(a.role) !== -1; });
 }
@@ -1624,6 +1672,8 @@ function anonymize_() {
   blank('business', ['contactpersoon', 'telefoon', 'email', 'factuur_email', 'opmerking', 'behandeld_door']);
   out.costs = blank('costs', ['ingevoerd_door', 'iban', 'beoordeeld_door']);
   clearRows_(sheet_('routes'));
+  // The rooster holds the names of volunteers.
+  clearRows_(sheet_('roster'));
   // Looked-up addresses include volunteers' home addresses.
   clearRows_(sheet_('places'));
   // The change log holds names, addresses and remarks.
@@ -1745,7 +1795,10 @@ function formatCell_(date, field) {
 // Beheer bevestigt een aanvraag op de pagina Zakelijk; dan telt hij mee als order (zie businessOrderRows_).
 // Prijzen en dagen: CONFIG.BUSINESS, te overschrijven in Instellingen en Zakelijke dagen.
 
-const BUSINESS_AREAS = { regio: 'Amsterdam/Aalsmeer', buiten: 'Buiten Amsterdam' };
+/** De zone zoals hij in de Sheet staat (kolom bezorgomgeving). Zelfde als areaLabel in business.ts. */
+const BUSINESS_AREAS = { zone1: 'Zone 1', zone2: 'Zone 2', zone3: 'Zone 3' };
+/** Rijen van vóór de zones (23 november): de regio was zone 1, daarbuiten is nu zone 3. */
+const BUSINESS_AREAS_OLD = { 'Amsterdam/Aalsmeer': 'zone1', 'Buiten Amsterdam': 'zone3' };
 const BUSINESS_MOMENTS = { regulier: 'Tussen 9:00 en 15:00', voor10: 'Vóór 10:00 (op aanvraag)', voor9: 'Vóór 9:00' };
 /** Wat er in de Sheet staat → sleutel, ook voor oude rijen ("Tussen 9:00 en 12:30", "Vóór 10:00"). */
 function businessMomentKey_(label) {
@@ -1782,7 +1835,15 @@ Object.assign(HANDLERS, {
     const input = businessInput_(body, info);
     const problem = validateBusiness_(input, info);
     if (problem) throw new Error(problem);
-    const totals = businessTotals_(input, info);
+    let totals = businessTotals_(input, info);
+    // Zone 3 met kilometerprijs: de rijafstand vanaf de bakkerij. Lukt dat niet, dan blijft de schatting van het formulier staan.
+    let kmFrom = '';
+    if (totals.deliveryLater) {
+      const driven = businessDrivingKm_(input.street, input.postalCode, input.city);
+      kmFrom = driven ? 'rijafstand' : input.distanceKm ? 'schatting van het formulier' : 'afstand onbekend';
+      if (driven) input.distanceKm = driven;
+      totals = businessTotals_(input, info);
+    }
 
     const only = input.fulfilment === 'donatie';
     const yes = function (v) { return v ? 'Ja' : 'Nee'; };
@@ -1806,7 +1867,8 @@ Object.assign(HANDLERS, {
         linkedin_badge: yes(input.linkedin), herkomst: BUSINESS_SOURCES[input.source] || '', ambassadeur: input.ambassador, via_link: input.via,
         aanleiding: BUSINESS_OCCASIONS[input.occasion] || '',
         herinneren_volgend_jaar: yes(input.remindNextYear), vaste_partner: yes(input.multiYear),
-        bezorgen_nacalculatie: totals.deliveryLater ? 'Ja, per km' : ''
+        bezorgen_nacalculatie: totals.deliveryLater ? 'Ja, per km (' + kmFrom + ')' : '',
+        bezorg_km: totals.deliveryKm || '', kilometerprijs_schatting: totals.deliveryEstimate || ''
       });
       bump_();
       return id;
@@ -1916,6 +1978,11 @@ function businessInfo_() {
     const v = settings[key];
     return v === undefined || v === '' ? fallback : num_(v);
   };
+  // "Haarlem, Zaandam, Leiden" → ['Haarlem', 'Zaandam', 'Leiden']; leeg = de lijst uit CONFIG.
+  const places = function (key, fallback) {
+    const list = String(settings[key] || '').split(/[,;\n]+/).map(function (p) { return p.trim(); }).filter(String);
+    return list.length ? list : fallback;
+  };
   const days = readTab_('businessDays').filter(function (r) {
     return r.datum && String(r.open || 'ja').trim().toLowerCase() !== 'nee';
   });
@@ -1927,9 +1994,15 @@ function businessInfo_() {
     vatRate: number('zakelijk_btw', b.vatPercent) / 100,
     minimum: number('zakelijk_minimum', b.minimum),
     maximum: number('zakelijk_maximum', b.maximum),
-    fees: { regio: number('zakelijk_bezorgen_regio', b.fees.regio), buiten: number('zakelijk_bezorgen_buiten', b.fees.buiten) },
+    // De oude sleutels (zakelijk_bezorgen_regio en _buiten) tellen nog mee als de nieuwe er niet staan.
+    fees: {
+      zone1: number('zakelijk_bezorgen_zone1', number('zakelijk_bezorgen_regio', b.fees.zone1)),
+      zone2: number('zakelijk_bezorgen_zone2', b.fees.zone2),
+      zone3: number('zakelijk_bezorgen_zone3_vast', number('zakelijk_bezorgen_buiten', b.fees.zone3))
+    },
+    zones: { zone1: places('zakelijk_zone1_plaatsen', b.zones.zone1), zone2: places('zakelijk_zone2_plaatsen', b.zones.zone2) },
+    perKm: number('zakelijk_bezorgen_per_km', b.perKm),
     fixedDeliveryFrom: number('zakelijk_bezorgen_vast_vanaf', b.fixedDeliveryFrom),
-    regionPostcodes: String(settings.zakelijk_postcodes_regio || b.regionPostcodes),
     surcharges: { regulier: 0, voor10: number('zakelijk_toeslag_voor_10', b.surcharges.voor10), voor9: number('zakelijk_toeslag_voor_10', b.surcharges.voor10) },
     leadWorkdays: number('zakelijk_werkdagen_vooraf', b.leadWorkdays),
     closeAt: settings.zakelijk_sluiting ? closeAt_(settings.zakelijk_sluiting) : b.closeAt,
@@ -2032,8 +2105,10 @@ function businessInput_(body, info) {
   input.pakket = !only && body.pakket === 'feest' ? 'feest' : '';
   input.guests = input.pakket === 'feest' ? count(body.guests) : 0;
   if (input.pakket === 'feest') input.occasion = 'event';
-  // Delivery costs follow from the address; what the browser chose does not count.
-  input.area = fulfilment === 'bezorgen' ? areaFor_(input.postalCode, input.city, info.regionPostcodes) : '';
+  // Delivery costs follow from the town; what the browser chose does not count.
+  input.area = fulfilment === 'bezorgen' ? areaFor_(input.city, info.zones) : '';
+  // The form's own estimate of the distance (zone 3); only kept when the driving distance cannot be calculated.
+  input.distanceKm = input.area === 'zone3' ? Math.min(500, count(body.distanceKm)) : 0;
   // The package follows from the number (businessPackage_); what it does not allow is left out.
   const pkg = only ? null : businessPackage_(input, info);
   const rank = pkg ? businessRank_(pkg) : 0;
@@ -2047,23 +2122,53 @@ function businessInput_(body, info) {
   return input;
 }
 
+/** Other spellings of the same town, already normalised. Same list as PLACE_ALIASES in business.ts. */
+const BUSINESS_PLACE_ALIASES = {
+  's gravenhage': 'den haag',
+  'alphen a d rijn': 'alphen aan den rijn',
+  'alphen ad rijn': 'alphen aan den rijn',
+  'ouderkerk a d amstel': 'ouderkerk aan de amstel'
+};
+
+/** "'s-Gravenhage" → "den haag", "Amsterdam-Duivendrecht" → "amsterdam duivendrecht". Same as normalizePlace in business.ts. */
+function normalizePlace_(city) {
+  const c = String(city || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’`.]/g, '')
+    .replace(/[-/]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return BUSINESS_PLACE_ALIASES[c] || c;
+}
+
 /**
- * Delivery area from the address: the four digits of the postcode decide (ranges like '1000-1109, 1430-1433').
- * Without a postcode the town decides; '' when we do not know yet. Same rules as areaFor in business.ts.
+ * Delivery zone from the town: in the list of zone 1 or zone 2 (info.zones) it is that zone, any other town is zone 3.
+ * A district that starts with the town's name ("Amsterdam Zuidoost") counts; "Haarlemmermeer" is not Haarlem.
+ * '' when the town is not filled in yet. Same rules as areaFor in business.ts.
  */
-function areaFor_(postalCode, city, ranges) {
-  const digits = String(postalCode || '').trim().match(/^(\d{4})/);
-  if (digits) {
-    const n = Number(digits[1]);
-    const inRange = String(ranges || '').split(/[,;]+/).some(function (part) {
-      const m = part.replace(/\s+/g, '').match(/^(\d{4})(?:-(\d{4}))?$/);
-      return m && n >= Number(m[1]) && n <= Number(m[2] || m[1]);
-    });
-    return inRange ? 'regio' : 'buiten';
-  }
-  const c = String(city || '').trim().toLowerCase();
+function areaFor_(city, zones) {
+  const c = normalizePlace_(city);
   if (!c) return '';
-  return /amsterdam|weesp|aalsmeer|kudelstaart/.test(c) ? 'regio' : 'buiten';
+  const inZone = function (list) {
+    return (list || []).map(normalizePlace_).some(function (p) { return p && (c === p || c.indexOf(p + ' ') === 0); });
+  };
+  return inZone(zones.zone1) ? 'zone1' : inZone(zones.zone2) ? 'zone2' : 'zone3';
+}
+
+/**
+ * Driving distance in whole kilometres, one way, from the bakery (CONFIG.START_ADDRESS) to this address. Uses the Maps
+ * service built into Apps Script, the same one the routes use: no API key needed. 0 when Google finds no route.
+ */
+function businessDrivingKm_(street, postalCode, city) {
+  try {
+    const result = Maps.newDirectionFinder()
+      .setOrigin(CONFIG.START_ADDRESS)
+      .setDestination(street + ', ' + postalCode + ' ' + city + ', Nederland')
+      .setMode(Maps.DirectionFinder.Mode.DRIVING)
+      .setRegion('nl')
+      .getDirections();
+    const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
+    return leg ? Math.round(leg.distance.value / 1000) : 0;
+  } catch (err) {
+    console.error('Rijafstand niet berekend: ' + err);
+    return 0;
+  }
 }
 
 /** Same rules as validateBusiness in src/features/business/business.ts; returns the first problem. */
@@ -2098,9 +2203,11 @@ function businessTotals_(i, info) {
   const oliebollen = i.withRaisins + i.withoutRaisins;
   const bollen = cents(oliebollen * info.price);
   const bezorgen = i.fulfilment === 'bezorgen' && oliebollen > 0;
-  // Buiten de regio onder fixedDeliveryFrom: op nacalculatie per kilometer, dus nog niet in het bedrag.
-  const deliveryLater = bezorgen && i.area === 'buiten' && oliebollen < info.fixedDeliveryFrom;
-  const delivery = bezorgen && i.area && !deliveryLater ? info.fees[i.area] : 0;
+  // Elke zone heeft een vast tarief. In zone 3 komt daar onder fixedDeliveryFrom de kilometerprijs bovenop: die is op
+  // aanvraag en zit nog niet in het bedrag; de schatting staat er los bij.
+  const deliveryLater = bezorgen && i.area === 'zone3' && oliebollen < info.fixedDeliveryFrom;
+  const delivery = bezorgen && i.area ? info.fees[i.area] : 0;
+  const km = deliveryLater && i.distanceKm > 0 ? Math.round(i.distanceKm) : 0;
   const surcharge = bezorgen ? info.surcharges[i.moment] || 0 : 0;
   // Feestpartner: de feestprijs bovenop de oliebollen, met een eigen btw-tarief.
   const party = i.pakket === 'feest' && oliebollen > 0 ? businessPartyFee_(i.guests, oliebollen, info) : 0;
@@ -2110,7 +2217,8 @@ function businessTotals_(i, info) {
   // De Partypot: hele euro's, geen btw.
   const donation = cents(Math.max(0, i.donation));
   return { oliebollen: oliebollen, bollen: bollen, delivery: delivery, deliveryLater: deliveryLater, surcharge: surcharge, party: party, subtotal: subtotal, vat: vat, total: total,
-    donation: donation, invoice: cents(total + donation), ouderen: businessOuderen_(oliebollen, info) };
+    donation: donation, invoice: cents(total + donation), ouderen: businessOuderen_(oliebollen, info),
+    deliveryKm: km, deliveryEstimate: cents(km * info.perKm) };
 }
 
 /** 1 oudere per 10 oliebollen; Bandpartner telt zijn gasten (60 of 100). De Partypot telt niet mee. Same as ouderenFor. */
@@ -2222,7 +2330,10 @@ function readBusiness_() {
       // In euro's; oude rijen hadden ook donatie_oliebollen, maar het bedrag stond er altijd bij.
       donation: num_(r.donatie_bedrag), flyers: truthy_(r.flyers), fulfilment: fulfilment,
       date: isoDate_(r.leverdatum), moment: businessMomentKey_(r.bezorgmoment),
-      area: key(BUSINESS_AREAS, String(r.bezorgomgeving)), street: String(r.adres || ''), postalCode: String(r.postcode || ''),
+      area: key(BUSINESS_AREAS, String(r.bezorgomgeving)) || BUSINESS_AREAS_OLD[String(r.bezorgomgeving).trim()] || '',
+      // Rijen van vóór de zones: buiten de regio onder de 500 zat er nog geen vast tarief in het bedrag.
+      oldArea: !!BUSINESS_AREAS_OLD[String(r.bezorgomgeving).trim()],
+      distanceKm: num_(r.bezorg_km), street: String(r.adres || ''), postalCode: String(r.postcode || ''),
       city: String(r.plaats || ''), pickupAgreed: truthy_(r.afhalen_afgestemd), remark: String(r.opmerking || ''),
       reason: String(r.reden || ''), handledBy: String(r.behandeld_door || ''), handledAt: String(r.behandeld_op || ''),
       wallOfFame: truthy_(r.wall_of_fame), certificate: truthy_(r.certificaat), certificateName: String(r.naam_certificaat || ''),
@@ -2232,7 +2343,9 @@ function readBusiness_() {
       remindNextYear: truthy_(r.herinneren_volgend_jaar), multiYear: truthy_(r.vaste_partner),
       totals: {
         oliebollen: oliebollen, bollen: 0, delivery: 0, surcharge: 0, party: num_(r.feest_bedrag), subtotal: subtotal, vat: num_(r.btw), total: total,
-        donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen)
+        donation: num_(r.donatie_bedrag), invoice: num_(r.factuurbedrag), ouderen: num_(r.ouderen),
+        // What the Sheet says wins: beheer may have typed the agreed amount for the kilometres over the estimate.
+        deliveryEstimate: num_(r.kilometerprijs_schatting)
       }
     };
   }).map(function (b) {
@@ -2240,8 +2353,11 @@ function readBusiness_() {
     info = info || businessInfo_();
     const t = businessTotals_(b, info);
     b.totals.bollen = t.bollen;
-    b.totals.delivery = t.delivery;
+    b.totals.delivery = b.oldArea && t.deliveryLater ? 0 : t.delivery;
+    delete b.oldArea;
     b.totals.deliveryLater = t.deliveryLater;
+    b.totals.deliveryKm = t.deliveryKm;
+    b.totals.deliveryEstimate = t.deliveryLater ? b.totals.deliveryEstimate || t.deliveryEstimate : 0;
     b.totals.surcharge = t.surcharge;
     return b;
   });
@@ -2267,7 +2383,7 @@ function businessOrderRows_(orders) {
 }
 
 /** Labels for the customer, the same as areaLabel in src/features/business/business.ts. */
-const BUSINESS_AREA_LABELS = { regio: 'Amsterdam of Aalsmeer', buiten: 'Buiten Amsterdam en Aalsmeer' };
+const BUSINESS_AREA_LABELS = { zone1: 'zone 1', zone2: 'zone 2', zone3: 'zone 3' };
 /**
  * The images in public/mail by name, sent along inside the mail (cid:) so they show without "load images".
  * The dancers (dans-1 … dans-10) are small animated GIFs of the oudjes from the disco hall; dans-9 and dans-10 have a darker skin.
@@ -2311,12 +2427,18 @@ function businessMailData_(id, i, t, info) {
   if (!only) {
     if (pkg.key === 'feest') {
       // De feestprijs en de korting apart, zoals op het formulier.
-      costs.push(['Feest op locatie, ' + numberNl_(i.guests) + ' gasten', euroNl_(businessPartyBase_(i.guests, info)), ''],
+      // Vanaf largeFrom gasten is de feestprijs hoger omdat er een muzikant bij komt: dat staat erbij.
+      costs.push(['Feest op locatie, ' + numberNl_(i.guests) + ' gasten' + (i.guests >= info.party.largeFrom ? ' (met extra muzikant)' : ''), euroNl_(businessPartyBase_(i.guests, info)), ''],
         ['Korting: ' + numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.party.credit), '− ' + euroNl_(businessPartyCredit_(i.guests, t.oliebollen, info)), '']);
     }
     costs.push([numberNl_(t.oliebollen) + ' oliebollen × ' + euroNl_(info.price), euroNl_(t.bollen), '']);
     costs.push(['Poedersuiker', 'gratis', '']);
-    costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area], t.deliveryLater ? 'op nacalculatie per km' : euroNl_(t.delivery), '']);
+    costs.push(['Bezorgen, ' + BUSINESS_AREA_LABELS[i.area] + ' (' + i.city + ')', euroNl_(t.delivery), '']);
+    // Zone 3: de kilometers komen er nog bij en zitten niet in het bedrag; de schatting staat erbij als de afstand bekend is.
+    if (t.deliveryLater) {
+      costs.push(['Kilometers zone 3' + (t.deliveryKm ? ' (± ' + numberNl_(t.deliveryKm) + ' km × ' + euroNl_(info.perKm) + ')' : ' (' + euroNl_(info.perKm) + ' per km)'),
+        t.deliveryKm ? 'op aanvraag, ± ' + euroNl_(t.deliveryEstimate) : 'op aanvraag', '']);
+    }
     if (t.surcharge) costs.push([BUSINESS_MOMENTS[i.moment], euroNl_(t.surcharge), '']);
     costs.push(['Subtotaal excl. btw', euroNl_(t.subtotal), 'muted']);
     if (t.party) {
@@ -2362,6 +2484,8 @@ function businessMailData_(id, i, t, info) {
             ? ['We kijken of de band kan', 'en laten het binnen 2 werkdagen weten. Daarna stemmen we het feest met je af.']
             : i.moment === 'voor10'
             ? ['We kijken je bestelling na', 'en laten binnen 2 werkdagen weten of vóór 10:00 lukt. Lukt het niet, dan bezorgen we tussen 9:00 en 15:00 en vervalt de toeslag.']
+            : t.deliveryLater
+            ? ['We kijken je bestelling na', 'en bevestigen hem per mail. Daarin staan ook de kilometers: ' + euroNl_(info.perKm) + ' per km vanaf onze bakkerij in Aalsmeer, bovenop de ' + euroNl_(t.delivery) + ' bezorgkosten. Die kilometers zitten nog niet in het bedrag hierboven.']
             : ['We kijken je bestelling na', 'en bevestigen hem per mail.'],
           ['Op ' + when + ' bakken we vers', 'en komen we ' + moment + ' langs op ' + i.street + '. Met gratis poedersuiker en een kaartje met ons verhaal.'],
           ['De factuur volgt per mail', 'naar ' + i.invoiceEmail + '. Je betaalt achteraf.']
@@ -2634,6 +2758,33 @@ function volunteerChoicesText_(roles, times) {
 }
 
 /**
+ * Sends `mail` (MailApp's fields) from `from` when that address is a "Send mail as" alias of this account;
+ * otherwise from the account itself, as MailApp does. Returns the address it was sent from ('' = the account).
+ */
+function sendMailFrom_(mail, from) {
+  from = String(from || '').trim().toLowerCase();
+  let aliases = [];
+  if (from) {
+    try {
+      aliases = GmailApp.getAliases().map(function (a) { return String(a).toLowerCase(); });
+    } catch (err) {
+      console.error('Gmail-aliassen niet op te vragen: ' + err);
+    }
+  }
+  if (from && aliases.indexOf(from) !== -1) {
+    const options = { from: from, name: mail.name };
+    // Sent from the reply address itself, a separate reply address is not needed.
+    if (mail.replyTo && String(mail.replyTo).toLowerCase() !== from) options.replyTo = mail.replyTo;
+    if (mail.htmlBody) options.htmlBody = mail.htmlBody;
+    GmailApp.sendEmail(mail.to, mail.subject, mail.body, options);
+    return from;
+  }
+  if (from) console.warn(from + ' staat niet als "Verzenden als" in Gmail; de mail gaat vanaf het account zelf.');
+  MailApp.sendEmail(mail);
+  return '';
+}
+
+/**
  * Confirmation to the volunteer (their answer goes to planning@) and a notice to planning@.
  * Each in its own try, so one failing never stops the other. Returns whether the confirmation went out.
  */
@@ -2645,6 +2796,7 @@ function sendVolunteerMails_(values, roles, times) {
     // No settings tab: CONFIG is used.
   }
   const planning = String(settings.vrijwilligers_melding_naar || CONFIG.VOLUNTEERS_NOTIFY).trim();
+  const sender = String(settings.vrijwilligers_afzender || CONFIG.VOLUNTEERS_FROM).trim();
   const first = values.name.split(/\s+/)[0];
   const choices = volunteerChoicesText_(roles, times);
   const details = [
@@ -2688,7 +2840,7 @@ function sendVolunteerMails_(values, roles, times) {
         ].join('\n')
       };
       if (planning) mail.replyTo = planning;
-      MailApp.sendEmail(mail);
+      sendMailFrom_(mail, sender);
       cache.put(key, String(sent + 1), 3600);
       mailed = true;
     } catch (err) {
@@ -2699,7 +2851,7 @@ function sendVolunteerMails_(values, roles, times) {
     try {
       const tasks = VOLUNTEER_ROLES.filter(function (role) { return roles[role] && roles[role].wants; })
         .map(function (role) { return VOLUNTEER_ROLE_NAMES[role].toLowerCase(); });
-      MailApp.sendEmail({
+      sendMailFrom_({
         to: planning,
         replyTo: values.email,
         name: CONFIG.MAIL_SENDER_NAME,
@@ -2718,7 +2870,7 @@ function sendVolunteerMails_(values, roles, times) {
           mailed ? 'De vrijwilliger heeft een bevestiging per mail gekregen. Antwoord je op deze mail, dan gaat je antwoord naar de vrijwilliger.'
             : 'Let op: de bevestiging naar de vrijwilliger is niet verstuurd. Neem zelf even contact op.'
         ].join('\n').replace(/\n{3,}/g, '\n\n')
-      });
+      }, sender);
     } catch (err) {
       console.error('Melding vrijwilliger ' + values.email + ' niet verstuurd: ' + err);
     }
@@ -2920,14 +3072,28 @@ Object.assign(HANDLERS, {
         };
         // Another address can mean other delivery costs.
         const info = businessInfo_();
-        input.area = input.fulfilment === 'bezorgen'
-          ? areaFor_(byField.postalCode ? byField.postalCode.to : b.postalCode, byField.city ? byField.city.to : b.city, info.regionPostcodes) : '';
+        const city = byField.city ? byField.city.to : b.city;
+        input.area = input.fulfilment === 'bezorgen' ? areaFor_(city, info.zones) : '';
+        input.distanceKm = b.distanceKm;
         set.bezorgomgeving = input.area ? BUSINESS_AREAS[input.area] : '';
         // Vóór 9:00 bieden we niet aan: alleen de standaardtijd en vóór 10:00 zijn te kiezen.
         if (byField.deliveryMoment && [BUSINESS_MOMENTS.regulier, BUSINESS_MOMENTS.voor10].indexOf(byField.deliveryMoment.to) === -1) {
           throw new Error('Kies een bezorgmoment: ' + BUSINESS_MOMENTS.regulier + ' of ' + BUSINESS_MOMENTS.voor10 + '.');
         }
-        const t = businessTotals_(input, info);
+        let t = businessTotals_(input, info);
+        // Zone 3 met kilometerprijs: bij een ander adres (of als de afstand er nog niet stond) de rijafstand opnieuw. Verder
+        // blijven de kolommen staan: beheer kan het afgesproken bedrag over de schatting hebben gezet.
+        const moved = !!(byField.address || byField.postalCode || byField.city);
+        if (!t.deliveryLater) {
+          Object.assign(set, { bezorgen_nacalculatie: '', bezorg_km: '', kilometerprijs_schatting: '' });
+        } else if (moved || !b.totals.deliveryLater || !b.distanceKm) {
+          input.distanceKm = businessDrivingKm_(byField.address ? byField.address.to : b.street, byField.postalCode ? byField.postalCode.to : b.postalCode, city);
+          t = businessTotals_(input, info);
+          Object.assign(set, {
+            bezorgen_nacalculatie: 'Ja, per km (' + (t.deliveryKm ? 'rijafstand' : 'afstand onbekend') + ')',
+            bezorg_km: t.deliveryKm || '', kilometerprijs_schatting: t.deliveryEstimate || ''
+          });
+        }
         Object.assign(set, {
           oliebollen: t.oliebollen, bedrag_excl_btw: t.subtotal, btw: t.vat, bedrag_incl_btw: t.total,
           donatie_bedrag: t.donation, factuurbedrag: t.invoice, ouderen: t.ouderen
@@ -3136,7 +3302,8 @@ Object.assign(HANDLERS, {
 // telefoon). Elke keer delen komt als regel in "Bakkerij doorgegeven"; zo ziet het platform of de
 // aantallen sindsdien veranderd zijn.
 
-const BAKE_SHARE_CHANNELS = ['whatsapp', 'email', 'deelmenu'];
+// 'gekopieerd': het bericht is gekopieerd en met de hand in een chat geplakt.
+const BAKE_SHARE_CHANNELS = ['whatsapp', 'email', 'deelmenu', 'gekopieerd'];
 
 Object.assign(HANDLERS, {
   logBakeShare: function (body) {
@@ -3150,7 +3317,11 @@ Object.assign(HANDLERS, {
     return withLock_(function () {
       const sheet = sheet_('bakeShares');
       const id = 'B' + Utilities.getUuid().slice(0, 8);
-      const values = { id: id, leverdatum: date, met: met, zonder: zonder, totaal: met + zonder, kanaal: channel, door: name, verzonden_op: now_() };
+      // De opmerking voor de bakker die in het bericht meeging (hooguit 500 tekens).
+      const typed = String(body.note || '').trim().slice(0, 500);
+      // Een opmerking die met = of + begint blijft tekst, geen formule.
+      const note = /^[=+]/.test(typed) ? "'" + typed : typed;
+      const values = { id: id, leverdatum: date, met: met, zonder: zonder, totaal: met + zonder, kanaal: channel, door: name, verzonden_op: now_(), opmerking: note };
       sheet.appendRow(TABS.bakeShares[1].map(function (h) { return values[h]; }));
       return bump_();
     });
@@ -3218,7 +3389,9 @@ Object.assign(HANDLERS, {
     const zonder = checkEditValue_('withoutRaisins', body.withoutRaisins);
     const neededMet = body.neededWithRaisins === undefined || body.neededWithRaisins === '' ? '' : checkEditValue_('withRaisins', body.neededWithRaisins);
     const neededZonder = body.neededWithoutRaisins === undefined || body.neededWithoutRaisins === '' ? '' : checkEditValue_('withoutRaisins', body.neededWithoutRaisins);
-    const note = String(body.note || '').trim().slice(0, 500);
+    const typed = String(body.note || '').trim().slice(0, 500);
+      // Een opmerking die met = of + begint blijft tekst, geen formule.
+      const note = /^[=+]/.test(typed) ? "'" + typed : typed;
     return withLock_(function () {
       migrateBaked_();
       const latest = readBakeApprovals_().filter(function (a) { return a.date === date; })[0];
@@ -3686,3 +3859,178 @@ function publicWall_(entries, season) {
     })
   };
 }
+
+// ---------------------------------------------------------------------------
+// Beheer › Rooster: wie staat wanneer. Elke ingeplande dienst is één regel in het tabblad Rooster, met de
+// definitieve tijden; dat tabblad is de planningssheet en mag ook met de hand worden bijgewerkt. Hoeveel mensen
+// een dienst nodig heeft, staat in de kolom "nodig" van het tabblad Agenda (setNeeded).
+
+const ROSTER_PARTS = ['', 'ochtend', 'middag', 'avond'];
+const ROSTER_WEEKDAYS = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+
+/** "07:00", "7.00" or a time cell → "7:00"; "" when it is no time. */
+function rosterTime_(v) {
+  const m = String(v === null || v === undefined ? '' : v).trim().match(/^(\d{1,2})[:.](\d{2})/);
+  return m && Number(m[1]) < 24 && Number(m[2]) < 60 ? Number(m[1]) + ':' + m[2] : '';
+}
+
+/** The planned shifts. A row typed into the Sheet by hand has no id yet and gets its row number until it is saved. */
+function readRoster_() {
+  return readTab_('roster').map(function (r, i) {
+    return {
+      id: String(r.id || 'rij-' + (i + 2)),
+      date: dutchDate_(isoDate_(r.datum), CONFIG.SEASON_YEAR),
+      role: String(r.taak || '').trim().toLowerCase(),
+      part: String(r.dagdeel || '').trim().toLowerCase(),
+      start: rosterTime_(r.begintijd),
+      end: rosterTime_(r.eindtijd),
+      name: String(r.vrijwilliger || '').trim(),
+      location: String(r.locatie || '').trim(),
+      note: String(r.opmerking || '').trim(),
+      by: String(r.ingepland_door || ''),
+      at: String(r.bijgewerkt_op || '')
+    };
+  }).filter(function (r) { return r.date && r.name && VOLUNTEER_ROLES.indexOf(r.role) !== -1; });
+}
+
+/** The tab with its rows, for finding and writing a shift. Dates and times stay text, so they sort and read back as written. */
+function rosterTable_() {
+  const sheet = sheet_('roster');
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0].map(String);
+  if (!prop_('ROSTER_TEXT_COLUMNS')) {
+    ['datum', 'begintijd', 'eindtijd'].forEach(function (h) {
+      const col = headers.indexOf(h);
+      if (col !== -1) sheet.getRange(1, col + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
+    });
+    setProp_('ROSTER_TEXT_COLUMNS', '1');
+  }
+  return { sheet: sheet, headers: headers, values: values };
+}
+
+/** Index of the shift in table.values, or -1. "rij-7" is a row without an id (typed into the Sheet). */
+function rosterIndex_(table, id) {
+  const col = table.headers.indexOf('id');
+  for (let i = 1; i < table.values.length; i++) if (keyOf_(table.values[i][col]) === id) return i;
+  const m = /^rij-(\d+)$/.exec(id);
+  const at = m ? Number(m[1]) - 1 : -1;
+  return at >= 1 && at < table.values.length && !keyOf_(table.values[at][col]) ? at : -1;
+}
+
+/** Keeps the tab in the order of the days and the times, so it reads as a planning. */
+function sortRoster_(table) {
+  const rows = table.sheet.getLastRow() - 1;
+  const date = table.headers.indexOf('datum');
+  const start = table.headers.indexOf('begintijd');
+  if (rows < 2 || date === -1 || start === -1) return;
+  table.sheet.getRange(2, 1, rows, table.sheet.getLastColumn()).sort([{ column: date + 1, ascending: true }, { column: start + 1, ascending: true }]);
+}
+
+Object.assign(HANDLERS, {
+  saveShift: function (body) {
+    const by = requireName_(body.name);
+    const date = String(body.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies een dag.');
+    const role = String(body.role || '').trim().toLowerCase();
+    if (VOLUNTEER_ROLES.indexOf(role) === -1) throw new Error('Onbekende taak.');
+    const part = String(body.part || '').trim().toLowerCase();
+    if (ROSTER_PARTS.indexOf(part) === -1) throw new Error('Onbekend dagdeel.');
+    const start = rosterTime_(body.start);
+    const end = rosterTime_(body.end);
+    if (!start || !end) throw new Error('Vul de tijden in als 7:00 en 9:30.');
+    // body.name is who is logged in; the volunteer on the shift comes as body.volunteer.
+    const volunteer = String(body.volunteer || '').trim();
+    if (!volunteer) throw new Error('Kies een vrijwilliger.');
+    const pad = function (t) { return t.length < 5 ? '0' + t : t; };
+    return withLock_(function () {
+      const table = rosterTable_();
+      const cell = function (row, h) { const c = table.headers.indexOf(h); return c === -1 ? '' : row[c]; };
+      let id = String(body.id || '').trim();
+      const at = id ? rosterIndex_(table, id) : -1;
+      for (let i = 1; i < table.values.length; i++) {
+        const row = table.values[i];
+        if (i !== at && dutchDate_(isoDate_(cell(row, 'datum')), CONFIG.SEASON_YEAR) === date && String(cell(row, 'taak')).trim().toLowerCase() === role &&
+          String(cell(row, 'dagdeel')).trim().toLowerCase() === part && String(cell(row, 'vrijwilliger')).trim().toLowerCase() === volunteer.toLowerCase()) {
+          throw new Error(volunteer + ' staat al op deze dienst.');
+        }
+      }
+      if (!id || /^rij-\d+$/.test(id)) id = 'R' + Utilities.getUuid().slice(0, 8);
+      const d = date.split('-').map(Number);
+      const values = {
+        id: id, datum: date, weekdag: ROSTER_WEEKDAYS[new Date(d[0], d[1] - 1, d[2], 12).getDay()], taak: role, dagdeel: part,
+        begintijd: pad(start), eindtijd: pad(end), vrijwilliger: volunteer, locatie: String(body.location || '').trim(),
+        opmerking: String(body.note || '').trim(), ingepland_door: by, bijgewerkt_op: now_()
+      };
+      // Columns someone added to the tab by hand keep what is in them.
+      const old = at === -1 ? [] : table.values[at];
+      const row = table.headers.map(function (h, i) { return values[h] !== undefined ? values[h] : (old[i] === undefined ? '' : old[i]); });
+      if (at === -1) table.sheet.appendRow(row);
+      else table.sheet.getRange(at + 1, 1, 1, row.length).setValues([row]);
+      sortRoster_(table);
+      return bump_();
+    });
+  },
+  removeShift: function (body) {
+    requireName_(body.name);
+    return withLock_(function () {
+      const table = rosterTable_();
+      const at = rosterIndex_(table, String(body.id || '').trim());
+      // Already gone (someone else removed it): nothing to do.
+      if (at === -1) return bump_();
+      // Sheets refuses to delete the only row under a frozen header: clear it instead.
+      if (table.values.length === 2) table.sheet.getRange(2, 1, 1, table.sheet.getLastColumn()).clearContent();
+      else table.sheet.deleteRow(at + 1);
+      return bump_();
+    });
+  },
+  setNeeded: function (body) {
+    requireName_(body.name);
+    const entries = (body.entries || []).map(function (e) {
+      const date = String(e.date || '').trim();
+      const role = String(e.role || '').trim().toLowerCase();
+      const part = String(e.part || '').trim().toLowerCase();
+      const needed = Number(e.needed);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies een dag.');
+      if (VOLUNTEER_ROLES.indexOf(role) === -1) throw new Error('Onbekende taak.');
+      if (ROSTER_PARTS.indexOf(part) === -1) throw new Error('Onbekend dagdeel.');
+      if (!(needed >= 0 && needed <= 99 && Math.floor(needed) === needed)) throw new Error('Vul een heel aantal van 0 tot 99 in.');
+      return { date: date, role: role, part: part, needed: needed };
+    });
+    if (entries.length === 0) throw new Error('Niets om op te slaan.');
+    return withLock_(function () {
+      const sheet = sheet_('agenda');
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0].map(function (h) { return String(h).trim().toLowerCase(); });
+      const col = { date: headers.indexOf('datum'), role: headers.indexOf('taak'), part: headers.indexOf('dagdeel'), needed: headers.indexOf('nodig') };
+      if (col.date === -1 || col.role === -1 || col.needed === -1) throw new Error('Het tabblad Agenda mist de kolom datum, taak of nodig.');
+      const added = [];
+      let changed = false;
+      entries.forEach(function (e) {
+        let found = false;
+        // Every row of that day, task and dagdeel: the Agenda may hold the same moment twice.
+        for (let i = 1; i < values.length; i++) {
+          const row = values[i];
+          if (dutchDate_(isoDate_(row[col.date]), CONFIG.SEASON_YEAR) !== e.date || String(row[col.role]).trim().toLowerCase() !== e.role) continue;
+          if ((col.part === -1 ? '' : String(row[col.part]).trim().toLowerCase()) !== e.part) continue;
+          row[col.needed] = e.needed;
+          found = true;
+          changed = true;
+        }
+        if (!found) {
+          const row = headers.map(function () { return ''; });
+          row[col.date] = e.date;
+          row[col.role] = e.role;
+          if (col.part !== -1) row[col.part] = e.part;
+          row[col.needed] = e.needed;
+          added.push(row);
+        }
+      });
+      // One write for the column and one for the new rows: a click on "alle dagen" changes some twenty rows.
+      if (changed && values.length > 1) {
+        sheet.getRange(2, col.needed + 1, values.length - 1, 1).setValues(values.slice(1).map(function (row) { return [row[col.needed]]; }));
+      }
+      if (added.length) sheet.getRange(sheet.getLastRow() + 1, 1, added.length, headers.length).setValues(added);
+      return bump_();
+    });
+  }
+});

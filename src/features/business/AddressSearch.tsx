@@ -8,7 +8,7 @@ import { formatPostcode } from "./business";
  * gewoon tekstveld. Alleen Nederlandse adressen; lukt het zoeken niet, dan merkt de klant er niets van.
  */
 
-const PDOK = "https://api.pdok.nl/bzk/locatieserver/search/v3_1";
+export const PDOK = "https://api.pdok.nl/bzk/locatieserver/search/v3_1";
 
 interface Suggestion {
   id: string;

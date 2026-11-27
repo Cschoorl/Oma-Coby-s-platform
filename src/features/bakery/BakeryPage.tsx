@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import { backend, type Session } from "../../data/backend";
 import type { BakeShare, DashboardState } from "../../types/dashboard";
 import type { Patch } from "../../lib/useDashboard";
-import { Badge, Bollenteller, Card, Icon, Notice, SectionTitle, Segmented, formatDayLabel, formatNumber, ghostButton, primaryButton, secondaryButton, toast, todayIso } from "../../components/ui";
+import { Badge, Bollenteller, Card, CopyButton, Icon, Notice, SectionTitle, Segmented, fieldLabel, formatDayLabel, formatNumber, inputClass, primaryButton, secondaryButton, toast, todayIso } from "../../components/ui";
 import { OrderFilters } from "../orders/OrderFilters";
 import { BakeApprovalCard } from "./BakeApprovalCard";
 import { formatChangeTime } from "../../lib/orderChanges";
 import { patches } from "../../lib/patches";
-import { addDays, bakeCounts, changedDays, channelLabel, diffSince, mailLink, shareText, sharesFor, signed, whatsappLink, type ShareChannel } from "../../lib/bakeShare";
+import { BAKE_NOTE_MAX, addDays, bakeCounts, changedDays, channelLabel, diffSince, mailLink, shareText, sharesFor, signed, whatsappLink, type ShareChannel } from "../../lib/bakeShare";
 
 interface BakeryPageProps {
   state: DashboardState;
@@ -22,8 +22,9 @@ function nativeShare(): boolean {
 
 /**
  * Bakkerij (beheer): the order list for the bakers, one day ahead. Opens on tomorrow; the counts are
- * shared via WhatsApp, e-mail or the share menu. Each share is saved; when the counts change
- * afterwards, a warning shows the difference per product.
+ * shared via WhatsApp, e-mail or the share menu, or copied and pasted into a chat. A remark for the
+ * baker goes along in the message. Each share is saved; when the counts change afterwards, a warning
+ * shows the difference per product.
  */
 export function BakeryPage({ state, session, run }: BakeryPageProps) {
   const today = todayIso();
@@ -37,7 +38,12 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
   const shares = useMemo(() => sharesFor(state, date), [state, date]);
   const last = shares[0];
   const diff = last ? diffSince(last, counts) : null;
-  const text = shareText(date, counts, last, today);
+  // The remark per delivery day; it starts as what last went along, so sharing again keeps it.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const note = notes[date] ?? last?.note ?? "";
+  // After copying: the day whose message is on the clipboard, until it is saved as passed on.
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const text = shareText(date, counts, last, today, note);
   const subject = `Bestellijst ${date === tomorrow ? "voor morgen, " : ""}${formatDayLabel(date)}: ${counts.withRaisins + counts.withoutRaisins} oliebollen`;
   const total = counts.withRaisins + counts.withoutRaisins;
   const phoneMenu = nativeShare();
@@ -45,11 +51,12 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
   const otherChanged = useMemo(() => changedDays(state).filter((d) => d !== date), [state, date]);
 
   function record(channel: ShareChannel) {
-    const share = { date, withRaisins: counts.withRaisins, withoutRaisins: counts.withoutRaisins, channel };
+    const share = { date, withRaisins: counts.withRaisins, withoutRaisins: counts.withoutRaisins, channel, note: note.trim() };
     setError(null);
+    setCopiedFor(null);
     run(() => backend.logBakeShare(session, share), patches.bakeShare(share, session.name)).then(
       () => toast(`Doorgegeven via ${channelLabel[channel]}.`),
-      (err) => setError(err instanceof Error ? `Gedeeld, maar niet vastgelegd: ${err.message}` : "Gedeeld, maar niet vastgelegd.")
+      (err) => setError(err instanceof Error ? `Het doorgeven is niet vastgelegd: ${err.message}` : "Het doorgeven is niet vastgelegd.")
     );
   }
 
@@ -73,22 +80,24 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
     }
   }
 
+  const tall = "min-h-[44px]";
   const buttons = (again: boolean) => (
     <div className="flex flex-wrap gap-2">
       {phoneMenu ? (
-        <button type="button" className={primaryButton} onClick={() => void viaMenu()}>
+        <button type="button" className={`${primaryButton} ${tall}`} onClick={() => void viaMenu()}>
           <Icon name="share" />
           {again ? "Opnieuw delen" : "Delen"}
         </button>
       ) : null}
-      <button type="button" className={phoneMenu ? secondaryButton : primaryButton} onClick={viaWhatsApp}>
-        <Icon name="share" />
+      <button type="button" className={`${phoneMenu ? secondaryButton : primaryButton} ${tall}`} onClick={viaWhatsApp}>
+        <Icon name="whatsapp" />
         {again && !phoneMenu ? "Opnieuw via WhatsApp" : "Via WhatsApp"}
       </button>
-      <button type="button" className={phoneMenu ? ghostButton : secondaryButton} onClick={viaMail}>
+      <button type="button" className={`${secondaryButton} ${tall}`} onClick={viaMail}>
         <Icon name="mail" />
         {again && !phoneMenu ? "Opnieuw per e-mail" : "Per e-mail"}
       </button>
+      <CopyButton text={text} label="Kopieer bericht" done="Bericht gekopieerd" className={`${secondaryButton} ${tall}`} onCopied={() => setCopiedFor(date)} />
     </div>
   );
 
@@ -145,9 +154,15 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
             <p className="text-sm text-muted">Deze lijst is nog niet naar de bakker gestuurd.</p>
           )}
 
+          {last?.note ? (
+            <p className="-mt-2 text-sm text-muted">
+              Opmerking erbij: <span className="text-krent">{last.note}</span>
+            </p>
+          ) : null}
+
           {last && diff?.changed ? (
             <div className="grid gap-3 rounded-kaart bg-feest-50 p-3.5" role="alert">
-              <p className="font-bold text-feest-ink">De aantallen zijn veranderd sinds je ze doorgaf. Geef ze opnieuw door.</p>
+              <p className="font-bold text-feest-ink">! De aantallen zijn veranderd sinds je ze doorgaf. Geef ze opnieuw door.</p>
               <table className="w-full max-w-md text-sm tabular-nums">
                 <thead>
                   <tr className="text-left text-xs text-muted">
@@ -174,12 +189,39 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
                   ))}
                 </tbody>
               </table>
-              {buttons(true)}
             </div>
-          ) : total === 0 ? (
+          ) : null}
+
+          {total === 0 ? (
             <Notice tone="info">Geen bestellingen op deze leverdag, dus niets door te geven.</Notice>
           ) : (
-            buttons(Boolean(last))
+            // The message itself: remark, what goes out, and the ways to send it. One hairline sets it apart.
+            <div className="grid gap-3 border-t border-lijn pt-4">
+              <label className="grid gap-1.5">
+                <span className={fieldLabel}>Opmerking voor de bakker</span>
+                <textarea
+                  className={`${inputClass} min-h-[72px] resize-y text-base sm:text-sm`}
+                  rows={2}
+                  maxLength={BAKE_NOTE_MAX}
+                  placeholder="Bijvoorbeeld: graag om 6:30 klaar."
+                  value={note}
+                  onChange={(e) => setNotes((n) => ({ ...n, [date]: e.target.value }))}
+                />
+              </label>
+              <div className="grid gap-1.5">
+                <p className={fieldLabel}>Bericht</p>
+                <pre className="select-all whitespace-pre-wrap rounded-md bg-vul p-3 font-sans text-sm text-krent">{text}</pre>
+              </div>
+              {buttons(Boolean(last))}
+              {copiedFor === date ? (
+                <Notice tone="success">
+                  Het bericht is gekopieerd: plak het in je chat met de bakker.{" "}
+                  <button type="button" className="font-bold underline underline-offset-4" onClick={() => record("gekopieerd")}>
+                    Verstuurd? Leg vast als doorgegeven
+                  </button>
+                </Notice>
+              ) : null}
+            </div>
           )}
           {error ? <Notice tone="error">{error}</Notice> : null}
           {!state.bakery?.phone && !state.bakery?.email ? (
@@ -189,11 +231,6 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
       </Card>
 
       <BakeApprovalCard state={state} session={session} run={run} date={date} needed={counts} />
-
-      <Card>
-        <SectionTitle title="Bericht" subtitle="Zo komt het bij de bakkerij aan." />
-        <pre className="whitespace-pre-wrap rounded-lg bg-vul p-3 font-sans text-sm text-krent">{text}</pre>
-      </Card>
 
       <Card>
         <SectionTitle
@@ -217,12 +254,14 @@ export function BakeryPage({ state, session, run }: BakeryPageProps) {
   );
 }
 
-const shortChannel: Record<string, string> = { whatsapp: "WhatsApp", email: "E-mail", deelmenu: "Deelmenu" };
+const shortChannel: Record<string, string> = { whatsapp: "WhatsApp", email: "E-mail", deelmenu: "Deelmenu", gekopieerd: "Gekopieerd" };
 
 function ShareHistory({ list, showDay }: { list: BakeShare[]; showDay: boolean }) {
+  // The remark column only when a remark ever went along.
+  const showNote = list.some((s) => s.note);
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm tabular-nums">
+      <table className={`w-full text-sm tabular-nums ${showNote ? "min-w-[560px]" : ""}`}>
         <thead>
           <tr className="border-b border-lijn-2 text-left text-xs text-muted">
             <th className="pb-1.5 font-bold">Gedeeld</th>
@@ -232,6 +271,7 @@ function ShareHistory({ list, showDay }: { list: BakeShare[]; showDay: boolean }
             <th className="pb-1.5 text-right font-bold">Totaal</th>
             <th className="pb-1.5 pl-3 font-bold">Via</th>
             <th className="pb-1.5 font-bold">Door</th>
+            {showNote ? <th className="pb-1.5 pl-3 font-bold">Opmerking</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -244,6 +284,7 @@ function ShareHistory({ list, showDay }: { list: BakeShare[]; showDay: boolean }
               <td className="py-1.5 text-right font-bold">{formatNumber(s.total)}</td>
               <td className="py-1.5 pl-3">{shortChannel[s.channel] ?? s.channel}</td>
               <td className="py-1.5">{s.by}</td>
+              {showNote ? <td className="min-w-[160px] py-1.5 pl-3 text-oliebol">{s.note}</td> : null}
             </tr>
           ))}
         </tbody>

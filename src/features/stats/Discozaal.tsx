@@ -178,7 +178,7 @@ export function DiscoBallIcon() {
 
 // ---------- de discozaal ----------
 
-/** KPI strip, the disco hall and the rollator bar, as shown behind the disco-ball button. */
+/** KPI strip and the disco hall, as shown behind the disco-ball button. The goal itself leads the Tussenstand (Rollatorbalk). */
 export function Discozaal({ oliebollen }: { oliebollen: number }) {
   const oudjes = oudjesFor(oliebollen);
   const rest = oliebollen % OLIEBOLLEN_PER_OUDJE;
@@ -244,8 +244,6 @@ export function Discozaal({ oliebollen }: { oliebollen: number }) {
           );
         }}
       </DiscoHall>
-
-      <Rollatorbalk oliebollen={oliebollen} />
     </div>
   );
 }
@@ -501,10 +499,13 @@ function DanceFloor({ layout }: { layout: FloorLayout }) {
 
 const MILESTONE_KEY = "omacoby-mijlpaal";
 
-/** Progress to the goal; the oudje with the rollator gets a rocket flame while she speeds ahead. */
+/**
+ * Progress to the goal, at the top of the Tussenstand: the oudje with the rollator gets a rocket flame while
+ * she speeds ahead. The milestones stand under the track; the numbers around it are up to the caller.
+ */
 export function Rollatorbalk({ oliebollen }: { oliebollen: number }) {
   const target = Math.min(100, (oliebollen / GOAL_OLIEBOLLEN) * 100);
-  // Start at 0 and fly to the stand, so opening the disco hall launches her once.
+  // Start at 0 and fly to the stand, so opening the Tussenstand launches her once.
   const [pct, setPct] = useState(0);
   const [boost, setBoost] = useState(false);
 
@@ -559,19 +560,18 @@ export function Rollatorbalk({ oliebollen }: { oliebollen: number }) {
           <span dangerouslySetInnerHTML={{ __html: WALKER_SVG }} />
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted">
-        <span>
-          {oliebollen >= GOAL_OLIEBOLLEN ? (
-            <b className="text-krent">Doel gehaald!</b>
-          ) : (
-            <>
-              Nog <b className="tabular-nums text-krent">{formatNumber(GOAL_OLIEBOLLEN - oliebollen)}</b> tot het doel
-            </>
-          )}
-        </span>
-        <span>
-          Doel: <b className="text-krent">{formatNumber(GOAL_OLIEBOLLEN)}</b> oliebollen = <b className="text-krent">{formatNumber(oudjesFor(GOAL_OLIEBOLLEN))}</b> oudjes naar de Gouwe Ouwe-avond
-        </span>
+      {/* The milestones under the track, each at its own place; a reached one gets a tick. */}
+      <div className="relative mt-2 h-4 text-[11px] tabular-nums text-muted">
+        {GOAL_MILESTONES.map((m) => {
+          const at = (m / GOAL_OLIEBOLLEN) * 100;
+          const hit = oliebollen >= m;
+          return (
+            <span key={m} className={`absolute top-0 whitespace-nowrap ${at >= 100 ? "right-0" : "-translate-x-1/2"} ${hit ? "font-bold text-kerst-ink" : ""}`} style={at >= 100 ? undefined : { left: `${at}%` }}>
+              {hit ? "✓ " : ""}
+              {formatNumber(m)}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

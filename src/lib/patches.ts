@@ -1,4 +1,4 @@
-import type { BakeShare, DashboardState, PackingState } from "../types/dashboard";
+import type { BakeShare, DashboardState, NeededInput, PackingState, RosterShiftInput } from "../types/dashboard";
 import { emptyPacking } from "../types/dashboard";
 
 /** Local time as the script writes it ("2026-12-30 09:12:00"). */
@@ -29,9 +29,21 @@ export const patches = {
     else delete packNotes[itemId];
     return { ...s, packNotes };
   },
-  bakeShare: (share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }, name: string) => (s: DashboardState): DashboardState => ({
+  bakeShare: (share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"]; note?: string }, name: string) => (s: DashboardState): DashboardState => ({
     ...s,
     bakeShares: [{ id: "nieuw", ...share, total: share.withRaisins + share.withoutRaisins, by: name, at: stamp() }, ...(s.bakeShares ?? [])]
+  }),
+  rosterSave: (shift: RosterShiftInput, name: string) => (s: DashboardState): DashboardState => ({
+    ...s,
+    roster: [...(s.roster ?? []).filter((r) => r.id !== shift.id), { ...shift, by: name, at: stamp() }]
+  }),
+  rosterRemove: (id: string) => (s: DashboardState): DashboardState => ({ ...s, roster: (s.roster ?? []).filter((r) => r.id !== id) }),
+  needed: (entries: NeededInput[]) => (s: DashboardState): DashboardState => ({
+    ...s,
+    agenda: [
+      ...s.agenda.filter((a) => !entries.some((e) => e.date === a.date && e.role === a.role && e.part === a.part)),
+      ...entries.map((e) => ({ ...e, time: "", location: "" }))
+    ]
   }),
   delivered: (orderId: string, name: string, delivered: boolean) => (s: DashboardState): DashboardState => {
     const delivery = { ...s.delivery };

@@ -2,7 +2,7 @@ import type { Volunteer } from "../../types/dashboard";
 import type { Order } from "../../types/order";
 import { PLANNING } from "../../config";
 import { stopAddress } from "../../utils/orderUtils";
-import { courierAvailability, findVolunteer, homeAddress, orderPart, orderWindow, toHhmm, type Transport } from "./routeUtils";
+import { courierAvailability, findVolunteer, homeAddress, orderPart, orderWindow, toHhmm } from "./routeUtils";
 
 /*
  * Automatic planning of one delivery day.
@@ -12,8 +12,8 @@ import { courierAvailability, findVolunteer, homeAddress, orderPart, orderWindow
  * the one nearest home; earlier trips end back at the loods to load up again.
  *
  * Orders are placed one by one (hardest first) where they add the least travel time, as long as
- * every stop is reached within its time slot, the trip fits in the dagdeel and the bollen fit on
- * the bike or in the car. Travel times are estimates from straight-line distance; Google Maps
+ * every stop is reached within its time slot, the trip fits in the dagdeel and the bollen fit in
+ * the car (we deliver by car only). Travel times are estimates from straight-line distance; Google Maps
  * calculates the real route afterwards.
  */
 
@@ -32,7 +32,6 @@ export interface PlanRun {
   courier: string;
   volunteer?: Volunteer;
   part: string;
-  vehicle: "fiets" | "bakfiets" | "auto";
   start: number;
   end: number;
   /** Departure from the loods: the start of the dagdeel, or later when the first stop asks for a later time. */
@@ -81,9 +80,8 @@ function roadKm(a: Point, b: Point): number {
   return straightKm(a, b) * PLANNING.roadFactor;
 }
 
-/** Minutes on the road; cars are slow for the first 10 km and fast on longer stretches. */
-function travelMinutes(km: number, vehicle: PlanRun["vehicle"]): number {
-  if (vehicle !== "auto") return (km / PLANNING.speed.fiets) * 60;
+/** Minutes on the road by car: slow for the first 10 km and fast on longer stretches. */
+function travelMinutes(km: number): number {
   const city = Math.min(km, 10);
   return (city / PLANNING.speed.autoStad) * 60 + (Math.max(0, km - 10) / PLANNING.speed.autoSnelweg) * 60 + (km > 0.2 ? 3 : 0);
 }
@@ -117,7 +115,7 @@ function simulate(run: PlanRun, stops: Order[], ctx: Ctx, strict: boolean): Simu
   for (const order of stops) {
     const p = ctx.point(order);
     const d = roadKm(pos, p);
-    const minutes = travelMinutes(d, run.vehicle);
+    const minutes = travelMinutes(d);
     t += minutes;
     travel += minutes;
     km += d;
@@ -131,7 +129,7 @@ function simulate(run: PlanRun, stops: Order[], ctx: Ctx, strict: boolean): Simu
   const finish = t;
   const end = run.endsAtHome ? ctx.home.get(run) ?? ctx.start : ctx.start;
   const back = roadKm(pos, end);
-  const backMinutes = travelMinutes(back, run.vehicle);
+  const backMinutes = travelMinutes(back);
   travel += backMinutes;
   km += back;
   // A trip back to the loods must fit in the dagdeel; the way home does not count as work.
@@ -141,41 +139,31 @@ function simulate(run: PlanRun, stops: Order[], ctx: Ctx, strict: boolean): Simu
   return { ok, etas, finish, travel, km };
 }
 
-function vehicleFor(transport: Transport[], v: Volunteer): PlanRun["vehicle"] {
-  if (transport.includes("auto")) return "auto";
-  return v.cargoBike ? "bakfiets" : "fiets";
-}
-
-function capacityOf(vehicle: PlanRun["vehicle"]): number {
-  return PLANNING.capacity[vehicle];
-}
-
-/** Order fits this trip at all (dagdeel, distance for the bike), regardless of what else is in it. */
-function fitsRun(order: Order, run: PlanRun, ctx: Ctx): string {
+/** Order fits this trip at all (dagdeel, size), regardless of what else is in it. */
+function fitsRun(order: Order, run: PlanRun): string {
   const part = orderPart(order);
   if (part && run.part && part !== run.part) return "dagdeel";
-  if (run.vehicle !== "auto" && straightKm(ctx.start, ctx.point(order)) > PLANNING.bikeMaxKm) return "fiets";
   if (pieces(order) > run.capacity) return "capaciteit";
   return "";
 }
 
-/** Minutes on the road, plus a minute per car kilometre: nearby stops go by bike when one is free. */
-function tripCost(run: PlanRun, sim: Simulation): number {
-  return sim.travel + (run.vehicle === "auto" ? sim.km : 0);
+/** Minutes on the road plus a minute per kilometre, so a short trip wins from a fast detour. */
+function tripCost(sim: Simulation): number {
+  return sim.travel + sim.km;
 }
 
 /** Best place to put an order in a trip, or null when it does not fit anywhere. */
 function bestInsertion(run: PlanRun, order: Order, ctx: Ctx): { index: number; cost: number; busy: number } | null {
   const current = run.stops.map((s) => s.order);
   const now = simulate(run, current, ctx, true);
-  const base = tripCost(run, now);
+  const base = tripCost(now);
   const busy = current.length ? now.finish - run.start : 0;
   let best: { index: number; cost: number; busy: number } | null = null;
   for (let i = 0; i <= current.length; i++) {
     const next = [...current.slice(0, i), order, ...current.slice(i)];
     const sim = simulate(run, next, ctx, true);
     if (!sim.ok) continue;
-    const cost = tripCost(run, sim) - base;
+    const cost = tripCost(sim) - base;
     if (!best || cost < best.cost) best = { index: i, cost, busy };
   }
   return best;
@@ -186,7 +174,7 @@ function refresh(run: PlanRun, ctx: Ctx) {
   const sim = simulate(run, orders, ctx, false);
   run.stops = orders.map((order, i) => ({ order, eta: sim.etas[i] }));
   // No point leaving at 9:00 for a first stop at 11:00: leave just in time.
-  const firstLeg = orders.length ? travelMinutes(roadKm(ctx.start, ctx.point(orders[0])), run.vehicle) : 0;
+  const firstLeg = orders.length ? travelMinutes(roadKm(ctx.start, ctx.point(orders[0]))) : 0;
   run.depart = orders.length ? Math.max(run.start, Math.floor((sim.etas[0] - firstLeg) / 5) * 5) : run.start;
   run.km = Math.round(sim.km * 10) / 10;
   run.finish = sim.finish;
@@ -232,12 +220,10 @@ export function makePlan(input: PlanInput): Plan {
     if (!address) notes.push(`${v.name} heeft geen woonadres ingevuld; de laatste rit eindigt bij de loods.`);
     else if (!homePoint) notes.push(`Het adres van ${v.name} is niet gevonden; de laatste rit eindigt bij de loods.`);
     slots.forEach((slot, i) => {
-      const vehicle = vehicleFor(slot.transport, v);
       const run: PlanRun = {
         courier: v.name,
         volunteer: v,
         part: slot.part,
-        vehicle,
         start: slot.start,
         end: slot.end,
         depart: slot.start,
@@ -247,7 +233,7 @@ export function makePlan(input: PlanInput): Plan {
         km: 0,
         finish: slot.start,
         pieces: 0,
-        capacity: capacityOf(vehicle),
+        capacity: PLANNING.capacity,
         lockedIds: []
       };
       home.set(run, homePoint);
@@ -283,12 +269,10 @@ export function makePlan(input: PlanInput): Plan {
       // Not signed up for this day: a trip of its own, so the hand-made choice is not lost.
       const v = findVolunteer(input.volunteers, courier);
       const [a, b] = PLANNING.partWindows[part] ?? PLANNING.partWindows[""];
-      const vehicle: PlanRun["vehicle"] = v && v.roles.fietskoerier.wants && !v.roles.autokoerier.wants ? (v.cargoBike ? "bakfiets" : "fiets") : "auto";
       run = {
         courier,
         volunteer: v,
         part,
-        vehicle,
         start: Number(a.slice(0, 2)) * 60 + Number(a.slice(3)),
         end: Number(b.slice(0, 2)) * 60 + Number(b.slice(3)),
         depart: Number(a.slice(0, 2)) * 60 + Number(a.slice(3)),
@@ -298,7 +282,7 @@ export function makePlan(input: PlanInput): Plan {
         km: 0,
         finish: 0,
         pieces: 0,
-        capacity: capacityOf(vehicle),
+        capacity: PLANNING.capacity,
         lockedIds: []
       };
       home.set(run, null);
@@ -311,14 +295,14 @@ export function makePlan(input: PlanInput): Plan {
   }
 
   // Hardest orders first: fewest possible trips, earliest deadline, furthest from the loods.
-  const options = (o: Order) => runs.filter((r) => !fitsRun(o, r, ctx)).length;
+  const options = (o: Order) => runs.filter((r) => !fitsRun(o, r)).length;
   free.sort((a, b) => options(a) - options(b) || orderWindow(a)[1] - orderWindow(b)[1] || straightKm(ctx.start, ctx.point(b)) - straightKm(ctx.start, ctx.point(a)));
 
   for (const order of free) {
     let best: { run: PlanRun; index: number; score: number } | null = null;
     const reasons = new Set<string>();
     for (const run of runs) {
-      const why = fitsRun(order, run, ctx);
+      const why = fitsRun(order, run);
       if (why) {
         reasons.add(why);
         continue;
@@ -346,9 +330,9 @@ export function makePlan(input: PlanInput): Plan {
           : reasons.has("tijd")
             ? "Past bij niemand meer binnen de tijd (dagdeel of gevraagde tijd)."
             : reasons.has("vol")
-              ? "Er is geen plek meer: fietsen en auto's zitten vol."
-              : reasons.has("fiets")
-                ? "Te ver voor de fiets, en er is geen auto beschikbaar."
+              ? "Er is geen plek meer: de auto's zitten vol."
+              : reasons.has("capaciteit")
+                ? `Meer dan ${PLANNING.capacity} oliebollen: past niet in één auto.`
                 : "Past bij geen enkele koerier.";
     unassigned.push({ order, reason });
   }

@@ -12,7 +12,7 @@ Het script:
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier, barter en pop-up); het script schrijft daar alleen bij **Bewerken** en bij een **nieuwe bestelling of pop-upvoorraad** uit het beheer;
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
-  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wall of fame`, `Wijzigingslog` en `Pop-up verkoop`;
+  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wall of fame`, `Wijzigingslog`, `Pop-up verkoop` en `Rooster` (de planning: wie staat wanneer, zie hieronder);
 - ontvangt zakelijke aanvragen van het bestelformulier (`#/bestellen`), stuurt de klant een kopie en info@ een melding,
   en telt bevestigde aanvragen mee als order (zie `docs/zakelijk-bestellen.md`);
 - zet bij bevestigen bedrijven met toestemming op de wall of fame (tabblad Wall of fame) en geeft de logozoeker
@@ -102,7 +102,7 @@ in dezelfde kolommen en hetzelfde formaat als het formulier ("Vrijdag 18 decembe
 - De aanmeldpagina zet vijf extra kolommen achteraan zodra ze voor het eerst gevuld worden: *Hoe aangemeld*,
   *Mag ingedeeld worden waar nodig*, *Maximaal aantal dagen*, *Herinnering 24 uur van tevoren* en *Rijbewijs*
   (zie `docs/vrijwilligers-aanmelding.md`). Rijen uit het Google Formulier laten die leeg.
-- De agenda in het dashboard wordt gevuld uit deze aanmeldingen (beschikbaarheid, niet het definitieve rooster).
+- De pagina's Vrijwilligers en Rooster lezen de beschikbaarheid uit deze aanmeldingen. Het definitieve rooster staat in het tabblad `Rooster`.
 - Inpakkers en bezorgers zien alleen namen en dagen; telefoon, e-mail en opmerkingen ziet alleen beheer.
 - De dagen op de aanmeldpagina staan in `src/config.ts` (`SIGNUP_OPTIONS`), het aantal benodigde mensen per
   taak per dag(deel) in `STAFFING_TARGETS`. Daarmee kleurt de bezettingskalender en stelt de aanmeldpagina
@@ -125,7 +125,7 @@ in de plaats ervan delen.
   - `taak` is `inpakken`, `autokoerier` of `oliebollenbar`. De fietskoerier doet niet meer mee; regels met `fietskoerier` worden overgeslagen.
   - `dagdeel` is `ochtend`, `middag`, `avond` of leeg (hele dag).
   - `datum` mag ook "26 december" zijn.
-  - `nodig` leeg = standaard (4).
+  - `nodig` leeg = standaard (4); `0` = niemand nodig op dat moment. De pagina **Rooster** vult deze kolom als de planner per dag instelt hoeveel mensen er nodig zijn (en voegt een regel toe als het moment er nog niet staat).
   - Het script vult de agenda de eerste keer met 15–24 en 27–31 december. Pas hem daarna gewoon in de Sheet aan: de aanmeldpagina en de bezettingskalender volgen direct.
   - Aanmeldingen bewaren de gekozen tekst ("Woensdag 30 december: middag"). Verander je een moment waarvoor al mensen zijn aangemeld, dan tellen die niet meer mee voor het nieuwe moment.
 - **Historie**: één regel per dag van eerdere jaren: `jaar`, `datum` (JJJJ-MM-DD), `bestellingen`, `oliebollen`, `omzet`.
@@ -134,12 +134,12 @@ in de plaats ervan delen.
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
   - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_btw` (9),
-    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1199, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (20: vóór 10:00 is een aanvraag;
+    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_zone1` (10), `zakelijk_bezorgen_zone2` (25), `zakelijk_bezorgen_zone3_vast` (25: het vaste tarief van zone 3), `zakelijk_bezorgen_per_km` (0,35: komt er in zone 3 per km bovenop, op aanvraag, tot `zakelijk_bezorgen_vast_vanaf`, 500 oliebollen), `zakelijk_zone1_plaatsen` en `zakelijk_zone2_plaatsen` (de plaatsen per zone met een komma ertussen; leeg = de lijst uit `CONFIG.BUSINESS.zones`; elke andere plaats is zone 3; zie `docs/zakelijk-bestellen.md`), `zakelijk_toeslag_voor_10` (20: vóór 10:00 is een aanvraag;
     let op: staat hier nog 10 uit vorig jaar, maak het dan 15 of maak het vak leeg), `zakelijk_werkdagen_vooraf` (3 werkdagen van tevoren bestellen),
     `zakelijk_sluiting` (`2026-12-28 12:00`: daarna is zakelijk bestellen dicht),
     `zakelijk_pakket_brons` (50, Schuifelpartner), `zakelijk_pakket_zilver` (150, Danspartner), `zakelijk_pakket_goud` (500,
     Polonaisepartner): vanaf die aantallen geldt het pakket. Feestpartner (alleen als de klant hem kiest):
-    `zakelijk_feest_minimum` (501), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
+    `zakelijk_feest_minimum` (510), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
     `zakelijk_feest_gasten_groot` (60: vanaf zo veel gasten de hogere prijs), `zakelijk_feest_korting` (1: zo veel euro per
     oliebol gaat van de feestprijs af, tot € 0) en `zakelijk_feest_btw` (21, nog te bevestigen),
     `zakelijk_email`, `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar` (wie bij elke nieuwe
@@ -191,11 +191,11 @@ Let op: "verzonden" betekent dat Gmail de mail heeft aangenomen. Een mail die la
 
 ## Bakkerij (beheer)
 
-De pagina **Bakkerij** (alleen beheer) opent op de leverdag van morgen: een dag van tevoren zet je de bestellijst klaar en stuur je hem naar de bakker. Je deelt de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon. Elke keer delen legt het script vast (`logBakeShare`, alleen beheer) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email` of `deelmenu`), `door`, `verzonden_op`. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
+De pagina **Bakkerij** (alleen beheer) opent op de leverdag van morgen: een dag van tevoren zet je de bestellijst klaar en stuur je hem naar de bakker. Je deelt de aantallen van een leverdag (met, zonder, totaal; pop-upvoorraad telt mee) via WhatsApp, e-mail of het deelmenu van de telefoon, of je kopieert het bericht en plakt het zelf in een chat. In het veld **Opmerking voor de bakker** typ je wat erbij moet; dat gaat in het bericht mee. Elke keer delen legt het script vast (`logBakeShare`, alleen beheer) in het tabblad **`Bakkerij doorgegeven`**: `id`, `leverdatum`, `met`, `zonder`, `totaal`, `kanaal` (`whatsapp`, `email`, `deelmenu` of `gekopieerd`), `door`, `verzonden_op`, `opmerking`. De kolom `opmerking` voegt het script zelf toe aan een bestaand tabblad. Veranderen de aantallen daarna, dan toont het platform het verschil per product en kun je opnieuw delen.
 
 Optioneel in **Instellingen**: `bakkerij_whatsapp` (telefoonnummer, bijv. `06 12345678`) en `bakkerij_email`. Dan gaat het bericht meteen naar de bakkerij; anders kies je bij het delen zelf de ontvanger.
 
-Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd.
+Let op: bij WhatsApp en e-mail wordt het delen vastgelegd op het moment dat je op de knop drukt (het platform kan niet zien of je het bericht daarna echt verstuurt). Bij het deelmenu van de telefoon pas als je een app kiest; sluit je het menu, dan wordt niets vastgelegd. Na kopiëren leg je het zelf vast met "Verstuurd? Leg vast als doorgegeven".
 
 ## Contact bij aflevering
 
@@ -232,6 +232,28 @@ Onder **Vrijwilligers → Na de actie** kan beheer met één knop (na het typen 
 - namen in de dashboardtabbladen, IBANs in `Kosten`, de routes, de opgezochte adressen in `Locaties`, en de bonfoto's in de Drive-map.
 
 Aantallen, bedragen en datums blijven staan, zodat de tussenstand van volgend jaar kan vergelijken. Maak eventueel eerst een kopie van de Sheet.
+
+## Rooster (wie staat wanneer)
+
+Op de pagina **Rooster** (alleen beheer) stelt de planner per dag in hoeveel mensen een dienst nodig heeft en zet
+vrijwilligers op een dienst. Het script bewaart dat op twee plekken:
+
+- **Tabblad `Rooster`**: één regel per ingeplande dienst, met de definitieve tijden. Dit is de planningssheet.
+
+  | id | datum | weekdag | taak | dagdeel | begintijd | eindtijd | vrijwilliger | locatie | opmerking | ingepland_door | bijgewerkt_op |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | R3f9a1c2 | 2026-12-07 | maandag | inpakken | | 07:00 | 09:30 | Ria de Vries | | | Raquel | 2026-11-30 10:12:00 |
+  | R8b21d04 | 2026-12-09 | woensdag | oliebollenbar | | 13:00 | 17:30 | Lotte Bos | Olieborrel, Het Amstelhuis | | Raquel | 2026-11-30 10:14:00 |
+
+  - Het script houdt het tabblad op volgorde van dag en begintijd.
+  - Met de hand bijwerken mag: pas een tijd aan, of typ een regel erbij met `datum`, `taak`, `begintijd`, `eindtijd`
+    en `vrijwilliger` (laat `id` leeg; het platform vult hem in zodra je de dienst daar wijzigt).
+  - De vrijwilliger staat er met naam, niet met een rijnummer: dat verschuift als iemand een aanmelding verwijdert.
+  - *Persoonsgegevens verwijderen* (pagina Vrijwilligers) leegt ook dit tabblad.
+- **Kolom `nodig` in het tabblad `Agenda`**: hoeveel mensen een dienst op een dag nodig heeft (`setNeeded`).
+
+Acties (alleen beheer): `saveShift` (inplannen, verplaatsen, tijden wijzigen), `removeShift` en `setNeeded`.
+Zie `docs/rooster.md` voor het scherm.
 
 ## Realtime
 

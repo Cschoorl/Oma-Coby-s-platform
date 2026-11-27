@@ -2,14 +2,17 @@ import type { BakeShare, DashboardState } from "../types/dashboard";
 import { formatChangeTime } from "./orderChanges";
 
 /*
- * Beheer › Bakkerij: the bake counts of one delivery day, passed on by WhatsApp, e-mail or the
- * phone's share menu. Every share is saved (tab "Bakkerij doorgegeven"), so the platform can warn
+ * Beheer › Bakkerij: the bake counts of one delivery day, passed on by WhatsApp, e-mail, the
+ * phone's share menu or as a copied message. Every share is saved (tab "Bakkerij doorgegeven"), so the platform can warn
  * when the counts changed afterwards.
  */
 
 export type ShareChannel = BakeShare["channel"];
 
-export const channelLabel: Record<ShareChannel, string> = { whatsapp: "WhatsApp", email: "e-mail", deelmenu: "deelmenu van de telefoon" };
+export const channelLabel: Record<ShareChannel, string> = { whatsapp: "WhatsApp", email: "e-mail", deelmenu: "deelmenu van de telefoon", gekopieerd: "een gekopieerd bericht" };
+
+/** A remark for the baker is one short message, not a letter. */
+export const BAKE_NOTE_MAX = 500;
 
 export interface BakeCounts {
   withRaisins: number;
@@ -74,8 +77,8 @@ function dayName(iso: string): string {
   return d.toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long" });
 }
 
-/** The message as it goes out. Mentions the change when counts were passed on before. */
-export function shareText(date: string, now: BakeCounts, last?: BakeShare, today = ""): string {
+/** The message as it goes out. Mentions the change when counts were passed on before; a remark closes it. */
+export function shareText(date: string, now: BakeCounts, last?: BakeShare, today = "", note = ""): string {
   const total = now.withRaisins + now.withoutRaisins;
   const when = today && addDays(today, 1) === date ? `morgen, ${dayName(date)}` : dayName(date);
   const lines = [
@@ -91,6 +94,7 @@ export function shareText(date: string, now: BakeCounts, last?: BakeShare, today
       lines.push("", `Gewijzigd sinds ${formatChangeTime(last.at)} (toen ${last.total}): met ${signed(d.withRaisins)}, zonder ${signed(d.withoutRaisins)}, totaal ${signed(d.total)}.`);
     }
   }
+  if (note.trim()) lines.push("", `Opmerking: ${note.trim()}`);
   return lines.join("\n");
 }
 

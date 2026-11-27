@@ -120,8 +120,12 @@ Sinds 27 november gaan er na elke aanmelding twee mails uit (`sendVolunteerMails
 - **Melding aan planning@** met alles uit de aanmelding, ook de opmerking. Antwoorden gaat naar de vrijwilliger. Een
   ander adres kies je met de instelling `vrijwilligers_melding_naar` in het tabblad Instellingen.
 
-Een mislukte mail maakt de aanmelding nooit ongedaan: die staat dan al in de Sheet. De afzender is het Google-account
-waar het script onder draait, met de naam "Oma Coby's Oliebollenbar". Zelf wijzigen via een persoonlijke link komt in
+Een mislukte mail maakt de aanmelding nooit ongedaan: die staat dan al in de Sheet.
+
+**Afzender.** Beide mails gaan vanaf planning@ (instelling `vrijwilligers_afzender`), als dat adres in Gmail van het
+account achter het script onder Instellingen → Accounts → "Verzenden als" staat. Staat het daar niet, dan gaan ze vanaf
+dat account zelf, met planning@ als antwoordadres; in Apps Script → Uitvoeringen staat dan een waarschuwing. Voor dit
+alles heeft het script toestemming voor Gmail nodig (GmailApp); die vraagt Google bij de eerstvolgende implementatie. Zelf wijzigen via een persoonlijke link komt in
 een volgende stap.
 
 ## Getoetst aan planningstools

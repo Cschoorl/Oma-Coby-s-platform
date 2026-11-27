@@ -82,6 +82,12 @@ const CONFIG = {
    */
   VOLUNTEERS_NOTIFY: 'planning@omacobysoliebollenbar.nl',
   /**
+   * Afzender van de vrijwilligersmails. Werkt alleen als dit adres in Gmail van het account achter dit script
+   * onder Instellingen → Accounts → "Verzenden als" staat; anders gaat de mail vanaf dat account zelf.
+   * Instelling: vrijwilligers_afzender.
+   */
+  VOLUNTEERS_FROM: 'planning@omacobysoliebollenbar.nl',
+  /**
    * Zakelijk bestellen (#/bestellen). Standaardprijzen en -dagen; overschrijf ze in het tabblad
    * Instellingen (zakelijk_minimum, zakelijk_dagen_vooraf, …; de prijs niet) en in het tabblad Zakelijke dagen.
    * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
@@ -787,7 +793,8 @@ const HANDLERS = {
       values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
     }
 
-    return withLock_(function () {
+    // Save first, under the lock; the mails go after, outside it.
+    withLock_(function () {
       const sheet = volunteerSheet_();
       let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
       let index = volunteerIndex_(headers);
@@ -2606,6 +2613,33 @@ function volunteerChoicesText_(roles, times) {
 }
 
 /**
+ * Sends `mail` (MailApp's fields) from `from` when that address is a "Send mail as" alias of this account;
+ * otherwise from the account itself, as MailApp does. Returns the address it was sent from ('' = the account).
+ */
+function sendMailFrom_(mail, from) {
+  from = String(from || '').trim().toLowerCase();
+  let aliases = [];
+  if (from) {
+    try {
+      aliases = GmailApp.getAliases().map(function (a) { return String(a).toLowerCase(); });
+    } catch (err) {
+      console.error('Gmail-aliassen niet op te vragen: ' + err);
+    }
+  }
+  if (from && aliases.indexOf(from) !== -1) {
+    const options = { from: from, name: mail.name };
+    // Sent from the reply address itself, a separate reply address is not needed.
+    if (mail.replyTo && String(mail.replyTo).toLowerCase() !== from) options.replyTo = mail.replyTo;
+    if (mail.htmlBody) options.htmlBody = mail.htmlBody;
+    GmailApp.sendEmail(mail.to, mail.subject, mail.body, options);
+    return from;
+  }
+  if (from) console.warn(from + ' staat niet als "Verzenden als" in Gmail; de mail gaat vanaf het account zelf.');
+  MailApp.sendEmail(mail);
+  return '';
+}
+
+/**
  * Confirmation to the volunteer (their answer goes to planning@) and a notice to planning@.
  * Each in its own try, so one failing never stops the other. Returns whether the confirmation went out.
  */
@@ -2617,6 +2651,7 @@ function sendVolunteerMails_(values, roles, times) {
     // No settings tab: CONFIG is used.
   }
   const planning = String(settings.vrijwilligers_melding_naar || CONFIG.VOLUNTEERS_NOTIFY).trim();
+  const sender = String(settings.vrijwilligers_afzender || CONFIG.VOLUNTEERS_FROM).trim();
   const first = values.name.split(/\s+/)[0];
   const choices = volunteerChoicesText_(roles, times);
   const details = [
@@ -2660,7 +2695,7 @@ function sendVolunteerMails_(values, roles, times) {
         ].join('\n')
       };
       if (planning) mail.replyTo = planning;
-      MailApp.sendEmail(mail);
+      sendMailFrom_(mail, sender);
       cache.put(key, String(sent + 1), 3600);
       mailed = true;
     } catch (err) {
@@ -2671,7 +2706,7 @@ function sendVolunteerMails_(values, roles, times) {
     try {
       const tasks = VOLUNTEER_ROLES.filter(function (role) { return roles[role] && roles[role].wants; })
         .map(function (role) { return VOLUNTEER_ROLE_NAMES[role].toLowerCase(); });
-      MailApp.sendEmail({
+      sendMailFrom_({
         to: planning,
         replyTo: values.email,
         name: CONFIG.MAIL_SENDER_NAME,
@@ -2690,7 +2725,7 @@ function sendVolunteerMails_(values, roles, times) {
           mailed ? 'De vrijwilliger heeft een bevestiging per mail gekregen. Antwoord je op deze mail, dan gaat je antwoord naar de vrijwilliger.'
             : 'Let op: de bevestiging naar de vrijwilliger is niet verstuurd. Neem zelf even contact op.'
         ].join('\n').replace(/\n{3,}/g, '\n\n')
-      });
+      }, sender);
     } catch (err) {
       console.error('Melding vrijwilliger ' + values.email + ' niet verstuurd: ' + err);
     }

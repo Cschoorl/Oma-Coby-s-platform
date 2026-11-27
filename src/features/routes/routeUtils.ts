@@ -2,7 +2,7 @@ import type { ChangeEntry, DashboardState, RouteInfo, Volunteer } from "../../ty
 import { routeChangedAfter } from "../../lib/orderChanges";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
-import { OPTION_TIMES, PLANNING } from "../../config";
+import { OPTION_TIMES, PLANNING, ROUTE_START_TIMES } from "../../config";
 
 /** One route per courier, day and dagdeel ("rit"); the dagdeel is left out when it is unknown. */
 export function routeKey(date: string, courier: string, part = ""): string {
@@ -199,6 +199,16 @@ export function courierAvailability(v: Volunteer, isoDate: string): Availability
     byPart.set(part, slot);
   }
   return Array.from(byPart.values()).sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Departure of a trip that has no saved route yet: the start of the dagdeel the courier signed up
+ * for, else the default for the dagdeel.
+ */
+export function defaultStart(volunteers: Volunteer[], isoDate: string, courier: string, part: string): string {
+  const v = findVolunteer(volunteers, courier);
+  const slot = v ? courierAvailability(v, isoDate).find((a) => a.part === part) : undefined;
+  return slot ? toHhmm(slot.start) : ROUTE_START_TIMES[part] ?? ROUTE_START_TIMES[""];
 }
 
 /** Time window of an order from "tussen 9:00 en 12:30", "vóór 10:00", "na 14:00" or the planned time. */

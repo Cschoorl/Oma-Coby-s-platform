@@ -6,8 +6,8 @@ import { Badge, Card, CopyButton, EmptyState, Icon, Notice, OliebolLoader, Secti
 import { Avatar } from "../../components/Avatar";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
-import { courierAvailability, courierCandidates, courierRuns, couriersOn, deliveryOrders, findVolunteer, formatTravelTime, homeAddress, isBikeRoute, isRouteStale, orderPart, orderedStops, runRoute, signedUpOn, toHhmm, whatsappNumber } from "./routeUtils";
-import { PLANNING, ROUTE_START_TIMES } from "../../config";
+import { courierCandidates, courierRuns, couriersOn, defaultStart, deliveryOrders, findVolunteer, formatTravelTime, homeAddress, isBikeRoute, isRouteStale, orderPart, orderedStops, runRoute, signedUpOn, whatsappNumber } from "./routeUtils";
+import { PLANNING } from "../../config";
 import { AutoPlanCard } from "./AutoPlanCard";
 import { effectiveCourier } from "../../utils/orderUtils";
 import type { Order } from "../../types/order";
@@ -76,10 +76,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
     if (startTimes[tripKey(courier, part)]) return startTimes[tripKey(courier, part)];
     const saved = routeOf(courier, part)?.startTime;
     if (saved) return saved;
-    // The start of the dagdeel the courier signed up for, else the default for the dagdeel.
-    const v = findVolunteer(state.volunteers, courier);
-    const slot = v ? courierAvailability(v, date).find((a) => a.part === part) : undefined;
-    return slot ? toHhmm(slot.start) : ROUTE_START_TIMES[part] ?? ROUTE_START_TIMES[""];
+    return defaultStart(state.volunteers, date, courier, part);
   };
   /** The last trip of the day ends at the courier's home, when the address is known. */
   const endFor = (courier: string, last: boolean) => (last ? homeAddress(findVolunteer(state.volunteers, courier)) : "");

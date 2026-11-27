@@ -35,6 +35,7 @@ import { minBoxes } from "../../utils/boxes";
 import { byRoute, labelsFor, loadAutoPrint, printLabels } from "./labels";
 import { LabelPanel, boxPlan } from "./LabelPanel";
 import { PackingNotes } from "./PackingNotes";
+import { PackDeadlines } from "./PackDeadlines";
 import { openPackNotes } from "../../lib/packNotes";
 import { DeliveryContactLine } from "../../components/DeliveryContactLine";
 import { deliveryContact } from "../../lib/deliveryContact";
@@ -203,6 +204,9 @@ export function PackingPage({ state, session, run }: PackingPageProps) {
         </div>
         {allPacked ? <Sticker tone="kerst">Alles ingepakt!</Sticker> : null}
       </div>
+
+      {/* How much has to be ready by which time, from the routes and the bezorgmoment of this day. */}
+      <PackDeadlines state={state} date={date} />
 
       {/* Approved on Bakkerij (beheer); read-only here. "Nog bakken" above counts down from it. */}
       <section className="grid gap-1 rounded-kaart bg-gouwe-50 p-3.5 sm:p-4" aria-label="Gebakken op deze leverdag">

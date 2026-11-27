@@ -9,7 +9,7 @@ import { effectiveNote, mapsRouteUrlForOrders, mapsUrl, stopAddress } from "../.
 import { navigate } from "../../lib/router";
 import { patches } from "../../lib/patches";
 import type { Patch } from "../../lib/useDashboard";
-import { courierRuns, couriersOn, isRouteStale, orderedStops, runRoute } from "./routeUtils";
+import { courierRuns, couriersOn, formatTravelTime, isRouteStale, orderedStops, runRoute } from "./routeUtils";
 import { DeliveryContactLine } from "../../components/DeliveryContactLine";
 import { deliveryContact, telHref } from "../../lib/deliveryContact";
 
@@ -85,7 +85,7 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
                 <p className="font-display text-[34px] uppercase leading-none tracking-wide text-krent">Hoi {name.split(" ")[0]}!</p>
                 <p className="mt-1 text-sm text-oliebol">
                   {orders.length} {orders.length === 1 ? "stop" : "stops"} · {pieces} oliebollen
-                  {computed.length ? ` · ${(Math.round(km * 10) / 10).toLocaleString("nl-NL")} km (± ${minutes} min)` : ""}
+                  {computed.length ? ` · ${(Math.round(km * 10) / 10).toLocaleString("nl-NL")} km (± ${formatTravelTime(minutes)})` : ""}
                   {trips.length > 1 ? ` · ${trips.length} ritten` : ""}
                   {firstStart ? ` · vertrek ${firstStart}` : ""}
                 </p>

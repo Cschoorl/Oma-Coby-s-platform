@@ -168,6 +168,15 @@ export function toHhmm(minutes: number): string {
   return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }
 
+/** Travel time in hours and whole minutes: 45 → "45 min", 60 → "1 uur", 87.4 → "1 uur 27 min". */
+export function formatTravelTime(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} uur` : `${hours} uur ${rest} min`;
+}
+
 /** Window of a signup option: the Agenda time ("09:00–12:00") when set, else the default for the dagdeel. */
 function optionWindow(option: string, part: string): [number, number] {
   const time = OPTION_TIMES[option.trim().toLowerCase()] ?? "";

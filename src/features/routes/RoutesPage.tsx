@@ -6,7 +6,7 @@ import { Badge, Card, CopyButton, EmptyState, Icon, Notice, OliebolLoader, Secti
 import { Avatar } from "../../components/Avatar";
 import { mapsRouteUrlForOrders, stopAddress } from "../../utils/orderUtils";
 import { appLink } from "../../lib/router";
-import { courierAvailability, courierCandidates, courierRuns, couriersOn, deliveryOrders, findVolunteer, guessMode, homeAddress, isRouteStale, orderPart, orderedStops, runRoute, toHhmm, transportOn, whatsappNumber } from "./routeUtils";
+import { courierAvailability, courierCandidates, courierRuns, couriersOn, deliveryOrders, findVolunteer, formatTravelTime, guessMode, homeAddress, isRouteStale, orderPart, orderedStops, runRoute, toHhmm, transportOn, whatsappNumber } from "./routeUtils";
 import { BIKE_MAX_PIECES, PLANNING, ROUTE_START_TIMES } from "../../config";
 import { AutoPlanCard } from "./AutoPlanCard";
 import { effectiveCourier } from "../../utils/orderUtils";
@@ -197,7 +197,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
             const done = orders.filter((o) => state.delivery[o.id]).length;
             const message = [
               `Hoi ${courier}! Je bezorgroute voor ${formatDayLabel(date)}${part ? ` (${part})` : ""}:`,
-              `${orders.length} stops, ${pieces} oliebollen${route ? `, ${route.km.toLocaleString("nl-NL")} km (± ${route.minutes} min)` : ""}.`,
+              `${orders.length} stops, ${pieces} oliebollen${route ? `, ${route.km.toLocaleString("nl-NL")} km (± ${formatTravelTime(route.minutes)})` : ""}.`,
               route?.startTime && !stale ? `Vertrek ${route.startTime} vanaf de loods in Aalsmeer.` : "",
               "",
               `Alle adressen, aantallen en opmerkingen: ${link}`,
@@ -228,7 +228,7 @@ export function RoutesPage({ state, session, run, isDemo }: RoutesPageProps) {
                   <div className="flex flex-wrap items-center gap-2">
                     {route ? (
                       <Badge tone={stale ? "aandacht" : "klaar"}>
-                        {route.km.toLocaleString("nl-NL")} km · ± {route.minutes} min{stale ? " · verouderd" : ""}
+                        {route.km.toLocaleString("nl-NL")} km · ± {formatTravelTime(route.minutes)}{stale ? " · verouderd" : ""}
                       </Badge>
                     ) : (
                       <Badge>Nog niet berekend</Badge>

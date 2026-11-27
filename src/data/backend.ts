@@ -219,7 +219,7 @@ export interface Backend {
   /** Inpakken › Opmerkingen: tick an item off as processed (or open it again). */
   setPackNoteDone(session: Session, itemId: string, orderId: string, done: boolean): Promise<SavedVersion | void>;
   /** Beheer › Bakkerij: save that the counts of a day were shared, and how. */
-  logBakeShare(session: Session, share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }): Promise<SavedVersion | void>;
+  logBakeShare(session: Session, share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"]; note?: string }): Promise<SavedVersion | void>;
   /** Several assignments in one go (automatic planning). */
   assignCouriers(session: Session, assignments: Array<{ orderId: string; courier: string }>): Promise<void>;
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
@@ -1037,7 +1037,7 @@ function createDemoBackend(notice?: string): Backend {
     async logBakeShare(session, share) {
       await delay(150);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(share.date)) throw new Error("Kies een leverdag.");
-      if (!["whatsapp", "email", "deelmenu"].includes(share.channel)) throw new Error("Onbekend kanaal.");
+      if (!["whatsapp", "email", "deelmenu", "gekopieerd"].includes(share.channel)) throw new Error("Onbekend kanaal.");
       mutate((store) => {
         const entry: BakeShare = { id: `B${Date.now().toString(36)}`, ...share, total: share.withRaisins + share.withoutRaisins, by: session.name, at: nowStamp() };
         store.bakeShares = [entry, ...(store.bakeShares ?? [])];

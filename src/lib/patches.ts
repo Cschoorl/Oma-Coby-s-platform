@@ -29,7 +29,7 @@ export const patches = {
     else delete packNotes[itemId];
     return { ...s, packNotes };
   },
-  bakeShare: (share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"] }, name: string) => (s: DashboardState): DashboardState => ({
+  bakeShare: (share: { date: string; withRaisins: number; withoutRaisins: number; channel: BakeShare["channel"]; note?: string }, name: string) => (s: DashboardState): DashboardState => ({
     ...s,
     bakeShares: [{ id: "nieuw", ...share, total: share.withRaisins + share.withoutRaisins, by: name, at: stamp() }, ...(s.bakeShares ?? [])]
   }),

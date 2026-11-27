@@ -366,12 +366,28 @@ export function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof iconP
 }
 
 /** Kopieerknop die altijd laat zien dat het gelukt is. */
-export function CopyButton({ text, label, done = "Gekopieerd", className = secondaryButton, icon = true }: { text: string; label: ReactNode; done?: string; className?: string; icon?: boolean }) {
+export function CopyButton({
+  text,
+  label,
+  done = "Gekopieerd",
+  className = secondaryButton,
+  icon = true,
+  onCopied
+}: {
+  text: string;
+  label: ReactNode;
+  done?: string;
+  className?: string;
+  icon?: boolean;
+  /** Called once the text is on the clipboard, e.g. to offer a next step. */
+  onCopied?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      onCopied?.();
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
       toast("Kopiëren lukte niet. Selecteer de tekst en kopieer hem zelf.");

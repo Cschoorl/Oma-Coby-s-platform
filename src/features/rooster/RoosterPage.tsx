@@ -11,7 +11,7 @@ import { planningDays } from "../volunteers/availability";
 import { PersonDetails, PersonHeader, TaskDot } from "../volunteers/PlanningViews";
 import { DayPlanner } from "./DayPlanner";
 import type { Drag, Planner } from "./planner";
-import { LANE_NAMES, hintsFor, laneKey, laneLabel, lanesOn, moveShift, nameKey, newShift, people, plannedDays, rosterDays, shiftsOf, timeRange, weeksOf, type Lane, type RosterDay } from "./roster";
+import { LANE_NAMES, hintsFor, laneKey, lanesOn, moveShift, nameKey, newShift, people, plannedDays, rosterDays, shiftsOf, timeRange, weeksOf, type Lane, type RosterDay } from "./roster";
 
 interface RoosterPageProps {
   state: DashboardState;
@@ -187,10 +187,10 @@ export function RoosterPage({ state, session, run }: RoosterPageProps) {
 
       {openPerson ? (
         <Drawer title={openPerson.name} header={<PersonHeader v={openPerson} />} onClose={() => setOpenName(null)}>
-          <PlannedList shifts={shiftsOf(roster, openPerson.name)} days={days} onDay={(iso) => (setOpenName(null), setPicked(iso))} />
           <PersonDetails
             v={openPerson}
             days={signupDays}
+            shifts={shiftsOf(roster, openPerson.name)}
             onDay={(key) => {
               const found = days.find((d) => dayKey(d.label) === key);
               setOpenName(null);
@@ -287,36 +287,5 @@ function ShiftChip({ shift, lane, onPick, p }: { shift: RosterShift; lane: Lane;
         </span>
       ) : null}
     </span>
-  );
-}
-
-/** In the person panel: the shifts this person is planned on. */
-function PlannedList({ shifts, days, onDay }: { shifts: RosterShift[]; days: RosterDay[]; onDay: (iso: string) => void }) {
-  const sorted = [...shifts].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
-  return (
-    <section className="grid gap-1.5">
-      <p className={fieldLabel}>Ingepland</p>
-      {sorted.length === 0 ? <p className="text-sm text-muted">Nog niet ingepland.</p> : null}
-      <ul className="grid">
-        {sorted.map((s) => {
-          const d = days.find((x) => x.iso === s.date);
-          return (
-            <li key={s.id} className="border-b border-lijn last:border-0">
-              <button type="button" onClick={() => onDay(s.date)} className="grid w-full grid-cols-[84px_minmax(0,1fr)] items-start gap-2 py-2 text-left hover:bg-vul">
-                <span className="text-sm font-bold text-krent">{d ? `${d.weekday} ${d.day} ${d.month.slice(0, 3)}` : s.date}</span>
-                <span className="flex flex-wrap items-center gap-1.5 text-xs text-krent">
-                  <TaskDot role={s.role} />
-                  {laneLabel(s)}
-                  <span className="tabular-nums text-muted">
-                    {s.start}–{s.end}
-                    {s.location ? ` · ${s.location}` : ""}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }

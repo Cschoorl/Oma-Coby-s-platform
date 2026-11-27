@@ -291,7 +291,6 @@ function App() {
       <main className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-5 px-4 py-6">
         {current ? (
           <div className="grid gap-1 print:hidden">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">#{current.path}</p>
             <h1 className="font-display text-[40px] uppercase leading-none tracking-wide text-krent">{current.label}</h1>
             <p className="text-sm text-oliebol">{current.description}</p>
           </div>

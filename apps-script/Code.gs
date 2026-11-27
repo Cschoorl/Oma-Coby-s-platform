@@ -787,7 +787,8 @@ const HANDLERS = {
       values.reminder = PLANNING_TEXT.reminder[planning.reminder] || '';
     }
 
-    return withLock_(function () {
+    // Save first, under the lock; the mails go after, outside it.
+    withLock_(function () {
       const sheet = volunteerSheet_();
       let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
       let index = volunteerIndex_(headers);

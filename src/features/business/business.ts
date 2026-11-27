@@ -1,13 +1,21 @@
 import type { BusinessArea, BusinessInfo, BusinessMoment, BusinessOrder, BusinessOrderInput, BusinessPackage, BusinessPackageChoice, BusinessPackageKey, BusinessSource, BusinessTotals } from "../../types/business";
 import type { Order } from "../../types/order";
-import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_PER_COLLEAGUE, OLD_PACKAGE_NAMES } from "../../config";
+import { straightKm } from "../routes/planner";
+import { BUSINESS_DEFAULTS, BUSINESS_DELIVERY_WINDOW, BUSINESS_ORIGIN, BUSINESS_PER_COLLEAGUE, OLD_PACKAGE_NAMES, PLANNING } from "../../config";
 
 /*
  * Rekenen en controleren voor de zakelijke bestelling. Het Apps Script rekent bij het versturen
  * precies hetzelfde na (businessTotals_ in Code.gs); houd die twee gelijk.
  */
 
-export const areaLabel: Record<BusinessArea, string> = { regio: "Amsterdam of Aalsmeer", buiten: "Buiten Amsterdam en Aalsmeer" };
+/** Voor beheer en de bestellijst; zo staat het ook in de Sheet (BUSINESS_AREAS in Code.gs). */
+export const areaLabel: Record<BusinessArea, string> = { zone1: "Zone 1", zone2: "Zone 2", zone3: "Zone 3" };
+
+/** De zone als tekst, ook voor aanvragen van vóór de zones ("regio" en "buiten", uit een ouder script of oude demodata). */
+export function areaName(area: string): string {
+  const old: Record<string, BusinessArea> = { regio: "zone1", buiten: "zone3" };
+  return areaLabel[(old[area] ?? area) as BusinessArea] ?? "";
+}
 
 export const momentLabel: Record<BusinessMoment, string> = {
   regulier: `Tussen ${BUSINESS_DELIVERY_WINDOW.replace("–", " en ")}`,
@@ -61,7 +69,7 @@ export function isParty(input: Pick<BusinessOrderInput, "pakket" | "withRaisins"
   return input.pakket === "feest" && input.withRaisins + input.withoutRaisins > 0;
 }
 
-/** Feestprijs excl. btw vóór de korting: vanaf largeFrom gasten het hogere bedrag (intern een muzikant extra). */
+/** Feestprijs excl. btw vóór de korting: vanaf largeFrom gasten het hogere bedrag (er komt een muzikant bij). */
 export function partyBaseFee(guests: number, info: BusinessInfo): number {
   return guests >= info.party.largeFrom ? info.party.feeLarge : info.party.fee;
 }
@@ -193,9 +201,10 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const bollen = cents(oliebollen * info.price);
   // Niets te bezorgen zonder oliebollen.
   const bezorgen = input.fulfilment === "bezorgen" && oliebollen > 0;
-  // Buiten de regio onder fixedDeliveryFrom: op nacalculatie per kilometer, dus nog niet in het bedrag.
-  const deliveryLater = bezorgen && input.area === "buiten" && oliebollen < info.fixedDeliveryFrom;
+  // Zone 3 onder fixedDeliveryFrom: op aanvraag per kilometer, dus nog niet in het bedrag. De schatting staat er los bij.
+  const deliveryLater = bezorgen && input.area === "zone3" && oliebollen < info.fixedDeliveryFrom;
   const delivery = bezorgen && input.area && !deliveryLater ? info.fees[input.area] : 0;
+  const km = deliveryLater && input.distanceKm && input.distanceKm > 0 ? Math.round(input.distanceKm) : 0;
   const surcharge = bezorgen ? info.surcharges[input.moment] ?? 0 : 0;
   // Feestpartner: de feestprijs (min € 1 per oliebol) komt bovenop de oliebollen, met een eigen btw-tarief.
   const party = isParty(input) ? partyFee(input.guests, oliebollen, info) : 0;
@@ -203,7 +212,10 @@ export function businessTotals(input: BusinessOrderInput, info: BusinessInfo): B
   const vat = cents((bollen + delivery + surcharge) * info.vatRate + party * info.party.vatRate);
   const total = cents(subtotal + vat);
   const donation = cents(Math.max(0, input.donation));
-  return { oliebollen, bollen, delivery, deliveryLater, surcharge, party, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info) };
+  return {
+    oliebollen, bollen, delivery, deliveryLater, surcharge, party, subtotal, vat, total, donation, invoice: cents(total + donation), ouderen: ouderenFor(oliebollen, info),
+    ...(km ? { deliveryKm: km, deliveryEstimate: cents(km * info.perKm) } : {})
+  };
 }
 
 /** "2026-12-07" ± dagen, zonder tijdzonegedoe. */
@@ -263,33 +275,50 @@ export function viaFromLink(): string {
   return (params.get("via") ?? outer.get("via") ?? "").trim().slice(0, 100);
 }
 
-/** "1000-1109, 1430-1433" → [[1000, 1109], [1430, 1433]]. Een los getal ("1431") telt als reeks van één. */
-export function parsePostcodeRanges(text: string): Array<[number, number]> {
-  const out: Array<[number, number]> = [];
-  for (const part of text.split(/[,;]+/)) {
-    const m = part.replace(/\s+/g, "").match(/^(\d{4})(?:-(\d{4}))?$/);
-    if (m) out.push([Number(m[1]), Number(m[2] ?? m[1])]);
-  }
-  return out;
+/** Andere schrijfwijzen van dezelfde plaats, al genormaliseerd (zie normalizePlace). Zelfde lijst als in Code.gs. */
+const PLACE_ALIASES: Record<string, string> = {
+  "s gravenhage": "den haag",
+  "alphen a d rijn": "alphen aan den rijn",
+  "alphen ad rijn": "alphen aan den rijn",
+  "ouderkerk a d amstel": "ouderkerk aan de amstel"
+};
+
+/** "'s-Gravenhage" → "den haag", "Amsterdam-Duivendrecht" → "amsterdam duivendrecht": zo vergelijken we plaatsnamen. */
+export function normalizePlace(city: string): string {
+  const c = city
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’`.]/g, "")
+    .replace(/[-/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return PLACE_ALIASES[c] ?? c;
 }
 
 /**
- * Bezorggebied uit het adres: de vier cijfers van de postcode beslissen (info.regionPostcodes).
- * Zonder postcode kijken we naar de plaats; leeg als we het nog niet weten. Zelfde regels als areaFor_ in Code.gs.
+ * Bezorgzone uit de plaats: staat hij in de lijst van zone 1 of zone 2 (info.zones), dan die zone; elke andere plaats is
+ * zone 3. Een wijk of dorp dat met de plaatsnaam begint ("Amsterdam Zuidoost") telt mee; "Haarlemmermeer" is geen Haarlem.
+ * Leeg als de plaats nog niet is ingevuld. Zelfde regels als areaFor_ in Code.gs.
  */
-export function areaFor(postalCode: string, city: string, regionPostcodes: string): BusinessArea | "" {
-  const digits = postalCode.trim().match(/^(\d{4})/);
-  if (digits) {
-    const n = Number(digits[1]);
-    return parsePostcodeRanges(regionPostcodes).some(([from, to]) => n >= from && n <= to) ? "regio" : "buiten";
-  }
-  const c = city.trim().toLowerCase();
+export function areaFor(city: string, zones: BusinessInfo["zones"]): BusinessArea | "" {
+  const c = normalizePlace(city);
   if (!c) return "";
-  return /amsterdam|weesp|aalsmeer|kudelstaart/.test(c) ? "regio" : "buiten";
+  const inZone = (places: string[]) => places.map(normalizePlace).some((p) => p && (c === p || c.startsWith(`${p} `)));
+  return inZone(zones.zone1) ? "zone1" : inZone(zones.zone2) ? "zone2" : "zone3";
+}
+
+/**
+ * Geschatte kilometers over de weg van de bakkerij naar dit punt, enkele reis: hemelsbreed maal PLANNING.roadFactor,
+ * net als de routeplanner. Alleen voor de schatting op het formulier; het Apps Script rekent de rijafstand uit.
+ */
+export function roadKmFromBakery(point: { lat: number; lng: number }): number {
+  return Math.round(straightKm(BUSINESS_ORIGIN, point) * PLANNING.roadFactor);
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const POSTCODE = /^\d{4}\s?[a-z]{2}$/i;
+/** Een hele postcode: "1431 AB". */
+export const POSTCODE = /^\d{4}\s?[a-z]{2}$/i;
 
 export type BusinessField = keyof BusinessOrderInput;
 
@@ -389,7 +418,7 @@ export function businessToOrder(b: BusinessOrder): Order {
     orderDate: b.createdAt.slice(0, 10),
     fulfilment: b.fulfilment === "afhalen" ? "afhalen" : "bezorgen",
     flyers: b.flyers ? "Ja" : "",
-    deliveryArea: bezorgen && b.area ? areaLabel[b.area] : undefined,
+    deliveryArea: bezorgen && b.area ? areaName(b.area) : undefined,
     deliveryMoment: bezorgen ? momentLabel[b.moment] : undefined
   };
 }

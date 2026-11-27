@@ -214,12 +214,40 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
   minimum: 50,
   // Grote bedrijven bestellen ruim meer dan 500; boven de 10.000 stemmen we het eerst af.
   maximum: 10000,
-  fees: { regio: 10, buiten: 25 },
-  // Buiten de regio onder de 500 oliebollen: bezorgkosten op nacalculatie per kilometer (besluit Mark, 19 november).
+  // Bezorgzones (besluit 23 november). Zone 1 en 2: een vast tarief. Zone 3 is elke plaats die hieronder niet staat:
+  // op aanvraag, € 0,35 per km (perKm), behalve vanaf 500 oliebollen (fixedDeliveryFrom), dan vast fees.zone3.
+  fees: { zone1: 10, zone2: 25, zone3: 25 },
+  // Eén plaats per regel: verplaats of verwijder de regel om een plaats van zone te laten wisselen. Een wijk of dorp dat met
+  // de plaatsnaam begint ("Amsterdam Zuidoost", "Almere Haven") telt mee; "'s-Gravenhage" lezen we als "Den Haag".
+  // Zelfde lijsten in CONFIG.BUSINESS.zones in apps-script/Code.gs; de Sheet kan ze overschrijven (zakelijk_zone1_plaatsen, …).
+  zones: {
+    zone1: [
+      "Aalsmeer",
+      "Kudelstaart",
+      "Amsterdam",
+      // Betaalden via hun postcode (10xx, 11xx, 1380–1384) al het lage tarief en liggen tussen Aalsmeer en Amsterdam.
+      "Amstelveen",
+      "Diemen",
+      "Duivendrecht",
+      "Ouderkerk aan de Amstel",
+      "Weesp"
+    ],
+    zone2: [
+      "Haarlem",
+      "Zaandam",
+      "Noordwijk",
+      "Leiden",
+      "Alphen aan den Rijn",
+      "Utrecht",
+      "Hilversum",
+      "Huizen",
+      // Open vraag aan Mark: hoort Almere bij zone 2?
+      "Almere"
+      // Open vraag aan Mark: valt Den Haag onder € 25? Zo ja, zet hier "Den Haag".
+    ]
+  },
+  perKm: 0.35,
   fixedDeliveryFrom: 500,
-  // Groot-Amsterdam (10xx en 11xx: ook Diemen en Amstelveen), Weesp (1380–1384, hoort bij Amsterdam) en Aalsmeer met
-  // Kudelstaart (1430–1433).
-  regionPostcodes: "1000-1199, 1380-1384, 1430-1433",
   // Vóór 10:00 is een aanvraag (besluit 11 november); vóór 9:00 bieden we niet aan (Mark, 19 november). voor9 staat er
   // alleen voor oude aanvragen, met dezelfde toeslag als vóór 10:00.
   surcharges: { regulier: 0, voor10: 20, voor9: 20 },
@@ -239,11 +267,11 @@ export const BUSINESS_DEFAULTS: BusinessInfo = {
     { key: "zilver", name: "Danspartner", oliebollen: 150 },
     { key: "goud", name: "Polonaisepartner", oliebollen: 500 }
   ],
-  // Feestpartner: feest op locatie met band vanaf 501 oliebollen. Feestprijs € 2.500, vanaf 60 gasten € 3.100 (er komt intern
-  // een muzikant bij). Het goede-doelendeel van € 1 per oliebol gaat van de feestprijs af: 501 oliebollen maakt € 1.999,
-  // elke oliebol meer weer € 1 eraf. Het is een aanvraag: we bevestigen pas als de band kan. Btw over de feestprijs is 21%
+  // Feestpartner: feest op locatie met band vanaf 510 oliebollen (we verkopen per 10, besluit 23 november). Feestprijs € 2.500,
+  // vanaf 60 gasten € 3.100 (er komt een muzikant bij; het formulier legt dat uit). Het goede-doelendeel van € 1 per oliebol
+  // gaat van de feestprijs af: 510 oliebollen maakt € 1.990, elke oliebol meer weer € 1 eraf. Het is een aanvraag: we bevestigen pas als de band kan. Btw over de feestprijs is 21%
   // tot het definitief is afgestemd.
-  party: { key: "feest", name: "Feestpartner", oliebollen: 501, fee: 2500, feeLarge: 3100, largeFrom: 60, credit: 1, vatRate: 0.21 },
+  party: { key: "feest", name: "Feestpartner", oliebollen: 510, fee: 2500, feeLarge: 3100, largeFrom: 60, credit: 1, vatRate: 0.21 },
   // Bandpartner (een eigen muziekmiddag) staat niet meer op het formulier; oude aanvragen houden hun naam via pakketName.
   adoptions: []
 };
@@ -254,6 +282,12 @@ export const OLD_PACKAGE_NAMES: Record<string, string> = { middag60: "Bandpartne
 
 /** Oliebollen per collega als richtlijn bij de pakketten (3 als ze er een mee naar huis nemen). */
 export const BUSINESS_PER_COLLEAGUE = 2;
+
+/**
+ * De bakkerij in Aalsmeer: vanaf hier meten we de kilometers voor zone 3 (enkele reis). Het formulier schat hemelsbreed
+ * maal PLANNING.roadFactor; het Apps Script rekent bij het versturen de rijafstand uit (CONFIG.START_ADDRESS).
+ */
+export const BUSINESS_ORIGIN = { address: "Aalsmeerderweg 85, Aalsmeer", lat: 52.27406, lng: 4.77846 };
 
 /** Standaard bezorgen we tussen deze tijden, zonder toeslag (besluit 11 november). Vóór 10:00 is een aanvraag met toeslag. */
 export const BUSINESS_DELIVERY_WINDOW = "9:00–15:00";

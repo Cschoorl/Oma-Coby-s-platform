@@ -130,12 +130,12 @@ in de plaats ervan delen.
   - `prijs_per_oliebol` (bijv. `0,95`) als de Sheet geen bedrag per order heeft;
   - `km_vergoeding` (bijv. `0,23`), dan toont Kosten per bezorger het bedrag voor de gereden routekilometers;
   - zakelijk bestellen (leeg = standaard uit `CONFIG.BUSINESS`): `zakelijk_btw` (9),
-    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_regio` (10), `zakelijk_bezorgen_buiten` (25), `zakelijk_postcodes_regio` (`1000-1199, 1430-1433`: postcodes met het lage bezorgtarief), `zakelijk_toeslag_voor_10` (20: vóór 10:00 is een aanvraag;
+    `zakelijk_minimum` (50), `zakelijk_maximum` (10000, meer gaat via de mail), `zakelijk_bezorgen_zone1` (10), `zakelijk_bezorgen_zone2` (25), `zakelijk_bezorgen_zone3_vast` (25: zone 3 vanaf `zakelijk_bezorgen_vast_vanaf`, 500 oliebollen), `zakelijk_bezorgen_per_km` (0,35: zone 3 daaronder, op aanvraag), `zakelijk_zone1_plaatsen` en `zakelijk_zone2_plaatsen` (de plaatsen per zone met een komma ertussen; leeg = de lijst uit `CONFIG.BUSINESS.zones`; elke andere plaats is zone 3; zie `docs/zakelijk-bestellen.md`), `zakelijk_toeslag_voor_10` (20: vóór 10:00 is een aanvraag;
     let op: staat hier nog 10 uit vorig jaar, maak het dan 15 of maak het vak leeg), `zakelijk_werkdagen_vooraf` (3 werkdagen van tevoren bestellen),
     `zakelijk_sluiting` (`2026-12-28 12:00`: daarna is zakelijk bestellen dicht),
     `zakelijk_pakket_brons` (50, Schuifelpartner), `zakelijk_pakket_zilver` (150, Danspartner), `zakelijk_pakket_goud` (500,
     Polonaisepartner): vanaf die aantallen geldt het pakket. Feestpartner (alleen als de klant hem kiest):
-    `zakelijk_feest_minimum` (501), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
+    `zakelijk_feest_minimum` (510), `zakelijk_feest_prijs` (2500 excl. btw), `zakelijk_feest_prijs_groot` (3100),
     `zakelijk_feest_gasten_groot` (60: vanaf zo veel gasten de hogere prijs), `zakelijk_feest_korting` (1: zo veel euro per
     oliebol gaat van de feestprijs af, tot € 0) en `zakelijk_feest_btw` (21, nog te bevestigen),
     `zakelijk_email`, `zakelijk_telefoon` (06 45 44 35 09) en `zakelijk_melding_naar` (wie bij elke nieuwe

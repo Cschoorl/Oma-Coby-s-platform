@@ -6,7 +6,7 @@ import { Badge, Card, ConfirmPanel, CopyButton, EmptyState, Icon, Note, Notice, 
 import { Drawer } from "../../components/Drawer";
 import { BUSINESS_DEFAULTS, BUSINESS_LARGE } from "../../config";
 import { appLink } from "../../lib/router";
-import { areaLabel, longDay, momentLabel, pakketName, sourceLabel } from "./business";
+import { areaName, longDay, momentLabel, pakketName, sourceLabel } from "./business";
 import { impactOf, linkedinText, openCertificate } from "./impact";
 
 const occasionLabel = { borrel: "Borrel", event: "Event", relatiegeschenk: "Relatiegeschenk" } as const;
@@ -261,7 +261,23 @@ function BusinessDrawer({ order: b, session, run, onClose }: { order: BusinessOr
                   ["Dag", longDay(b.date)],
                   ["Moment", b.moment === "voor10" ? <>{momentLabel[b.moment]}<br /><span className="text-xs text-muted">Laat binnen 2 werkdagen weten of het lukt. Lukt het niet? Haal de toeslag eraf.</span></> : momentLabel[b.moment]],
                   ["Adres", <>{b.street}<br />{b.postalCode} {b.city}</>],
-                  ["Bezorgkosten", b.area ? (b.totals.deliveryLater ? <>{areaLabel[b.area]}: op nacalculatie per km<br /><span className="text-xs text-muted">Niet in het bedrag. Zet de bezorgkosten zelf op de factuur.</span></> : areaLabel[b.area]) : ""]
+                  [
+                    "Bezorgkosten",
+                    !b.area ? (
+                      ""
+                    ) : b.totals.deliveryLater ? (
+                      <>
+                        {areaName(b.area)}, op aanvraag:{" "}
+                        {b.totals.deliveryKm && b.totals.deliveryEstimate
+                          ? `geschat ${formatEuro(b.totals.deliveryEstimate)} (${formatNumber(b.totals.deliveryKm)} km enkele reis vanaf de bakkerij)`
+                          : "per km vanaf de bakkerij; de afstand is niet uitgerekend"}
+                        <br />
+                        <span className="text-xs text-muted">Niet in het bedrag. Noem de bezorgkosten in je bevestiging en zet ze zelf op de factuur.</span>
+                      </>
+                    ) : (
+                      `${areaName(b.area)}: ${formatEuro(b.totals.delivery)}`
+                    )
+                  ]
                 ]
               : [
                   ["Dag", longDay(b.date)],

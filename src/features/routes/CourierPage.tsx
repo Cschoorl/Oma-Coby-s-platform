@@ -9,7 +9,7 @@ import { effectiveNote, mapsRouteUrlForOrders, mapsUrl, stopAddress } from "../.
 import { navigate } from "../../lib/router";
 import { patches } from "../../lib/patches";
 import type { Patch } from "../../lib/useDashboard";
-import { courierRuns, couriersOn, formatTravelTime, isRouteStale, orderedStops, runRoute } from "./routeUtils";
+import { courierRuns, couriersOn, formatTravelTime, isBikeRoute, isRouteStale, orderedStops, runRoute } from "./routeUtils";
 import { DeliveryContactLine } from "../../components/DeliveryContactLine";
 import { deliveryContact, telHref } from "../../lib/deliveryContact";
 
@@ -56,7 +56,8 @@ export function CourierPage({ state, session, run, name, date: dateParam }: Cour
   const trips = runs.map((r) => {
     const route = runRoute(state, date, name ?? "", r, runs.length === 1);
     const stops = orderedStops(r.orders, route);
-    return { ...r, route, stale: isRouteStale(r.orders, route, state.changes), stops, url: route?.mapsUrl || mapsRouteUrlForOrders(stops) };
+    // A route once calculated for the bike is stale and has bike directions: then the plain car route past the stops.
+    return { ...r, route, stale: isRouteStale(r.orders, route, state.changes), stops, url: (!isBikeRoute(route) && route?.mapsUrl) || mapsRouteUrlForOrders(stops) };
   });
   const orders = trips.flatMap((t) => t.orders);
   const stops = trips.flatMap((t) => t.stops);

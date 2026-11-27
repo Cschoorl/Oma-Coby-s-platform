@@ -554,8 +554,7 @@ function demoVolunteers(): Volunteer[] {
       city: "Aalsmeer",
       phone: "0600000001",
       email: "anna@example.nl",
-      cargoBike: true,
-      roles: { inpakken: none, fietskoerier: { wants: true, days: ["Woensdag 30 december: ochtend", "Donderdag 31 december: ochtend"] }, autokoerier: none, oliebollenbar: none }
+      roles: { inpakken: none, fietskoerier: none, autokoerier: { wants: true, days: ["Woensdag 30 december: ochtend", "Donderdag 31 december: ochtend"] }, oliebollenbar: none }
     },
     {
       ...base,

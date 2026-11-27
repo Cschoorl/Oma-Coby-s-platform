@@ -223,7 +223,8 @@ export interface Backend {
   /** Coordinates of addresses (cached in the Sheet), for the automatic planning. */
   geocode(session: Session, addresses: string[]): Promise<GeocodeResult>;
   computeRoute(session: Session, request: RouteRequest): Promise<RouteInfo>;
-  registerVolunteer(signup: VolunteerSignup): Promise<void>;
+  /** Saves the signup. `mailed` says whether the confirmation mail went out (an older Apps Script sends none). */
+  registerVolunteer(signup: VolunteerSignup): Promise<{ mailed: boolean }>;
   extractReceipt(session: Session, imageBase64: string, mediaType: string): Promise<ReceiptResult>;
   saveCost(session: Session, cost: CostInput): Promise<void>;
   setDelivered(session: Session, orderId: string, delivered: boolean): Promise<SavedVersion | void>;
@@ -381,7 +382,8 @@ function createAppsScriptBackend(url: string): Backend {
       return call<RouteInfo>("computeRoute", withSession(session, { ...request }));
     },
     async registerVolunteer(signup) {
-      await call("registerVolunteer", { ...signup });
+      const saved = await call<{ mailed?: boolean } | undefined>("registerVolunteer", { ...signup });
+      return { mailed: saved?.mailed === true };
     },
     async extractReceipt(session, imageBase64, mediaType) {
       return call<ReceiptResult>("extractReceipt", withSession(session, { imageBase64, mediaType }));
@@ -1129,6 +1131,8 @@ function createDemoBackend(notice?: string): Backend {
           planning: signup.planning
         });
       });
+      // The demo saves locally and sends no mail.
+      return { mailed: false };
     },
     async extractReceipt() {
       await delay(900);

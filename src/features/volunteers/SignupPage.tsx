@@ -148,6 +148,8 @@ export function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  /** Whether the confirmation mail went out; the thank-you page only promises a mail that was sent. */
+  const [mailed, setMailed] = useState(false);
   const composerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -544,7 +546,7 @@ export function SignupPage() {
                   type="email"
                   autoComplete="email"
                   error={shownContact.email}
-                  hint="Voor als ik je via WhatsApp niet te pakken krijg."
+                  hint="Hier stuur ik je bevestiging naartoe."
                   extra={
                     emailCheck.suggestion ? (
                       <span className="text-xs text-krent">
@@ -626,7 +628,9 @@ export function SignupPage() {
                 </div>
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">E-mail</dt>
-                  <dd className="break-all text-krent">{email.trim()}</dd>
+                  <dd className="break-all text-krent">
+                    {email.trim()} <span className="text-muted">(hier komt je bevestiging)</span>
+                  </dd>
                 </div>
                 <div className="grid gap-0.5 sm:grid-cols-[130px_minmax(0,1fr)]">
                   <dt className="font-bold text-krent">Planning</dt>
@@ -673,7 +677,7 @@ export function SignupPage() {
     setBusy(true);
     setError(null);
     try {
-      await backend.registerVolunteer({
+      const saved = await backend.registerVolunteer({
         name: `${firstName.trim()} ${lastName.trim()}`.trim(),
         address,
         city,
@@ -690,6 +694,7 @@ export function SignupPage() {
           driving: roles.autokoerier.wants && a.driving && a.driving !== "nee" ? a.driving : undefined
         }
       });
+      setMailed(saved.mailed);
       setDone(true);
       rollOliebol();
     } catch (err) {
@@ -711,6 +716,7 @@ export function SignupPage() {
           <h1 className="font-display text-4xl uppercase leading-none tracking-wide text-krent">Dankjewel, {first}!</h1>
           <p className="text-krent">Fijn dat je wilt helpen. Je zit nu officieel in mijn team. Zodra ik weet hoeveel bestellingen er zijn, maak ik het rooster en laat ik je weten waar en wanneer ik je verwacht.</p>
           <p className="text-sm text-krent">Je rooster en je herinneringen stuur ik vooral via WhatsApp, op {phone.trim()}. Houd je telefoon dus in de gaten.</p>
+          {mailed ? <p className="text-sm text-krent">Wat je hebt doorgegeven staat in de mail die ik je net stuurde, op {email.trim()}. Niets gezien? Kijk dan even bij je spam.</p> : null}
           <p className="text-sm text-muted">
             Vragen of iets wijzigen? Mail naar{" "}
             <a className={textAction} href={`mailto:${CONTACT_EMAIL}`}>

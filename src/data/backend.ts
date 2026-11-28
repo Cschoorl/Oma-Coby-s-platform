@@ -533,7 +533,7 @@ function createAppsScriptBackend(url: string): Backend {
       await call("setBusinessStatus", withSession(session, { id, status, reason }));
     },
     async getWallOfFame() {
-      // An older script without the wall: the six empty frames, never an error on the website.
+      // An older script without the wall: the empty wall with the invitation, never an error on the website.
       try {
         return await call<PublicWall>("wallOfFame", {});
       } catch {

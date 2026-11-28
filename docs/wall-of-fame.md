@@ -12,7 +12,7 @@ platform het uitwerkt. Markering zoals in het bouwplan: **FEIT** staat in het pl
 | 2 | Wat je erop krijgt groeit met het pakket, nooit met korting: **Brons** (Danspartner, 50+) je naam, **Zilver** (Podiumpartner, 150+) ook je logo, **Goud** (Hoofdact, 500+) een podiumplek. | 00 principe 1, bijlage A sectie 3 | FEIT |
 | 3 | Per bedrijf de naam en **het aantal ouderen**. **Nooit bedragen.** | bijlage B, veld "Wall of fame" | FEIT |
 | 4 | Alleen met **toestemming**: een vinkje in het formulier (standaard uit, AVG) of een akkoord per mail. Tekst bij het vinkje: "Zet ons op de wall of fame: naam (vanaf Podiumpartner ook logo) en het aantal ouderen. Nooit bedragen." | bijlage B, bijlage A sectie 8 | FEIT |
-| 5 | Zonder toestemmingen: **zes lege tegels** met "logo na toestemming", de laatste "+ jullie?". Kop "Zij lieten vorig jaar ouderen dansen", sub "Vorig jaar lieten ruim honderd bedrijven ouderen dansen. Dit jaar erbij? Dan staat jullie naam hier." | bijlage A sectie 8, bijlage C item 20 | FEIT |
+| 5 | Zonder toestemmingen: geen lege lijsten met "logo na toestemming" (het bouwplan vroeg zes lege tegels; op 28 november 2026 geschrapt, niet presentabel). Wel wat er in het café hangt en de lijst "+ jullie?". Kop "Wie laat dit jaar ouderen dansen?", sub "Vorig jaar lieten ruim honderd bedrijven ouderen dansen. Dit jaar erbij? Dan staat jullie naam hier." | bijlage A sectie 8, bijlage C item 20 | FEIT |
 | 6 | **Vroegboekers bovenaan**: "Bestel vóór 1 december en jullie staan bovenaan de wall of fame, met eerste keus van bezorgdag." Kolom *vroegboeker* in de sheet. | 07 idee 6 | HYPOTHESE |
 | 7 | Na het seizoen: de wall of fame **dynamisch met logo's** en een **cumulatief impactregister**. | 08 | HYPOTHESE |
 | 8 | Bedrijfsnaam (2 tot 80 tekens) is nodig voor factuur, certificaat én wall of fame. | bijlage B | FEIT |
@@ -72,7 +72,7 @@ Oma's café, geen scherm: een okergele gepleisterde muur vol bruine lijsten, zoa
 - Onderaan de lambrisering, een terrazzovloer, twee thonetkrukken met rood leer en een marmeren tafeltje met een
   bord oliebollen en een biertje. Voorin een gietijzeren zuil en een stenen pilaar, iets onscherp.
 - Daglicht valt van links door een raam buiten beeld; de lijsten werpen hun schaduw naar rechtsonder.
-- Zonder vermeldingen: zes lege lijsten ("logo na toestemming", de laatste "+ jullie?") en de tekst uit eis 5 op het bord.
+- Zonder vermeldingen: de cafémuur met Oma's portret, het affiche en de lijst "+ jullie?", en de tekst uit eis 5 op het bord. Geen lege lijsten.
 
 Alles is CSS en SVG (houtnerf, pleister en krijt met `feTurbulence`), zonder foto's van buiten. Alleen Oma's
 portret is een echte foto. De maten schalen met de breedte van de muur (container queries), dus ook in een smal
@@ -147,7 +147,7 @@ Er zijn twee manieren om te zoeken:
 1. Zonder vinkje of akkoord staat een bedrijf nergens op de muur, ook niet na bevestigen.
 2. Brons toont alleen de naam; Zilver en Goud een logo pas na "Logo klopt", daarvoor het naambordje.
 3. Nergens op de muur of in de openbare API een bedrag of aantal oliebollen; wel ouderen.
-4. Zonder vermeldingen: zes tegels "logo na toestemming", de laatste "+ jullie?".
+4. Zonder vermeldingen: geen lege lijsten; wel de lijst "+ jullie?" en de uitnodiging op het bord.
 5. Een vroegboeker staat binnen zijn pakket vóór de rest en heeft de rozet.
 6. Twee bestellingen van hetzelfde bedrijf (twee adressen) geven één plek met de ouderen samen.
 7. Werkt op telefoon (twee lijsten naast elkaar) en in een iframe (`?embed=1`), zonder zijwaarts scrollen.

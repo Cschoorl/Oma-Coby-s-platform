@@ -601,15 +601,10 @@ export function WallOfFame({ wall, embed = false, today }: { wall: PublicWall; e
   // Goud in het midden van de bovenste rij, met Oma's portret en een affiche ernaast; daarna Zilver met af en toe wat café ertussen.
   const items: ReactNode[] = [<FillerItem key="links" kinds={["prent", "foto"]} i={0} />, <FillerItem key="oma" kinds={["oma"]} i={1} wide />];
   if (empty) {
-    for (let k = 0; k < 5; k++) {
-      items.push(
-        <SilverFrame key={`leeg-${k}`} i={k + 2}>
-          <span className="wof-potlood">logo na toestemming</span>
-        </SilverFrame>
-      );
-      if (k === 2) items.push(<FillerItem key="affiche" kinds={["affiche"]} i={9} wide />);
-    }
-    items.push(plus(8));
+    // Nog niemand: alleen wat er in het café hangt en de uitnodiging. Geen lege lijsten met een tekstje erin.
+    items.push(<FillerItem key="affiche" kinds={["affiche"]} i={2} wide />);
+    items.push(<FillerItem key="dans" kinds={["dans"]} i={3} />);
+    items.push(plus(4));
   } else {
     goud.forEach((e, k) => items.push(<GoldFrame key={e.key} entry={e} i={k + 2} />));
     items.push(<FillerItem key="affiche" kinds={["affiche"]} i={goud.length + 2} wide />);
@@ -634,7 +629,7 @@ export function WallOfFame({ wall, embed = false, today }: { wall: PublicWall; e
           <h2 id="wof-titel" className="wof-verf wof-verf-titel">
             Wall of fame
           </h2>
-          <p className="wof-verf wof-verf-sub">{empty ? "Zij lieten vorig jaar ouderen dansen" : "Zij lieten dit jaar ouderen dansen"}</p>
+          <p className="wof-verf wof-verf-sub">{empty ? "Wie laat dit jaar ouderen dansen?" : "Zij lieten dit jaar ouderen dansen"}</p>
           {earlyOpen ? <p className="wof-briefje">Bestel vóór 1 december: dan hangen jullie bovenaan en kies je als eerste je bezorgdag.</p> : null}
         </header>
 

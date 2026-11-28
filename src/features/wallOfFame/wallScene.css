@@ -124,7 +124,6 @@
 .wof-link { display: block; border-radius: 4px; }
 .wof-link:focus-visible { outline: 3px solid #dcc05d; outline-offset: 6px; }
 .wof-plus { font-family: "VTC SuperMarket", Impact, sans-serif; text-transform: uppercase; font-size: calc(34 * var(--u)); line-height: 1; color: #d05438; }
-.wof-potlood { max-width: 80%; text-align: center; font-family: Vollkorn, Georgia, serif; font-style: italic; font-size: max(11px, calc(14 * var(--u))); color: rgba(38, 31, 31, 0.45); }
 
 /* Messing plaatje, met twee schroefjes. */
 .wof-plaatje {

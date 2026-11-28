@@ -24,7 +24,7 @@ export function WallOfFamePage({ embed = false }: { embed?: boolean }) {
     };
   }, []);
 
-  // Without a wall the page still shows the six empty frames: never a blank spot on the website.
+  // Without a wall the page still shows the café wall with the invitation: never a blank spot on the website.
   if (error) {
     return (
       <div className="grid gap-3">

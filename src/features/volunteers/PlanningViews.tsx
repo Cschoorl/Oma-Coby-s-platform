@@ -1,21 +1,30 @@
 import type { ReactNode } from "react";
-import type { Volunteer, VolunteerRole } from "../../types/dashboard";
-import { ACTIVE_ROLES, VOLUNTEER_ROLES, drivingLabel, maxShiftsLabel, reminderLabel, volunteerRoleLabel } from "../../types/dashboard";
+import type { RosterShift, Volunteer, VolunteerRole } from "../../types/dashboard";
+import { ACTIVE_ROLES, drivingLabel, maxShiftsLabel, reminderLabel, volunteerRoleLabel } from "../../types/dashboard";
+import { isoDayLabel } from "../../config";
 import { Avatar, NameTag } from "../../components/Avatar";
-import { Icon, Note, fieldLabel, secondaryButton, taskClass } from "../../components/ui";
-import { statusLabel, type StaffingStatus } from "../../utils/staffing";
+import { Badge, Icon, Note, fieldLabel, secondaryButton, taskClass } from "../../components/ui";
+import { dayKey } from "../../utils/staffing";
+import { laneLabel, nameKey, plannedDays, shiftsOf, timeRange } from "../rooster/roster";
 import { whatsappNumber } from "../routes/routeUtils";
 import { dayTasks, daysOf, slotsOn, type SeasonDayInfo, type Slot } from "./availability";
 
 /*
  * Planning views after the way rostering tools (Eitje, Planday) show availability: one row per
  * person, one column per day, the staffing per day on top. Click a name for the person, a day for
- * who can that day.
+ * who can that day. What someone can comes from the signup; a ✓ says they are planned in the rooster.
+ *
+ * The staffing is shown calmly: the count, and a ✓ when there are enough people. No red and no
+ * exclamation marks: early in the season nearly every day is short, and an alarm on every day says nothing.
  */
 
-export const statusText: Record<StaffingStatus, string> = { weinig: "text-feest-ink", bijna: "text-gouwe-ink", genoeg: "text-kerst-ink" };
-export const statusBg: Record<StaffingStatus, string> = { weinig: "bg-feest-50", bijna: "bg-gouwe-100", genoeg: "bg-kerst-50" };
-export const statusSign: Record<StaffingStatus, string> = { weinig: "!", bijna: "~", genoeg: "✓" };
+/** The planned shifts of one person on one day ("7 december"). */
+function shiftsOn(shifts: RosterShift[], day: string): RosterShift[] {
+  return shifts.filter((s) => dayKey(isoDayLabel(s.date)) === day);
+}
+
+/** Is this the shift they said they could do? An answer or a shift without a dagdeel covers the whole day. */
+const sameShift = (slot: Slot, shift: RosterShift) => slot.role === shift.role && (!slot.part || !shift.part || slot.part === shift.part);
 
 /** "Bezorgen" reads better than "Autokoerier" in tight spots. */
 export const shortRole: Record<VolunteerRole, string> = { inpakken: "Inpakken", fietskoerier: "Fiets", autokoerier: "Bezorgen", oliebollenbar: "Bar" };
@@ -47,8 +56,13 @@ export function shiftTime(slot: Slot): string {
 }
 
 /** A shift as a block in the task colour with its time, like a planned shift in a rostering tool. */
-function ShiftChip({ slot }: { slot: Slot }) {
-  return <span className={`block truncate rounded-[5px] px-1 py-[3px] text-center text-[10px] font-bold leading-tight tabular-nums ${taskClass[slot.role]}`}>{shiftTime(slot)}</span>;
+function ShiftChip({ role, time, planned }: { role: VolunteerRole; time: string; planned: boolean }) {
+  return (
+    <span className={`block truncate rounded-[5px] px-1 py-[3px] text-center text-[10px] font-bold leading-tight tabular-nums ${taskClass[role]}`}>
+      {planned ? <span className="font-serif">✓ </span> : null}
+      {time}
+    </span>
+  );
 }
 
 interface MatrixProps {
@@ -57,6 +71,8 @@ interface MatrixProps {
   everyone: Volunteer[];
   days: SeasonDayInfo[];
   roles: VolunteerRole[];
+  /** The rooster: a planned shift gets a ✓. */
+  roster: RosterShift[];
   selectedPerson?: string;
   selectedDay?: string;
   onPerson: (v: Volunteer) => void;
@@ -68,11 +84,11 @@ const COL = "w-[64px] min-w-[64px]";
 /**
  * Rows are people, columns are days. Sticky names on the left, sticky days on top. Above the people,
  * one row per task with that day's shift: its time and how many can against how many are needed.
- * In the cells, each shift someone can do as a block with its time, in the task colour.
+ * In the cells, each shift someone can do as a block with its time, in the task colour; with a ✓ when
+ * they are planned on it. A shift they are planned on without having signed up for it shows too.
  */
-export function AvailabilityMatrix({ volunteers, everyone, days, roles, selectedPerson, selectedDay, onPerson, onDay }: MatrixProps) {
+export function AvailabilityMatrix({ volunteers, everyone, days, roles, roster, selectedPerson, selectedDay, onPerson, onDay }: MatrixProps) {
   const tasksPerDay = days.map((d) => dayTasks(everyone, d.key, roles));
-  // Tasks without moments this season (fietskoerier) only show in the rows, not in the shifts on top.
   const headRoles = roles.filter((r) => ACTIVE_ROLES.includes(r));
   const weekStart = (i: number) => i > 0 && (days[i].weekday === "ma" || seasonGap(days[i - 1], days[i]));
   const line = (i: number) => (weekStart(i) ? "border-l-2 border-l-lijn-2" : "");
@@ -111,6 +127,7 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
                 </th>
                 {days.map((d, i) => {
                   const task = tasksPerDay[i].find((t) => t.role === role && t.moments.length > 0);
+                  const needed = task ? task.moments.reduce((n, m) => n + m.target, 0) : 0;
                   return (
                     <td key={d.key} className={`bg-papier px-0.5 py-0.5 align-top ${line(i)} ${last ? "border-b border-lijn-2 pb-2" : ""}`}>
                       {task ? (
@@ -118,12 +135,12 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
                           type="button"
                           onClick={() => onDay(d.key)}
                           className={`grid ${COL} gap-px rounded-[5px] border border-dashed border-lijn-2 bg-papier px-1 py-[3px] text-center leading-tight hover:bg-vul`}
-                          aria-label={`${d.label}, ${volunteerRoleLabel[role]}: ${task.people.length} van ${task.moments.reduce((n, m) => n + m.target, 0)} nodig, ${statusLabel[task.status].toLowerCase()}`}
+                          aria-label={`${d.label}, ${volunteerRoleLabel[role]}: ${task.people.length} kunnen, ${needed} nodig`}
                         >
                           <span className="truncate text-[10px] text-muted tabular-nums">{task.moments.map((m) => shiftTime(m.slot)).join(" · ")}</span>
-                          <b className={`text-[11px] tabular-nums ${statusText[task.status]}`}>
-                            {task.status === "weinig" ? <span className="font-serif">! </span> : null}
-                            {task.people.length}/{task.moments.reduce((n, m) => n + m.target, 0)}
+                          <b className={`text-[11px] tabular-nums ${task.status === "genoeg" ? "text-kerst-ink" : "text-oliebol"}`}>
+                            {task.status === "genoeg" ? <span className="font-serif">✓ </span> : null}
+                            {task.people.length}/{needed}
                           </b>
                         </button>
                       ) : (
@@ -140,6 +157,8 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
           {volunteers.map((v) => {
             const active = selectedPerson === v.id;
             const count = daysOf(v).length;
+            const mine = shiftsOf(roster, v.name);
+            const planned = plannedDays(roster, v.name);
             return (
               <tr key={v.id} className={`group ${active ? "bg-gouwe-50" : ""}`}>
                 <th scope="row" className={`sticky left-0 z-10 border-b border-lijn px-4 py-1 text-left font-normal sm:px-5 ${active ? "bg-gouwe-50" : "bg-papier group-hover:bg-[#fbf6e6]"}`}>
@@ -151,17 +170,33 @@ export function AvailabilityMatrix({ volunteers, everyone, days, roles, selected
                         {count} {count === 1 ? "dag" : "dagen"}
                         {v.planning?.maxShifts && v.planning.maxShifts < count ? ` · max ${v.planning.maxShifts}` : ""}
                       </span>
+                      {planned ? (
+                        <span className="block text-[11px] font-bold text-kerst-ink">
+                          <span className="font-serif">✓</span> {planned} {planned === 1 ? "dag" : "dagen"} ingepland
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 </th>
                 {days.map((d, i) => {
                   const slots = slotsOn(v, d.key).filter((s) => roles.includes(s.role));
+                  const today = shiftsOn(mine, d.key).filter((s) => roles.includes(s.role));
+                  // Planned on a shift they did not sign up for.
+                  const extra = today.filter((shift) => !slots.some((slot) => sameShift(slot, shift)));
+                  const title = [
+                    ...slots.map((s) => `${volunteerRoleLabel[s.role]}${slotText(s) ? ` (${slotText(s)})` : ""}`),
+                    ...today.map((s) => `ingepland: ${laneLabel(s).toLowerCase()} ${timeRange(s.start, s.end)}`)
+                  ].join(", ");
                   return (
                     <td key={d.key} className={`border-b border-lijn px-0.5 py-1 align-middle ${line(i)} ${selectedDay === d.key ? "bg-gouwe-50/70" : "group-hover:bg-[#fbf6e6]"}`}>
-                      {slots.length ? (
-                        <span className={`grid ${COL} gap-0.5`} title={`${v.name}, ${d.label}: ${slots.map((s) => `${volunteerRoleLabel[s.role]}${slotText(s) ? ` (${slotText(s)})` : ""}`).join(", ")}`}>
-                          {slots.map((s) => (
-                            <ShiftChip key={s.option} slot={s} />
+                      {slots.length || extra.length ? (
+                        <span className={`grid ${COL} gap-0.5`} title={`${v.name}, ${d.label}: ${title}`}>
+                          {slots.map((slot) => {
+                            const shift = today.find((s) => sameShift(slot, s));
+                            return <ShiftChip key={slot.option} role={slot.role} time={shift ? timeRange(shift.start, shift.end) : shiftTime(slot)} planned={!!shift} />;
+                          })}
+                          {extra.map((shift) => (
+                            <ShiftChip key={shift.id} role={shift.role} time={timeRange(shift.start, shift.end)} planned />
                           ))}
                         </span>
                       ) : (
@@ -186,10 +221,19 @@ function seasonGap(a: SeasonDayInfo, b: SeasonDayInfo): boolean {
 
 const DAY_SHORT = (d: SeasonDayInfo) => `${d.weekday} ${d.day} ${d.month.slice(0, 3)}`;
 
-/** Everything about one volunteer: contact, what they want, when they can. For beheer. */
-export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDayInfo[]; onDay: (day: string) => void }) {
+/**
+ * Everything about one volunteer: contact, what they want, the shifts they are planned on and every day
+ * they can. For beheer. `onDay` gets the day as "7 december".
+ */
+export function PersonDetails({ v, days, shifts, onDay }: { v: Volunteer; days: SeasonDayInfo[]; shifts: RosterShift[]; onDay: (day: string) => void }) {
   const mine = daysOf(v);
   const p = v.planning;
+  const tasks = ACTIVE_ROLES.filter((r) => v.roles[r].wants);
+  const planned = [...shifts].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
+  const shortDay = (iso: string) => {
+    const [weekday, day, month] = isoDayLabel(iso).split(" ");
+    return `${weekday.slice(0, 2).toLowerCase()} ${day} ${month.slice(0, 3)}`;
+  };
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -215,11 +259,12 @@ export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDa
       <Facts>
         <Fact label="Taken">
           <span className="flex flex-wrap gap-1">
-            {VOLUNTEER_ROLES.filter((r) => v.roles[r].wants).map((r) => (
+            {tasks.map((r) => (
               <span key={r} className={`rounded px-2 py-0.5 text-[11px] font-bold ${taskClass[r]}`}>
                 {volunteerRoleLabel[r]}
               </span>
             ))}
+            {tasks.length === 0 ? <span className="text-muted">Geen taak van dit seizoen gekozen.</span> : null}
           </span>
         </Fact>
         <Fact label="Beschikbaar">
@@ -228,7 +273,6 @@ export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDa
         </Fact>
         {p ? <Fact label="Indelen">{p.flexible ? "Mag ingedeeld worden waar het nodig is" : "Alleen bij de gekozen taak"}</Fact> : null}
         {p?.driving ? <Fact label="Rijbewijs">{drivingLabel[p.driving]}</Fact> : null}
-        {v.cargoBike ? <Fact label="Bakfiets">Kan er een lenen</Fact> : null}
         {/* Since the reminder question is gone, rooster and reminders go by WhatsApp; older signups still show their answer. */}
         {p ? <Fact label="Herinnering">{!p.reminder ? "Via WhatsApp" : p.reminder === "geen" ? "Hoeft niet" : `De dag ervoor via ${reminderLabel[p.reminder]}`}</Fact> : null}
         {v.phone ? <Fact label="Telefoon">{v.phone}</Fact> : null}
@@ -239,7 +283,29 @@ export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDa
       {v.remark ? <Note>{v.remark}</Note> : null}
 
       <section className="grid gap-1.5">
-        <p className={fieldLabel}>Wanneer</p>
+        <p className={fieldLabel}>Ingepland</p>
+        {planned.length === 0 ? <p className="text-sm text-muted">Staat nog niet in het rooster.</p> : null}
+        <ul className="grid">
+          {planned.map((s) => (
+            <li key={s.id} className="border-b border-lijn last:border-0">
+              <button type="button" onClick={() => onDay(dayKey(isoDayLabel(s.date)))} className="grid w-full grid-cols-[84px_minmax(0,1fr)] items-start gap-2 py-2 text-left hover:bg-vul">
+                <span className="text-sm font-bold text-krent">{shortDay(s.date)}</span>
+                <span className="flex flex-wrap items-center gap-1.5 text-xs text-krent">
+                  <TaskDot role={s.role} />
+                  {laneLabel(s)}
+                  <span className="tabular-nums text-muted">
+                    {s.start}–{s.end}
+                    {s.location ? ` · ${s.location}` : ""}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="grid gap-1.5">
+        <p className={fieldLabel}>Kan op</p>
         {mine.length === 0 ? <p className="text-sm text-muted">Nog geen dagen opgegeven.</p> : null}
         <ul className="grid">
           {days
@@ -254,6 +320,11 @@ export function PersonDetails({ v, days, onDay }: { v: Volunteer; days: SeasonDa
                         <TaskDot role={s.role} />
                         {volunteerRoleLabel[s.role]}
                         {slotText(s) ? <span className="text-muted">{slotText(s)}</span> : null}
+                        {shiftsOn(shifts, d.key).some((shift) => sameShift(s, shift)) ? (
+                          <span className="font-bold text-kerst-ink">
+                            <span className="font-serif">✓</span> ingepland
+                          </span>
+                        ) : null}
                       </span>
                     ))}
                   </span>
@@ -295,42 +366,26 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /**
- * Who can on one day, per task and moment, against what is needed. When a task is short, the
- * people who said "put me where you need me" and can that day for another task are suggested.
+ * Who can on one day, per task and moment, against what is needed; a ✓ behind a name says they are
+ * planned on that shift. When a task is short, the people who said "put me where you need me" and
+ * can that day for another task are suggested.
  */
-export function DayRoster({
-  volunteers,
-  day,
-  me,
-  onPerson,
-  suggest = true
-}: {
-  volunteers: Volunteer[];
-  day: string;
-  /** Show who could stand in when a task is short; for planners. */
-  suggest?: boolean;
-  /** Logged-in name: their tag gets the gouwe ouwe tint. */
-  me?: string;
-  onPerson?: (v: Volunteer) => void;
-}) {
+export function DayRoster({ volunteers, day, roster, onPerson }: { volunteers: Volunteer[]; day: string; roster: RosterShift[]; onPerson: (v: Volunteer) => void }) {
   const tasks = dayTasks(volunteers, day);
   if (tasks.length === 0) return <p className="text-sm text-muted">Op deze dag is er niets te doen.</p>;
-  const tag = (v: Volunteer) => {
-    const t = <NameTag name={v.name} mine={me !== undefined && v.name.toLowerCase() === me.toLowerCase()} />;
-    return onPerson ? (
+  const today = shiftsOn(roster, day);
+  const tag = (v: Volunteer, slot?: Slot) => {
+    const planned = slot ? today.some((s) => nameKey(s.name) === nameKey(v.name) && sameShift(slot, s)) : false;
+    return (
       <button key={v.id} type="button" className="max-w-full rounded-full hover:ring-2 hover:ring-gouwe" onClick={() => onPerson(v)}>
-        {t}
+        <NameTag name={v.name} suffix={planned ? "✓" : undefined} />
       </button>
-    ) : (
-      <span key={v.id} className="max-w-full">
-        {t}
-      </span>
     );
   };
   return (
     <div className="grid gap-4">
       {tasks.map((task) => {
-        const elsewhere = suggest && task.status !== "genoeg" ? volunteers.filter((v) => v.planning?.flexible && !task.people.includes(v) && slotsOn(v, day).length > 0) : [];
+        const elsewhere = task.status !== "genoeg" ? volunteers.filter((v) => v.planning?.flexible && !task.people.includes(v) && slotsOn(v, day).length > 0) : [];
         return (
           <section key={task.role} className="grid gap-2">
             {(task.moments.length ? task.moments : [null]).map((m, i) => (
@@ -341,14 +396,14 @@ export function DayRoster({
                     {m && slotText(m.slot) ? <span className="text-xs text-muted">{slotText(m.slot)}</span> : null}
                   </p>
                   {m ? (
-                    <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-bold ${statusBg[m.status]} ${statusText[m.status]}`}>
-                      <span className="font-serif">{statusSign[m.status]}</span>
-                      {m.people.length} van {m.target} nodig
-                    </span>
+                    <Badge tone={m.status === "genoeg" ? "klaar" : "zacht"}>
+                      {m.status === "genoeg" ? <span className="font-serif">✓</span> : null}
+                      {m.people.length} kunnen, {m.target} nodig
+                    </Badge>
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {(m ? m.people : task.people).map(tag)}
+                  {(m ? m.people : task.people).map((v) => tag(v, m?.slot))}
                   {(m ? m.people : task.people).length === 0 ? <span className="text-xs text-muted">Nog niemand.</span> : null}
                 </div>
               </div>
@@ -356,12 +411,17 @@ export function DayRoster({
             {elsewhere.length > 0 ? (
               <div className="grid gap-1.5 rounded-md bg-vul px-2.5 py-2">
                 <p className="text-xs text-muted">Kunnen die dag ook bijspringen, want inzetbaar waar nodig:</p>
-                <div className="flex flex-wrap gap-1.5">{elsewhere.map(tag)}</div>
+                <div className="flex flex-wrap gap-1.5">{elsewhere.map((v) => tag(v))}</div>
               </div>
             ) : null}
           </section>
         );
       })}
+      {today.length > 0 ? (
+        <p className="text-xs text-muted">
+          <span className="font-serif font-bold text-kerst-ink">✓</span> achter een naam: staat op die dienst in het rooster.
+        </p>
+      ) : null}
     </div>
   );
 }

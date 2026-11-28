@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { backend, type AnonymizeResult, type Session } from "../../data/backend";
 import type { DashboardState, VolunteerRole } from "../../types/dashboard";
-import { ACTIVE_ROLES, VOLUNTEER_ROLES, volunteerRoleLabel } from "../../types/dashboard";
+import { ACTIVE_ROLES, volunteerRoleLabel } from "../../types/dashboard";
 import { Card, CopyButton, EmptyState, Icon, Notice, SectionTitle, Segmented, StatStrip, dangerButton, fieldLabel, ghostButton, inputClass } from "../../components/ui";
 import { Drawer } from "../../components/Drawer";
 import { appLink } from "../../lib/router";
+import { shiftsOf } from "../rooster/roster";
 import { dayTasks, daysOf, planningDays } from "./availability";
 import { AvailabilityMatrix, DayRoster, PersonDetails, PersonHeader, TaskLegend, shortRole } from "./PlanningViews";
 
@@ -29,16 +30,19 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
   const [day, setDay] = useState<string | null>(null);
 
   const days = useMemo(() => planningDays(state.volunteers), [state.volunteers]);
-  const roles = VOLUNTEER_ROLES.filter((r) => ACTIVE_ROLES.includes(r) || state.volunteers.some((v) => v.roles[r].wants));
+  // Only the tasks of this season: the fietskoerier is gone, also for answers from an earlier form.
+  const roles = ACTIVE_ROLES;
   const shownRoles = role === "alle" ? roles : [role];
+  const roster = state.roster ?? [];
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return state.volunteers
-      .filter((v) => shownRoles.some((r) => v.roles[r].wants))
+      // "Alles" really is everyone, also who chose no task of this season.
+      .filter((v) => role === "alle" || v.roles[role].wants)
       .filter((v) => !q || [v.name, v.city, v.address ?? "", v.phone, v.email, v.remark].some((x) => x.toLowerCase().includes(q)))
       .sort((a, b) => (sort === "dagen" ? daysOf(b).length - daysOf(a).length : 0) || a.name.localeCompare(b.name, "nl"));
-  }, [state.volunteers, query, shownRoles.join(), sort]);
+  }, [state.volunteers, query, role, sort]);
 
   const count = (r: VolunteerRole) => state.volunteers.filter((v) => v.roles[r].wants).length;
   const shortDays = days.filter((d) => dayTasks(state.volunteers, d.key).some((t) => t.moments.length > 0 && t.status === "weinig")).length;
@@ -52,14 +56,14 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
         items={[
           { label: "Aanmeldingen", value: state.volunteers.length },
           ...ACTIVE_ROLES.map((r) => ({ label: volunteerRoleLabel[r], value: count(r) })),
-          { label: "Krappe dagen", value: shortDays, hint: shortDays ? "een taak met ! heeft te weinig" : "overal genoeg mensen" }
+          { label: "Krappe dagen", value: shortDays, hint: shortDays ? "een taak met minder dan de helft" : "overal genoeg mensen" }
         ]}
       />
 
       <Card>
         <SectionTitle
           title="Wie kan wanneer"
-          subtitle="Eén rij per vrijwilliger, één kolom per dag. Klik een naam voor alle gegevens, of een dag voor wie er kan."
+          subtitle="Eén rij per vrijwilliger, één kolom per dag. Klik een naam voor alle dagen, diensten en gegevens, of een dag voor wie er kan."
           action={<CopyButton text={signupLink} label="Kopieer aanmeldlink" done="Aanmeldlink gekopieerd" />}
         />
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -91,6 +95,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
             everyone={state.volunteers}
             days={days}
             roles={shownRoles}
+            roster={roster}
             selectedPerson={person ?? undefined}
             selectedDay={day ?? undefined}
             onPerson={(v) => {
@@ -106,8 +111,8 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <TaskLegend roles={roles} />
           <p className="text-xs text-muted">
-            Bovenaan per taak de dienst van die dag, met wie er kunnen tegenover wie er nodig zijn: <b className="text-feest-ink">rood met !</b> te weinig, <b className="text-gouwe-ink">geel</b> bijna,{" "}
-            <b className="text-kerst-ink">groen</b> genoeg. Beschikbaarheid, nog geen rooster.
+            Bovenaan per taak wie er kunnen tegenover wie er nodig zijn; <b className="font-serif text-kerst-ink">✓</b> is genoeg. Een blokje is beschikbaarheid, met <b className="font-serif text-kerst-ink">✓</b> staat iemand
+            in het rooster.
           </p>
         </div>
       </Card>
@@ -119,6 +124,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
           <PersonDetails
             v={openPerson}
             days={days}
+            shifts={shiftsOf(roster, openPerson.name)}
             onDay={(d) => {
               setPerson(null);
               setDay(d);
@@ -131,6 +137,7 @@ export function VolunteersPage({ state, session, run }: VolunteersPageProps) {
           <DayRoster
             volunteers={state.volunteers}
             day={openDay.key}
+            roster={roster}
             onPerson={(v) => {
               setDay(null);
               setPerson(v.id);

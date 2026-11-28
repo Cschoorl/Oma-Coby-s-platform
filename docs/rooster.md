@@ -29,6 +29,20 @@ laat zien wie *kan*; het rooster legt vast wie er *staat*, met de definitieve ti
 
 Slepen werkt met de muis. Op een telefoon of tablet plan je met de knoppen.
 
+## Terug te zien op Vrijwilligers
+
+De pagina Vrijwilligers blijft de beschikbaarheid; het rooster staat er als ✓ doorheen:
+
+- een blokje met ✓ is een dienst waarop iemand is ingepland (met de tijd uit het rooster), ook als die zich er niet
+  voor had opgegeven;
+- onder de naam staat op hoeveel dagen iemand is ingepland;
+- een klik op een naam toont *Ingepland* (de diensten uit het rooster) en *Kan op* (alle opgegeven dagen);
+- in het dagpaneel staat een ✓ achter wie die dag op die dienst staat.
+
+De bezetting is daar rustig gehouden: het aantal, en een ✓ als er genoeg mensen kunnen. Geen rood en geen
+uitroeptekens: vroeg in het seizoen is bijna elke dag krap, en een alarm op elke dag zegt niets. De fietskoerier
+is er niet meer: alleen de taken van dit seizoen (`ACTIVE_ROLES`) tellen, ook bij antwoorden uit een ouder formulier.
+
 ## Opmerkingen bij een dienst
 
 Onder een ingeplande naam staat in het klein wat de planner wil weten. Het zijn opmerkingen, geen blokkades:

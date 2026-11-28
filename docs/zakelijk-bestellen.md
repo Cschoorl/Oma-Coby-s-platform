@@ -58,6 +58,10 @@ Eén pagina met drie stappen en rechts een overzicht dat meerekent (op telefoon 
 >   over vers en opwarmen, "Waar moeten we zijn?" en de contactpersoon op het bezorgadres.
 > - **Certificaat en LinkedIn-tekst** maakt beheer in de lade van een aanvraag op **Zakelijk** (`impact.ts`): het
 >   certificaat opent als A4 om te printen of als PDF te bewaren; de LinkedIn-tekst opent met de slogan.
+>   Het certificaat staat in een leeg tabblad en laadt daar zelf de huisstijl-letters (VTC SuperMarket voor de titel en
+>   de regel onder het getal, Vollkorn voor naam en getal, Arvo voor de tekst). Bovenaan de slinger, naast het getal
+>   hooguit zes dansende oudjes uit de discozaal (nooit meer dan er dansen), onderaan het logo en de medaille met de
+>   pakketnaam in het schuine ovaal. Alleen een bijdrage aan de Partypot: dan staat die bijdrage groot, zonder ouderen.
 
 > **Drie stappen (13 november 2026).** Het formulier toont één stap tegelijk, met bovenaan de stappenbalk
 > **1 Jullie bestelling · 2 Waar en wanneer · 3 Gegevens en factuur** en onderaan **Vorige** en **Volgende**.

@@ -25,7 +25,8 @@ function discoBallSvg(id: string): string {
 }
 
 const SLINGER_COLORS = ["#d05438", "#dcc05d", "#69873c", "#f1d9cd"];
-const SLINGER_SVG =
+/** The bunting as SVG content for a 1000 × 44 viewBox; also hangs above the impact certificate. */
+export const SLINGER_SVG =
   Array.from({ length: 26 }, (_, i) => {
     const t = i / 25;
     const x = t * 1000;

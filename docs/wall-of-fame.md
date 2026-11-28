@@ -26,7 +26,7 @@ De pakketten heten sinds november Schuifelpartner (Brons, 50+), Danspartner (Zil
 **Bron is de echte bestelling in de Sheet.** Wie in `#/bestellen` het vinkje zet, geeft toestemming. Zodra beheer de
 aanvraag **bevestigt**, zet het Apps Script het bedrijf in het tabblad **Wall of fame** (één rij per bedrijf per
 seizoen, meerdere afleveradressen tellen samen). Een akkoord per mail voeg je toe op de beheerpagina *Wall of fame*
-(`#/muur`). De openbare muur leest alleen dat tabblad; de verzonnen bedrijven zie je alleen in demo-modus.
+(`#/muur`). De openbare muur leest alleen dat tabblad; in demo-modus (zonder Sheet) volgt de muur de voorbeeldaanvragen en begint hij leeg.
 
 Wat er **nooit** op komt:
 

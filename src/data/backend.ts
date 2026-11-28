@@ -29,14 +29,13 @@ import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus, Partypot } from "../types/business";
 import type { PublicWall, WallEntry, WallEntryPatch } from "../types/wallOfFame";
 import { BAR_EVENTS, BUSINESS_DEFAULTS, PARTYPOT_GOAL, isoDayLabel } from "../config";
-import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, packageSplit, validateBusiness } from "../features/business/business";
+import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
 import { repairCounts, repairVolunteer } from "../lib/volunteerDays";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
 import { categoryOf } from "../lib/categories";
 import { countsFor, newWallEntry, publicWall, seasonOf, syncWall, wallKey } from "../features/wallOfFame/wall";
-import { DEMO_LOGOS, demoLogo } from "../features/wallOfFame/demoLogos";
 
 /** Same check as the script: something@domain.tld. */
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -744,17 +743,18 @@ function writeStore(store: DemoStore) {
   }
 }
 
+/** The wall in the demo follows the demo requests, like the script does: confirmed and with the box ticked. */
 function demoBusinessAndWall(): Pick<DemoStore, "business" | "wallOfFame"> {
-  const business = [...demoBusiness(), ...demoWallOrders()];
-  return { business, wallOfFame: demoWall(business) };
+  const business = demoBusiness();
+  return { business, wallOfFame: syncWall([], business, BUSINESS_DEFAULTS, "2026-10-25 17:02:00").entries };
 }
 
 /** Fictitious requests from the order form, so the Zakelijk page has something to show. */
 function demoBusiness(): BusinessOrder[] {
   const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "zone1" };
   const rows: Array<[string, string, BusinessOrder["status"], Partial<BusinessOrderInput>]> = [
-    ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412", wallOfFame: true, email: "petra@bloemenveilingnoord.nl" }],
-    ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", pakket: "zilver", wallOfFame: true, withRaisins: 110, withoutRaisins: 40, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
+    ["Z26-0001", "2026-10-19 09:12:00", "bevestigd", { company: "Bloemenveiling Noord", contact: "Petra Jansen", withRaisins: 150, withoutRaisins: 100, donation: 50, flyers: true, date: "2026-12-18", street: "Legmeerdijk 313", postalCode: "1431 GB", city: "Aalsmeer", moment: "voor10", reference: "PO-88412" }],
+    ["Z26-0002", "2026-10-22 14:40:00", "nieuw", { company: "Studio Grachtengordel", contact: "Daan Visser", pakket: "zilver", withRaisins: 110, withoutRaisins: 40, date: "2026-12-22", street: "Keizersgracht 210", postalCode: "1016 DZ", city: "Amsterdam", remark: "Graag bij de achteringang aanbellen, de voordeur is dicht in de ochtend." }],
     ["Z26-0003", "2026-10-24 11:05:00", "nieuw", { company: "Tuincentrum De Linde", contact: "Mieke de Graaf", pakket: "goud", withRaisins: 1000, withoutRaisins: 800, donation: 100, date: "2026-12-30", street: "Herenweg 80", postalCode: "2101 MS", city: "Heemstede", area: "zone3", invoiceAddress: "Postbus 12, 2100 AA Heemstede" }],
     ["Z26-0004", "2026-10-25 16:30:00", "afgewezen", { company: "Sportschool Fit", contact: "Rick Bos", withRaisins: 0, withoutRaisins: 60, date: "2026-12-24", street: "Stationsweg 4", postalCode: "3811 MP", city: "Amersfoort", area: "zone3", distanceKm: 62 }]
   ];
@@ -769,74 +769,6 @@ function demoBusiness(): BusinessOrder[] {
       handledBy: status === "nieuw" ? "" : "Mark", handledAt: status === "nieuw" ? "" : "2026-10-25 17:02:00"
     };
   });
-}
-
-/**
- * Een gevulde muur voor de demo: verzonnen Amsterdamse en Aalsmeerse bedrijven, met de verhoudingen van 2025
- * (veel Brons, een handvol Zilver, een paar grote). Name, oliebollen, first order, consent, logo status, ink, note.
- * Alleen voorbeelddata: met het Apps Script komt de muur uit de bevestigde bestellingen in de Sheet.
- */
-const DEMO_WALL: Array<[string, number, string, WallEntry["consent"], WallEntry["logoStatus"], WallEntry["ink"], string?]> = [
-  ["Zuidas Vastgoed Partners B.V.", 1200, "2026-11-04 09:20:00", "formulier", "goedgekeurd", "donker", "Woordmerk van zuidasvastgoedpartners.nl, het domein van de besteller."],
-  ["Brouwerij De Vrolijke Ketel", 620, "2026-12-02 15:10:00", "mail", "goedgekeurd", "kleur", "Het keteltje is zonder kleur niet te herkennen; daarom in eigen kleur."],
-  ["Studio Noorderlicht", 180, "2026-11-09 11:42:00", "formulier", "goedgekeurd", "donker", "Logo van studionoorderlicht.nl, het e-maildomein van de besteller."],
-  ["Pakhuis Digital", 240, "2026-11-21 10:05:00", "formulier", "goedgekeurd", "donker", "Woordmerk met punt, doorzichtige achtergrond."],
-  ["Van der Meulen Accountants", 150, "2026-12-07 08:55:00", "formulier", "goedgekeurd", "licht", "Alleen een witte versie gevonden; als lichte inkt omgezet."],
-  ["Amstel Installatietechniek", 320, "2026-12-09 13:30:00", "formulier", "nakijken", "donker", "Besteld met een Gmail-adres, dus op naam gezocht. Er zijn twee bedrijven met deze naam; dit is die uit Amsterdam-Oost."],
-  ["Huisartsenpraktijk Oud-Zuid", 160, "2026-12-11 16:20:00", "mail", "geen", "donker", "Geen logo gevonden op de website; het naambordje hangt."],
-  ["Rederij Amstelstroom", 210, "2026-12-01 09:45:00", "formulier", "goedgekeurd", "donker", "Logo van rederijamstelstroom.nl. In de demo is de link stuk: dan hangt vanzelf het naambordje."],
-  ["Notariskantoor Prinsengracht", 120, "2026-11-18 09:00:00", "formulier", "geen", "donker"],
-  ["Architectenbureau Ruimtevaart", 110, "2026-11-26 14:12:00", "formulier", "geen", "donker"],
-  ["Koffiebranderij Het Zwarte Paard", 100, "2026-12-03 10:40:00", "formulier", "geen", "donker"],
-  ["Drukkerij Lijnbaan", 90, "2026-12-05 11:15:00", "formulier", "geen", "donker"],
-  ["Kinderopvang De Blokkendoos", 80, "2026-11-12 08:30:00", "formulier", "geen", "donker"],
-  ["Kapsalon Knip & Krul", 70, "2026-12-08 17:45:00", "mail", "geen", "donker"],
-  ["Bureau Wittenburg", 60, "2026-11-06 12:00:00", "formulier", "geen", "donker"],
-  ["Stichting Buurtkamer West", 60, "2026-12-10 09:35:00", "formulier", "geen", "donker"],
-  ["Yogaschool Ademruimte", 50, "2026-12-12 19:05:00", "formulier", "geen", "donker"],
-  ["Fietsenmakerij Spaarndammer", 50, "2026-12-14 10:20:00", "formulier", "geen", "donker"],
-  ["Makelaardij Het Gooi", 200, "2026-11-30 15:00:00", "formulier", "goedgekeurd", "donker", "Op eigen verzoek van de muur gehaald (mail 3 december)."]
-];
-
-/** In the demo every company on the list has an order with the box ticked: without one, syncWall takes a form consent off the wall. */
-function demoWallOrders(): BusinessOrder[] {
-  const base: BusinessOrderInput = { ...emptyBusinessInput(), pakket: "zelf", area: "zone1", fulfilment: "bezorgen", city: "Amsterdam", wallOfFame: true };
-  return DEMO_WALL.filter(([, , , consent]) => consent === "formulier").map(([company, oliebollen, at], i) => {
-    const slug = wallKey(company, seasonOf("2026-12-01")).split(":")[1];
-    // Amstel ordered with a free mail address: no domain of its own, so the logo was searched by name.
-    const email = slug.startsWith("amstel") ? "amstel.installatie@gmail.com" : `info@${slug.replace(/-/g, "")}.nl`;
-    const input: BusinessOrderInput = { ...base, ...packageSplit(oliebollen), company, contact: "Demo", email, invoiceEmail: email, date: "2026-12-18" };
-    return { ...input, id: `Z26-01${String(i + 1).padStart(2, "0")}`, createdAt: at, status: "bevestigd", reason: "", handledBy: "Mark", handledAt: at, totals: businessTotals(input, BUSINESS_DEFAULTS) };
-  });
-}
-
-function demoWall(business: BusinessOrder[]): WallEntry[] {
-  const season = seasonOf("2026-12-01");
-  const fromList = DEMO_WALL.map(([company, oliebollen, at, consent, logoStatus, ink, note]): WallEntry => {
-    const entry = newWallEntry({ company, season, consent, domain: "", now: at });
-    const slug = wallKey(company, season).split(":")[1];
-    const own = slug.startsWith("amstel") ? "" : `${slug.replace(/-/g, "")}.nl`;
-    const logoUrl = slug === "rederij-amstelstroom" ? "https://logo.invalid/rederij-amstelstroom.svg" : DEMO_LOGOS[slug] ?? "";
-    return {
-      ...entry,
-      ...countsFor(oliebollen, at, season, BUSINESS_DEFAULTS),
-      visible: !company.startsWith("Makelaardij"),
-      domain: own,
-      logoUrl,
-      logoStatus,
-      ink,
-      logoSource: logoUrl ? (own ? "website" : "brandfetch") : logoStatus === "geen" && oliebollen >= 150 ? "website" : "",
-      logoDomain: logoUrl ? own || "amstelinstallatie.nl" : "",
-      logoNote: note ?? "",
-      confidence: logoUrl ? (logoStatus === "nakijken" ? 0.62 : 0.94) : null,
-      updatedBy: logoStatus === "goedgekeurd" ? "Mark" : "",
-      updatedAt: at
-    };
-  });
-  // Bloemenveiling Noord (Z26-0001) is confirmed with the box ticked: it comes on the wall through syncWall.
-  const synced = syncWall(fromList, business, BUSINESS_DEFAULTS, "2026-10-25 17:02:00");
-  for (const key of synced.toSearch) demoFindLogo(synced.entries, key);
-  return synced.entries;
 }
 
 function nowStamp(): string {
@@ -1517,20 +1449,17 @@ function createDemoBackend(notice?: string): Backend {
         };
         if (entry.tier !== "brons") entry.logoStatus = "zoeken";
         store.wallOfFame.push(entry);
-        if (entry.logoStatus === "zoeken") demoFindLogo(store.wallOfFame, key);
       });
     },
     async searchWallLogo(_session, key) {
-      await delay(900);
-      let message = "";
+      await delay(300);
       mutate((store) => {
         const w = (store.wallOfFame ?? []).find((x) => x.key === key);
         if (!w) throw new Error("Deze plek staat niet (meer) op de muur.");
         Object.assign(w, { logoStatus: "zoeken", logoSource: "" });
-        demoFindLogo(store.wallOfFame ?? [], key);
-        message = w.logoStatus === "nakijken" ? "Logo gevonden. Kijk het na en keur het goed." : "Geen logo gevonden; het naambordje blijft hangen.";
       });
-      return { message };
+      // Same answer as the script without a logo search connected.
+      return { message: "Staat klaar. De logozoeker pakt het bij de volgende ronde op; tot dan hangt het naambordje." };
     },
     async refreshWall() {
       await delay(300);
@@ -1570,27 +1499,11 @@ function createDemoBackend(notice?: string): Backend {
   };
 }
 
-/** Same as syncWall_ in the script: the wall follows the confirmed requests; the logo search follows. */
+/** Same as syncWall_ in the script: the wall follows the confirmed requests. A logo stays "zoeken" until someone sets one. */
 function demoSyncWall(store: DemoStore): string[] {
-  // A demo saved before the wall existed has the example wall but not its orders: add them, or the sync empties the wall.
-  for (const o of demoWallOrders()) if (!store.business.some((b) => b.id === o.id)) store.business.push(o);
   const synced = syncWall(store.wallOfFame ?? [], store.business, BUSINESS_DEFAULTS, nowStamp());
   store.wallOfFame = synced.entries;
-  for (const key of synced.toSearch) demoFindLogo(store.wallOfFame, key);
   return synced.added;
-}
-
-/** Demo stand-in for the daily logo search: a fictitious logo when there is one, otherwise the name sign. */
-function demoFindLogo(wall: WallEntry[], key: string) {
-  const w = wall.find((x) => x.key === key);
-  if (!w) return;
-  const logo = demoLogo(key);
-  Object.assign(
-    w,
-    logo
-      ? { logoUrl: logo, logoStatus: "nakijken", logoSource: "demo", logoDomain: w.domain, ink: "donker", confidence: 0.88, logoNote: `Demo: zo komt een gevonden logo binnen voor ${w.name}. In het echt zoekt de dagelijkse taak het op de website van het bedrijf en kijk jij het na.` }
-      : { logoStatus: "geen", logoSource: "demo", logoDomain: "", confidence: null, logoNote: "Demo: geen logo gevonden; het naambordje hangt." }
-  );
 }
 
 export const DEMO_STORAGE_KEY = DEMO_KEY;

@@ -1,5 +1,6 @@
-// Voorbeeld van de zakelijke bevestigingsmail, met de echte template uit Code.gs.
+// Voorbeeld van de zakelijke bevestigingsmail en de dagelijkse roostermail, met de echte templates uit Code.gs.
 // Draaien: node apps-script/mail-preview.mjs  →  docs/mail-zakelijke-bevestiging*.html (Polonaisepartner, Feestpartner, Bandpartner, Partypot)
+//                                                en docs/mail-rooster.html
 import { readFileSync, writeFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 
@@ -58,4 +59,26 @@ for (const [file, input] of Object.entries(examples)) {
   )(input);
   writeFileSync(new URL(`../docs/${file}.html`, here), html);
   console.log(`docs/${file}.html`);
+}
+
+// De roostermail aan de planner: woensdag 9 december, de dag ervoor verstuurd. Verzonnen namen en nummers.
+{
+  const shift = (role, part, start, end, name, extra = {}) => ({ id: name, date: "2026-12-09", role, part, start, end, name, location: "", note: "", ...extra });
+  const shifts = [
+    shift("inpakken", "", "7:00", "9:30", "Ria de Vries"),
+    shift("inpakken", "", "7:30", "9:30", "Truus Dekker", { note: "komt met de bus" }),
+    shift("autokoerier", "ochtend", "9:00", "12:30", "Ahmed Yilmaz"),
+    shift("autokoerier", "middag", "12:30", "15:00", "Ahmed Yilmaz"),
+    shift("oliebollenbar", "", "13:00", "17:30", "Lotte Bos", { location: "Olieborrel, Het Amstelhuis" }),
+    shift("oliebollenbar", "", "13:00", "17:30", "Piet van buiten", { location: "Olieborrel, Het Amstelhuis" })
+  ];
+  const volunteers = [
+    { name: "Ria de Vries", phone: "06 12345678" },
+    { name: "Truus Dekker", phone: "0612345679" },
+    { name: "Ahmed Yilmaz", phone: "+31 6 12345670" },
+    { name: "Lotte Bos", phone: "" }
+  ];
+  const html = runInContext("(function (shifts, volunteers) { return rosterMailHtml_(rosterMailData_('2026-12-09', 1, shifts, volunteers, '')); })", context)(shifts, volunteers);
+  writeFileSync(new URL("../docs/mail-rooster.html", here), html);
+  console.log("docs/mail-rooster.html");
 }

@@ -255,6 +255,29 @@ vrijwilligers op een dienst. Het script bewaart dat op twee plekken:
 Acties (alleen beheer): `saveShift` (inplannen, verplaatsen, tijden wijzigen), `removeShift` en `setNeeded`.
 Zie `docs/rooster.md` voor het scherm.
 
+## Dagelijkse roostermail aan de planner
+
+Elke ochtend rond 7:00 mailt het script de planner wie er **de volgende dag** op het rooster staat: per persoon het
+telefoonnummer, de diensten met tijden, een klaargezet bericht en een knop die WhatsApp opent met dat bericht al
+ingevuld. De planner stuurt de berichten zelf; het script appt niemand. Staat er niemand op het rooster, dan komt er
+geen mail. Voorbeeld: [`docs/mail-rooster.html`](../docs/mail-rooster.html).
+
+**Aanzetten:** voer na het plaatsen van `Code.gs` de functie **`installeer`** één keer opnieuw uit; die zet de
+dagelijkse trigger. Met **`testRoosterMail`** (kiezen bovenin de editor, Uitvoeren) stuur je de mail meteen.
+
+Instellen in het tabblad **Instellingen** (`sleutel`, `waarde`); zonder regel geldt de standaard uit `CONFIG.ROSTER_MAIL`:
+
+| Sleutel | Standaard | Wat |
+|---|---|---|
+| `rooster_mail_naar` | `planning@omacobysoliebollenbar.nl` | wie de mail krijgt |
+| `rooster_mail_afzender` | de afzender van de vrijwilligersmails (`vrijwilligers_afzender`, anders planning@) | het afzenderadres. Het moet in Gmail van het account achter het script onder Instellingen → Accounts → *Verzenden als* staan; anders gaat de mail vanaf dat account zelf |
+| `rooster_mail_dagen_vooraf` | `1` | hoeveel dagen voor de dienst: `1` is de dag ervoor, `0` de dag zelf, `2` twee dagen ervoor |
+| `rooster_app_bericht` | zie `CONFIG.ROSTER_MAIL.message` | de tekst van het WhatsApp-bericht, met `{voornaam}`, `{wanneer}` (morgen), `{dag}` (woensdag 9 december) en `{diensten}` |
+
+Het telefoonnummer komt uit de aanmelding met dezelfde naam als in het rooster. Zonder bruikbaar nummer staat het
+bericht er wel, zonder knop. Het uur van verzenden (`CONFIG.ROSTER_MAIL.hour`) wijzig je in de code; voer daarna
+`installeer` opnieuw uit.
+
 ## Realtime
 
 Elke wijziging verhoogt een versienummer. Het dashboard vraagt elke 3 seconden "iets nieuw sinds versie X?";

@@ -59,8 +59,15 @@ In de week staat bij zo'n naam een `~`.
 
 Verandert de vorm van de aanmeldingen, dan is `canDo` de enige plek in het rooster die mee moet.
 
+## Dagelijkse mail aan de planner
+
+Elke ochtend krijgt de planner een mail met wie er de volgende dag op het rooster staat: telefoonnummer, diensten,
+een klaargezet bericht en een knop die WhatsApp opent met dat bericht ingevuld. De planner verstuurt zelf. Ontvanger,
+afzender, het aantal dagen vooraf en de tekst van het bericht stel je in het tabblad Instellingen in; zie
+`apps-script/README.md` (*Dagelijkse roostermail aan de planner*) en het voorbeeld in `docs/mail-rooster.html`.
+
 ## Nog niet
 
 - Een automatisch voorstel ("vul voor"): de planner plant met de hand.
-- Bevestiging of herinnering aan de vrijwilliger, en het dagelijkse overzicht voor de planner.
+- Bevestiging of herinnering aan de vrijwilliger vanuit het rooster.
 - Slepen op een aanraakscherm.

@@ -88,6 +88,24 @@ const CONFIG = {
    */
   VOLUNTEERS_FROM: 'planning@omacobysoliebollenbar.nl',
   /**
+   * Dagelijkse roostermail aan de planner: wie er binnenkort een dienst heeft, met telefoonnummer en een klaargezet
+   * WhatsApp-bericht. Alles is te overschrijven in het tabblad Instellingen:
+   *   rooster_mail_naar          wie de mail krijgt (leeg hier én daar = geen mail)
+   *   rooster_mail_afzender      afzender; moet in Gmail onder "Verzenden als" staan, anders gaat hij vanaf het account zelf
+   *   rooster_mail_dagen_vooraf  hoeveel dagen voor de dienst (1 = de dag ervoor, 0 = op de dag zelf)
+   *   rooster_app_bericht        het WhatsApp-bericht, met {voornaam}, {wanneer}, {dag} en {diensten}
+   * De mail gaat alleen uit als de trigger is gezet: voer `installeer` één keer opnieuw uit.
+   */
+  ROSTER_MAIL: {
+    to: 'planning@omacobysoliebollenbar.nl',
+    from: 'planning@omacobysoliebollenbar.nl',
+    daysAhead: 1,
+    /** Het uur waarop de mail uitgaat (tijdzone van het script). */
+    hour: 7,
+    message: 'Hoi {voornaam}! Een berichtje van Oma Coby\'s Oliebollenbar: {wanneer} ({dag}) sta je op het rooster. {diensten}. ' +
+      'Lukt dat nog? Laat het even weten als er iets tussenkomt. Tot dan!'
+  },
+  /**
    * Zakelijk bestellen (#/bestellen). Standaardprijzen en -dagen; overschrijf ze in het tabblad
    * Instellingen (zakelijk_minimum, zakelijk_dagen_vooraf, …; de prijs niet) en in het tabblad Zakelijke dagen.
    * Zelfde getallen als BUSINESS_DEFAULTS in src/config.ts.
@@ -1571,10 +1589,12 @@ function onEdit() {
 function installeer() {
   const ss = SpreadsheetApp.getActive();
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (['bijWijziging', 'bijFormulier'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
+    if (['bijWijziging', 'bijFormulier', 'dagelijkseRoosterMail'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('bijWijziging').forSpreadsheet(ss).onChange().create();
   ScriptApp.newTrigger('bijFormulier').forSpreadsheet(ss).onFormSubmit().create();
+  // Elke ochtend de roostermail aan de planner (zie CONFIG.ROSTER_MAIL).
+  ScriptApp.newTrigger('dagelijkseRoosterMail').timeBased().everyDays(1).atHour(CONFIG.ROSTER_MAIL.hour).create();
   // Make sure every dashboard tab exists, with its key column as text.
   Object.keys(TABS).forEach(function (tab) { sheet_(tab); });
   bump_();
@@ -4064,3 +4084,202 @@ Object.assign(HANDLERS, {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Dagelijkse roostermail aan de planner: wie heeft er binnenkort een dienst, met telefoonnummer en een klaargezet
+// WhatsApp-bericht. De planner stuurt de berichten zelf; dit script appt niemand. Instellingen: CONFIG.ROSTER_MAIL.
+
+/** "06 12345678", "+31 6 12345678" or 612345678 (Sheets dropped the 0) → "31612345678" for wa.me; "" when unusable. */
+function rosterWhatsapp_(phone) {
+  let digits = String(phone === null || phone === undefined ? '' : phone).replace(/[^\d+]/g, '');
+  if (digits.charAt(0) === '+') digits = digits.slice(1);
+  else if (digits.indexOf('00') === 0) digits = digits.slice(2);
+  else if (digits.charAt(0) === '0') digits = '31' + digits.slice(1);
+  else if (/^6\d{8}$/.test(digits)) digits = '31' + digits;
+  return /^\d{9,15}$/.test(digits) ? digits : '';
+}
+
+/** One shift as it reads in a message: "inpakken van 7:00 tot 9:30 (Aalsmeerderweg 85, Aalsmeer)". */
+function rosterShiftText_(shift) {
+  const time = ' van ' + shift.start + ' tot ' + shift.end;
+  if (shift.role === 'inpakken') return 'inpakken' + time + ' (' + CONFIG.START_ADDRESS + ')';
+  if (shift.role === 'autokoerier') return 'bezorgen' + time + ', je vertrekt vanaf ' + CONFIG.START_ADDRESS;
+  if (shift.role === 'oliebollenbar') return 'helpen bij de Oliebollenbar' + time + (shift.location ? ' (' + shift.location + ')' : '');
+  return VOLUNTEER_ROLE_NAMES[shift.role].toLowerCase() + time;
+}
+
+/** The tasks as the rooster calls them. */
+const ROSTER_MAIL_TASKS = { inpakken: 'Inpakken', fietskoerier: 'Fietskoerier', autokoerier: 'Bezorgen', oliebollenbar: 'Oliebollenbar' };
+
+/** 0 → "vandaag", 1 → "morgen", 2 → "overmorgen", else "over 3 dagen". */
+function rosterWhen_(daysAhead) {
+  return ['vandaag', 'morgen', 'overmorgen'][daysAhead] || 'over ' + daysAhead + ' dagen';
+}
+
+/**
+ * Everything the mail shows for one day: per person their shifts, phone and the message to send.
+ * Pure (no Sheet), so it can be previewed: `shifts` as readRoster_ gives them, `volunteers` as readVolunteers_.
+ */
+function rosterMailData_(date, daysAhead, shifts, volunteers, template) {
+  const day = weekdayLabel_(date);
+  const when = rosterWhen_(daysAhead);
+  const phones = {};
+  volunteers.forEach(function (v) {
+    const key = String(v.name || '').trim().toLowerCase();
+    // Signed up twice: the latest row with a phone number counts.
+    if (key && v.phone) phones[key] = String(v.phone);
+  });
+  const known = {};
+  volunteers.forEach(function (v) { known[String(v.name || '').trim().toLowerCase()] = true; });
+  const byName = {};
+  const order = [];
+  shifts.filter(function (s) { return s.date === date; })
+    .sort(function (a, b) { return rosterMinutes_(a.start) - rosterMinutes_(b.start); })
+    .forEach(function (s) {
+      const key = s.name.trim().toLowerCase();
+      if (!byName[key]) { byName[key] = { name: s.name.trim(), shifts: [] }; order.push(key); }
+      byName[key].shifts.push(s);
+    });
+  const people = order.map(function (key) {
+    const p = byName[key];
+    // Sheets drops the first 0 of a number typed as a number: show it as people know it.
+    const phone = /^6\d{8}$/.test(phones[key] || '') ? '0' + phones[key] : phones[key] || '';
+    const whatsapp = rosterWhatsapp_(phone);
+    // Morning and afternoon of the same task in a row read as one shift: "bezorgen van 9:00 tot 15:00".
+    const joined = [];
+    p.shifts.forEach(function (s) {
+      const last = joined[joined.length - 1];
+      if (last && last.role === s.role && last.location === s.location && last.end === s.start) last.end = s.end;
+      else joined.push({ role: s.role, location: s.location, start: s.start, end: s.end });
+    });
+    const list = joined.map(rosterShiftText_).join(' en ');
+    const message = String(template || CONFIG.ROSTER_MAIL.message)
+      .replace(/\{voornaam\}/g, volunteerFirstName_(p.name))
+      .replace(/\{wanneer\}/g, when)
+      .replace(/\{dag\}/g, day)
+      .replace(/\{diensten\}/g, list.charAt(0).toUpperCase() + list.slice(1));
+    return {
+      name: p.name,
+      phone: phone,
+      known: !!known[key],
+      shifts: p.shifts.map(function (s) {
+        return { label: ROSTER_MAIL_TASKS[s.role] + (s.part ? ' ' + s.part : ''), time: s.start + '–' + s.end, location: s.location, note: s.note };
+      }),
+      message: message,
+      link: whatsapp ? 'https://wa.me/' + whatsapp + '?text=' + encodeURIComponent(message) : ''
+    };
+  });
+  return { date: date, day: day, when: when, people: people, shiftCount: people.reduce(function (n, p) { return n + p.shifts.length; }, 0) };
+}
+
+function rosterMinutes_(time) {
+  const parts = String(time || '').split(':');
+  return (Number(parts[0]) || 0) * 60 + (Number(parts[1]) || 0);
+}
+
+function rosterMailSubject_(d) {
+  return 'Rooster ' + d.when + ' (' + d.day + '): ' + d.people.length + (d.people.length === 1 ? ' vrijwilliger' : ' vrijwilligers') + ' om te appen';
+}
+
+function rosterMailText_(d) {
+  const lines = [
+    capitalize_(d.when) + ', ' + d.day + ', ' + (d.people.length === 1 ? 'staat er 1 vrijwilliger' : 'staan er ' + d.people.length + ' vrijwilligers') + ' op het rooster.',
+    'Hieronder per persoon het telefoonnummer en een bericht dat je kunt sturen. De link opent WhatsApp met het bericht al ingevuld.',
+    ''
+  ];
+  d.people.forEach(function (p) {
+    lines.push(p.name + (p.phone ? ' · ' + p.phone : ' · geen telefoonnummer bekend'));
+    p.shifts.forEach(function (s) {
+      lines.push('  ' + s.label + ' ' + s.time + (s.location ? ' · ' + s.location : '') + (s.note ? ' · opmerking: ' + s.note : ''));
+    });
+    if (!p.known) lines.push('  Staat niet bij de aanmeldingen.');
+    lines.push('  Bericht: ' + p.message);
+    if (p.link) lines.push('  WhatsApp: ' + p.link);
+    lines.push('');
+  });
+  lines.push('Het rooster wijzig je op de pagina Rooster van het platform of in het tabblad Rooster van de Sheet.');
+  return lines.join('\n');
+}
+
+function capitalize_(text) {
+  return String(text).charAt(0).toUpperCase() + String(text).slice(1);
+}
+
+/** The mail in the house style, within what mail programs can do: tables and inline styles, no images. */
+function rosterMailHtml_(d) {
+  const font = "font-family:Rockwell,'Rockwell Nova',Georgia,serif;";
+  const people = d.people.map(function (p, i) {
+    const shifts = p.shifts.map(function (s) {
+      return '<div style="' + font + 'font-size:14px;line-height:20px;color:#5c4238;"><b style="color:#261f1f;">' + escapeHtml_(s.label) + '</b> ' + escapeHtml_(s.time) +
+        (s.location ? ' · ' + escapeHtml_(s.location) : '') + (s.note ? ' · <i>' + escapeHtml_(s.note) + '</i>' : '') + '</div>';
+    }).join('');
+    const phone = p.phone
+      ? '<a href="tel:' + escapeHtml_(String(p.phone).replace(/[^\d+]/g, '')) + '" style="color:#5c4238;">' + escapeHtml_(p.phone) + '</a>'
+      : 'geen telefoonnummer bekend';
+    const button = p.link
+      ? '<a href="' + escapeHtml_(p.link) + '" style="' + font + 'display:inline-block;background:#261f1f;color:#f9f3d9;font-size:14px;font-weight:bold;text-decoration:none;padding:10px 16px;border-radius:6px;">Open in WhatsApp</a>'
+      : '<span style="' + font + 'font-size:13px;color:#6d5a4f;">Geen bruikbaar nummer voor WhatsApp: kopieer het bericht en stuur het zelf.</span>';
+    return '<tr><td style="padding:' + (i ? '24px' : '0') + ' 0 0 0;' + (i ? 'border-top:1px solid #ebe1bf;' : '') + '">' +
+      '<div style="' + font + 'font-size:18px;line-height:24px;font-weight:bold;color:#261f1f;">' + escapeHtml_(p.name) + '</div>' +
+      '<div style="' + font + 'font-size:14px;line-height:20px;color:#5c4238;padding-bottom:6px;">' + phone + (p.known ? '' : ' · staat niet bij de aanmeldingen') + '</div>' +
+      shifts +
+      '<div style="' + font + 'font-size:14px;line-height:21px;color:#261f1f;background:#fbf3cf;border-radius:6px;padding:12px 14px;margin:12px 0;">' + escapeHtml_(p.message) + '</div>' +
+      button +
+      '<div style="height:24px;line-height:24px;font-size:0;">&nbsp;</div>' +
+      '</td></tr>';
+  }).join('');
+  return '<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+    '<body style="margin:0;padding:0;background:#f9f3d9;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9f3d9;"><tr><td align="center" style="padding:24px 12px;">' +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#fffdf6;border-radius:10px;"><tr><td style="padding:32px 28px 8px 28px;">' +
+    '<div style="' + font + 'font-size:12px;line-height:16px;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold;color:#6d5a4f;">Rooster ' + escapeHtml_(d.when) + '</div>' +
+    '<div style="' + font + 'font-size:24px;line-height:30px;font-weight:bold;color:#261f1f;padding:4px 0 8px 0;">' + escapeHtml_(capitalize_(d.day)) + '</div>' +
+    '<div style="' + font + 'font-size:15px;line-height:22px;color:#5c4238;padding-bottom:24px;">' +
+    (d.people.length === 1 ? 'Er staat 1 vrijwilliger' : 'Er staan ' + d.people.length + ' vrijwilligers') + ' op het rooster. Per persoon staat het bericht klaar; de knop opent WhatsApp met het bericht al ingevuld.</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' + people + '</table>' +
+    '<div style="' + font + 'font-size:12px;line-height:18px;color:#6d5a4f;border-top:1px solid #ebe1bf;padding:16px 0 24px 0;">Het rooster wijzig je op de pagina Rooster van het platform of in het tabblad Rooster van de Sheet. ' +
+    'Deze mail komt elke ochtend, alleen als er iemand op het rooster staat.</div>' +
+    '</td></tr></table></td></tr></table></body></html>';
+}
+
+/**
+ * Sends the planner the mail for the day that is `rooster_mail_dagen_vooraf` days ahead. Once per day, unless `force`
+ * (testRoosterMail). Returns what happened, as a sentence for the log.
+ */
+function sendRosterMail_(force) {
+  const settings = {};
+  try {
+    readTab_('settings').forEach(function (r) { settings[String(r.sleutel).trim()] = r.waarde; });
+  } catch (err) {
+    // No settings tab: CONFIG is used.
+  }
+  const to = String(settings.rooster_mail_naar === undefined || settings.rooster_mail_naar === '' ? CONFIG.ROSTER_MAIL.to : settings.rooster_mail_naar).trim();
+  if (!to) return 'Geen roostermail: er is geen adres ingesteld (rooster_mail_naar).';
+  const rawAhead = String(settings.rooster_mail_dagen_vooraf === undefined ? '' : settings.rooster_mail_dagen_vooraf).trim();
+  const daysAhead = /^\d$/.test(rawAhead) ? Number(rawAhead) : CONFIG.ROSTER_MAIL.daysAhead;
+  const today = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
+  if (!force && prop_('ROSTER_MAIL_SENT') === today) return 'Geen roostermail: die van vandaag is al verstuurd.';
+  const date = shiftDay_(today, daysAhead);
+  const d = rosterMailData_(date, daysAhead, readRoster_(), readVolunteers_(), String(settings.rooster_app_bericht || '').trim());
+  if (d.people.length === 0) return 'Geen roostermail: op ' + d.day + ' staat er niemand op het rooster.';
+  const sender = String(settings.rooster_mail_afzender || settings.vrijwilligers_afzender || CONFIG.ROSTER_MAIL.from).trim();
+  const from = sendMailFrom_({ to: to, name: CONFIG.MAIL_SENDER_NAME, subject: rosterMailSubject_(d), body: rosterMailText_(d), htmlBody: rosterMailHtml_(d) }, sender);
+  if (!force) setProp_('ROSTER_MAIL_SENT', today);
+  return 'Roostermail voor ' + d.day + ' verstuurd naar ' + to + (from ? ' vanaf ' + from : ' vanaf het account van het script') + ' (' + d.people.length + ' personen).';
+}
+
+/** Time trigger (set by `installeer`): every morning. A failure is logged, never thrown at the trigger. */
+function dagelijkseRoosterMail() {
+  try {
+    console.log(sendRosterMail_(false));
+  } catch (err) {
+    console.error('Roostermail niet verstuurd: ' + err);
+  }
+}
+
+/** Kies deze functie bovenin de editor en klik Uitvoeren om de roostermail nu te versturen (ook als hij vandaag al ging). */
+function testRoosterMail() {
+  const result = sendRosterMail_(true);
+  console.log(result);
+  return result;
+}

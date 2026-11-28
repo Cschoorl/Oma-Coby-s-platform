@@ -249,6 +249,9 @@ function planningKey_(map, text) {
  *   ANTHROPIC_API_KEY                          — voor het uitlezen van bonnen
  *   SHOPIFY_SHOP, SHOPIFY_TOKEN                — voor de stand van de Partypot: de winkel ("…myshopify.com") en een
  *                                                Admin API-token van een eigen app met alleen de rechten read_orders
+ *   WALL_CALLBACK_SECRET                       — geheim waarmee de logozoeker van de wall of fame (de dagelijkse taak, of
+ *                                                n8n) de zoeklijst ophaalt en een gevonden logo terugmeldt
+ *   WALL_N8N_WEBHOOK                           — optioneel: n8n-webhook die meteen na bevestigen een logo zoekt
  */
 
 const TABS = {
@@ -274,6 +277,10 @@ const TABS = {
     // Zone 3: kilometers enkele reis vanaf de bakkerij en de kilometerprijs daarbij (km × € 0,35), excl. btw. Die komt
     // bovenop het vaste tarief van zone 3 en zit niet in bedrag_excl_btw.
     'bezorg_km', 'kilometerprijs_schatting']],
+  // Wall of fame: one row per company per season, with consent (see docs/wall-of-fame.md).
+  wallOfFame: ['Wall of fame', ['sleutel', 'seizoen', 'naam_op_muur', 'onderneming', 'ordernummers', 'pakket', 'oliebollen', 'ouderen',
+    'eerste_bestelling', 'vroegboeker', 'toestemming', 'zichtbaar', 'domein', 'logo_url', 'logo_status', 'inkt', 'logo_bron',
+    'logo_toelichting', 'logo_zekerheid', 'bijgewerkt_door', 'bijgewerkt_op', 'logo_domein']],
   businessDays: ['Zakelijke dagen', ['datum', 'soort', 'tijd', 'open']],
   // Coordinates per address for the automatic planning, so each address is looked up only once.
   places: ['Locaties', ['adres', 'lat', 'lng', 'opgezocht_op']],
@@ -329,7 +336,16 @@ const PERMISSIONS = {
   setBusinessStatus: ['beheer'],
   saveShift: ['beheer'],
   removeShift: ['beheer'],
-  setNeeded: ['beheer']
+  setNeeded: ['beheer'],
+  wallOfFame: ['public'],
+  saveWallEntry: ['beheer'],
+  addWallEntry: ['beheer'],
+  searchWallLogo: ['beheer'],
+  refreshWall: ['beheer'],
+  // The logo search (daily task or n8n) asks what to look for and reports what it found; both are checked with
+  // WALL_CALLBACK_SECRET instead of a role code.
+  wallTodo: ['public'],
+  wallOfFameLogo: ['public']
 };
 
 // ---------------------------------------------------------------------------
@@ -941,6 +957,7 @@ function buildFullState_() {
     roster: readRoster_(),
     // Zakelijke aanvragen with contact details: beheer only (see viewFor_).
     business: readBusiness_(),
+    wallOfFame: readWall_(),
     changes: [],
     popupSales: {},
     packNotes: {},
@@ -1088,6 +1105,7 @@ function viewFor_(full, role, name) {
     }),
     history: isAdmin ? full.history : [],
     business: isAdmin ? full.business : [],
+    wallOfFame: isAdmin ? full.wallOfFame : [],
     // Everyone sees what changed (packers need it), contact details only for beheer.
     changes: isAdmin ? full.changes : (full.changes || []).map(function (c) {
       return PRIVATE_LOG_FIELDS.indexOf(c.field) === -1 ? c : Object.assign({}, c, { from: '', to: '' });
@@ -1872,14 +1890,24 @@ Object.assign(HANDLERS, {
     if (['nieuw', 'bevestigd', 'afgewezen'].indexOf(status) === -1) throw new Error('Onbekende status.');
     const reason = String(body.reason || '').trim();
     if (status === 'afgewezen' && !reason) throw new Error('Schrijf kort waarom je de aanvraag afwijst.');
-    return withLock_(function () {
+    const done = withLock_(function () {
       const row = findRow_('business', body.id);
       row.set({
         status: status, reden: status === 'afgewezen' ? reason : '',
         behandeld_door: status === 'nieuw' ? '' : String(body.name || ''), behandeld_op: status === 'nieuw' ? '' : now_()
       });
-      return bump_();
+      // Confirming (or taking back) changes who is on the wall of fame. The wall never blocks a confirmation.
+      let toSearch = [];
+      try {
+        toSearch = syncWall_().toSearch;
+      } catch (err) {
+        console.error('Wall of fame niet bijgewerkt: ' + err);
+      }
+      return { version: bump_().version, toSearch: toSearch };
     });
+    // After the lock: n8n may take a while, and a failing webhook never blocks a confirmation.
+    askWallLogos_(done.toSearch);
+    return { version: done.version };
   }
 });
 
@@ -3474,6 +3502,393 @@ Object.assign(HANDLERS, {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Wall of fame (#/wall-of-fame)
+//
+// Wie in het bestelformulier het vinkje zet (of per mail akkoord geeft), komt na bevestigen op de muur: één rij per
+// bedrijf per seizoen in het tabblad Wall of fame. Alleen bevestigde aanvragen tellen, nooit een testbestelling.
+// Rekenregels gelijk aan src/features/wallOfFame/wall.ts; houd die twee gelijk. Logo's zoekt de logozoeker (de
+// dagelijkse taak, of n8n uit automation/wall-of-fame); beheer keurt ze goed. Zonder goedgekeurd logo hangt het
+// naambordje. De openbare muur krijgt nooit bedragen, oliebollen of contactgegevens. Zie docs/wall-of-fame.md.
+
+/** Gratis mail zegt niets over het bedrijf. Zelfde lijst als FREE_MAIL in wall.ts. */
+const WALL_FREE_MAIL = ['gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.nl', 'outlook.com', 'outlook.nl', 'live.nl', 'live.com',
+  'msn.com', 'icloud.com', 'me.com', 'yahoo.com', 'yahoo.nl', 'ziggo.nl', 'kpnmail.nl', 'kpnplanet.nl', 'planet.nl', 'home.nl',
+  'xs4all.nl', 'hetnet.nl', 'chello.nl', 'casema.nl', 'upcmail.nl', 'telfort.nl', 'tele2.nl', 'online.nl', 'proton.me', 'protonmail.com'];
+const WALL_TEXT_COLUMNS = ['sleutel', 'ordernummers', 'eerste_bestelling', 'domein', 'logo_domein', 'bijgewerkt_op'];
+const WALL_LOGO_STATUS = ['zoeken', 'nakijken', 'goedgekeurd', 'geen'];
+const WALL_INK = ['donker', 'licht', 'kleur'];
+
+Object.assign(HANDLERS, {
+  /** Openbaar: de muur van dit seizoen. Een paar minuten in de cache, want de website vraagt hem bij elk bezoek. */
+  wallOfFame: function () {
+    const cache = CacheService.getScriptCache();
+    const cacheKey = 'wall:' + getVersion_();
+    const hit = cache.get(cacheKey);
+    if (hit) return JSON.parse(hit);
+    const wall = publicWall_(readWall_(), seasonOf_(now_().slice(0, 10)));
+    cache.put(cacheKey, JSON.stringify(wall), 300);
+    return wall;
+  },
+  saveWallEntry: function (body) {
+    const name = requireName_(body.name);
+    const patch = body.patch || {};
+    return withLock_(function () {
+      const row = findRow_('wallOfFame', body.key);
+      const update = { bijgewerkt_door: name, bijgewerkt_op: now_() };
+      if (patch.name !== undefined) {
+        if (!String(patch.name).trim()) throw new Error('Vul de naam op de muur in.');
+        update.naam_op_muur = wallText_(patch.name, 80);
+      }
+      if (patch.visible !== undefined) update.zichtbaar = patch.visible ? 'Ja' : 'Nee';
+      if (patch.ink !== undefined && WALL_INK.indexOf(patch.ink) !== -1) update.inkt = patch.ink;
+      if (patch.logoUrl !== undefined) {
+        const url = String(patch.logoUrl || '').trim();
+        if (url && !/^https:\/\//.test(url)) throw new Error('Een logo-link begint met https://.');
+        Object.assign(update, { logo_url: url, logo_bron: 'handmatig', logo_toelichting: '', logo_zekerheid: '', logo_domein: '' });
+      }
+      if (patch.logoStatus !== undefined) {
+        if (WALL_LOGO_STATUS.indexOf(patch.logoStatus) === -1) throw new Error('Onbekende logostatus.');
+        update.logo_status = patch.logoStatus;
+        // "Alleen het naambordje": remember that someone chose this, so the next sync does not search again.
+        if (patch.logoStatus === 'geen' && !row.values.logo_bron) update.logo_bron = 'handmatig';
+      }
+      row.set(update);
+      return bump_();
+    });
+  },
+  /** Akkoord per mail, bijvoorbeeld voor een bestelling uit de gewone orderlijst. */
+  addWallEntry: function (body) {
+    const name = requireName_(body.name);
+    const company = String(body.company || '').trim();
+    if (company.length < 2) throw new Error('Vul de bedrijfsnaam in.');
+    const date = String(body.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Kies de leverdatum.');
+    const oliebollen = Math.round(num_(body.oliebollen));
+    if (oliebollen < 1) throw new Error('Vul het aantal oliebollen in.');
+    const season = seasonOf_(date);
+    const key = wallKey_(company, season);
+    const added = withLock_(function () {
+      if (readWall_().some(function (w) { return w.key === key; })) throw new Error(company + ' staat al op de muur van ' + season + '.');
+      const entry = Object.assign(newWallEntry_(company, season, 'mail', cleanDomain_(body.domain), now_()),
+        wallCounts_(oliebollen, String(body.firstOrderAt || now_()), season, businessInfo_()),
+        { orderIds: (body.orderIds || []).map(String), updatedBy: name });
+      if (entry.tier !== 'brons') entry.logoStatus = 'zoeken';
+      appendWall_(entry);
+      bump_();
+      return entry;
+    });
+    if (added.logoStatus === 'zoeken') askWallLogos_([key]);
+    return { key: key };
+  },
+  /** Beheer: zet deze plek (opnieuw) klaar voor de logozoeker. Met n8n gaat het meteen, anders bij de volgende ronde. */
+  searchWallLogo: function (body) {
+    withLock_(function () {
+      findRow_('wallOfFame', body.key).set({ logo_status: 'zoeken', logo_bron: '', bijgewerkt_door: String(body.name || ''), bijgewerkt_op: now_() });
+      bump_();
+    });
+    if (!prop_('WALL_N8N_WEBHOOK')) return { message: 'Staat klaar. De logozoeker pakt het bij de volgende ronde op; tot dan hangt het naambordje.' };
+    const sent = askWallLogos_([String(body.key)]);
+    return { message: sent ? 'De logozoeker is bezig. Over een minuut staat het logo klaar om na te kijken.' : 'De logozoeker reageert niet. Probeer het later nog eens of zet het logo zelf.' };
+  },
+  /** Beheer: de muur nu bijwerken uit de bevestigde aanvragen (ook de eerste keer, voor wat al bevestigd was). */
+  refreshWall: function () {
+    const done = withLock_(function () {
+      const synced = syncWall_();
+      return { version: synced.changed ? bump_().version : getVersion_(), added: synced.added, toSearch: synced.toSearch };
+    });
+    askWallLogos_(done.toSearch);
+    return { version: done.version, added: done.added };
+  },
+  /**
+   * Voor de logozoeker (met WALL_CALLBACK_SECRET): werkt de muur bij uit de bevestigde aanvragen en zegt wat er te doen
+   * is. `search`: plekken die een logo zoeken, met alleen wat daarvoor nodig is (bedrijfsnaam, plaats, domeinen; geen
+   * contactpersonen, e-mailadressen, telefoonnummers of bedragen). `check`: logo's die hangen, om na te lopen of ze
+   * nog laden. `review`: namen die op beheer wachten.
+   */
+  wallTodo: function (body) {
+    requireWallSecret_(body);
+    const synced = withLock_(function () {
+      const r = syncWall_();
+      if (r.changed) bump_();
+      return r;
+    });
+    const season = seasonOf_(now_().slice(0, 10));
+    const business = readBusiness_();
+    const hanging = readWall_().filter(function (e) { return e.season === season && e.visible && e.ouderen > 0; });
+    const withLogo = hanging.filter(function (e) { return e.tier !== 'brons'; });
+    return {
+      season: season,
+      onWall: hanging.length,
+      added: synced.added,
+      search: withLogo.filter(function (e) { return e.logoStatus === 'zoeken'; }).map(function (e) { return wallLogoRequest_(e, business); }),
+      check: withLogo.filter(function (e) { return e.logoStatus === 'goedgekeurd' && e.logoUrl; }).map(function (e) {
+        return { key: e.key, name: e.name, logoUrl: e.logoUrl, logoDomain: e.logoDomain, ink: e.ink };
+      }),
+      review: withLogo.filter(function (e) { return e.logoStatus === 'nakijken'; }).map(function (e) { return e.name; })
+    };
+  },
+  /**
+   * De logozoeker meldt wat hij vond (met WALL_CALLBACK_SECRET). Alleen voor plekken die op "zoeken" staan: een
+   * goedgekeurd logo wordt nooit overschreven. Niemand keurt hier zelf goed: een gevonden logo komt op "nakijken" en
+   * tot beheer het goedkeurt hangt het naambordje.
+   * Met `broken: true`: een logo dat al hing laadt niet meer of is leeg. Dan terug naar "nakijken".
+   */
+  wallOfFameLogo: function (body) {
+    requireWallSecret_(body);
+    return withLock_(function () {
+      const row = findRow_('wallOfFame', body.key);
+      const status = String(row.values.logo_status || '');
+      const url = String(body.logoUrl || '').trim();
+      if (body.broken === true) {
+        if (status !== 'goedgekeurd' || String(row.values.logo_url || '') !== url) return { skipped: true };
+        row.set({
+          logo_status: 'nakijken', logo_toelichting: wallText_(body.note || 'Het logo laadt niet meer of is leeg. Tot je het nakijkt, hangt het naambordje.', 400),
+          bijgewerkt_door: 'logozoeker', bijgewerkt_op: now_()
+        });
+        return bump_();
+      }
+      if (status !== 'zoeken') return { skipped: true };
+      const found = body.found === true && /^https:\/\//.test(url) && url.length <= 2000;
+      const confidence = Number(body.confidence);
+      row.set({
+        logo_url: found ? url : '', logo_status: found ? 'nakijken' : 'geen',
+        inkt: WALL_INK.indexOf(body.ink) !== -1 ? body.ink : 'donker',
+        logo_bron: wallText_(body.source || 'logozoeker', 40), logo_toelichting: wallText_(body.note, 400),
+        logo_zekerheid: isFinite(confidence) && body.confidence !== null && body.confidence !== undefined ? Math.max(0, Math.min(1, confidence)) : '',
+        bijgewerkt_door: 'logozoeker', bijgewerkt_op: now_(),
+        // Where the logo comes from. Not the customer's own domain: beheer gets a warning (namesake or competitor).
+        logo_domein: found ? cleanDomain_(body.logoDomain) : ''
+      });
+      return bump_();
+    });
+  }
+});
+
+function requireWallSecret_(body) {
+  const secret = prop_('WALL_CALLBACK_SECRET');
+  if (!secret || String(body.secret || '') !== secret) throw new Error('Geen toegang.');
+}
+
+/** Tekst voor het tabblad: ingekort, en nooit als formule (een naam die met = begint blijft tekst). */
+function wallText_(v, max) {
+  const text = String(v === undefined || v === null ? '' : v).trim().slice(0, max || 200);
+  return /^[=+\-@]/.test(text) ? "'" + text : text;
+}
+
+/** Het seizoen loopt van november tot begin januari: 2 januari 2027 hoort bij 2026. */
+function seasonOf_(isoDate) {
+  const year = Number(String(isoDate).slice(0, 4));
+  const month = Number(String(isoDate).slice(5, 7));
+  return month >= 7 ? year : year - 1;
+}
+
+function wallKey_(company, season) {
+  const slug = String(company).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+    .replace(/\b(b\.?\s?v\.?|n\.?\s?v\.?|v\.?o\.?f\.?|holding|c\.?v\.?)$/, '')
+    .replace(/&/g, ' en ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return season + ':' + slug;
+}
+
+/** Een testbestelling hoort niet op de muur. Zelfde regel als isTestCompany in wall.ts. */
+function wallIsTest_(company) {
+  const name = String(company || '').trim().toLowerCase();
+  return /^test(bestelling|order|bedrijf)?(?![a-z])/.test(name) || /(^|[^a-z])(test|testbestelling|testorder|proefbestelling)$/.test(name);
+}
+
+function cleanDomain_(site) {
+  const host = String(site || '').trim().toLowerCase().replace(/^[a-z]+:\/\//, '').split(/[/?#\s]/)[0].replace(/^www\./, '');
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host) ? host : '';
+}
+
+function domainFromEmail_(email) {
+  const domain = cleanDomain_(String(email || '').split('@')[1] || '');
+  return domain && WALL_FREE_MAIL.indexOf(domain) === -1 ? domain : '';
+}
+
+function wallDisplayName_(company) {
+  return String(company).trim().replace(/\s*,?\s*\b(b\.?\s?v\.?|n\.?\s?v\.?)$/i, '').trim();
+}
+
+/** Pakket, ouderen en vroegboeker. Zelfde als countsFor in wall.ts; boven Goud blijft het Goud, onder Brons Brons. */
+function wallCounts_(oliebollen, firstOrderAt, season, info) {
+  const reached = info.packages.filter(function (p) { return oliebollen >= p.oliebollen; });
+  return {
+    oliebollen: oliebollen, ouderen: Math.floor(oliebollen / 10),
+    tier: reached.length ? reached[reached.length - 1].key : 'brons',
+    firstOrderAt: firstOrderAt, early: String(firstOrderAt).slice(0, 10) < season + '-12-01'
+  };
+}
+
+function newWallEntry_(company, season, consent, domain, now) {
+  return {
+    key: wallKey_(company, season), season: season, name: wallDisplayName_(company), company: String(company).trim(), orderIds: [],
+    tier: 'brons', oliebollen: 0, ouderen: 0, firstOrderAt: now, early: false, consent: consent, visible: true, domain: domain,
+    logoUrl: '', logoStatus: 'geen', ink: 'donker', logoSource: '', logoDomain: '', logoNote: '', confidence: null, updatedBy: '', updatedAt: now
+  };
+}
+
+function readWall_() {
+  return readTab_('wallOfFame').filter(function (r) { return r.sleutel; }).map(function (r) {
+    const status = String(r.logo_status || 'geen');
+    const ink = String(r.inkt || 'donker');
+    return {
+      key: String(r.sleutel), season: num_(r.seizoen), name: String(r.naam_op_muur || ''), company: String(r.onderneming || ''),
+      orderIds: splitList_(r.ordernummers), tier: ['brons', 'zilver', 'goud'].indexOf(r.pakket) !== -1 ? r.pakket : 'brons',
+      oliebollen: num_(r.oliebollen), ouderen: num_(r.ouderen), firstOrderAt: String(r.eerste_bestelling || ''),
+      early: truthy_(r.vroegboeker), consent: r.toestemming === 'mail' ? 'mail' : 'formulier',
+      // Empty counts as visible: someone who typed a row by hand should not have to fill this in.
+      visible: String(r.zichtbaar || '').toLowerCase() !== 'nee', domain: String(r.domein || ''), logoUrl: String(r.logo_url || ''),
+      logoStatus: WALL_LOGO_STATUS.indexOf(status) !== -1 ? status : 'geen', ink: WALL_INK.indexOf(ink) !== -1 ? ink : 'donker',
+      logoSource: String(r.logo_bron || ''), logoDomain: String(r.logo_domein || ''), logoNote: String(r.logo_toelichting || ''),
+      confidence: r.logo_zekerheid === '' || r.logo_zekerheid === null || r.logo_zekerheid === undefined ? null : num_(r.logo_zekerheid),
+      updatedBy: String(r.bijgewerkt_door || ''), updatedAt: String(r.bijgewerkt_op || '')
+    };
+  });
+}
+
+function wallRow_(e) {
+  return {
+    sleutel: e.key, seizoen: e.season, naam_op_muur: wallText_(e.name, 80), onderneming: wallText_(e.company, 200), ordernummers: e.orderIds.join(', '),
+    pakket: e.tier, oliebollen: e.oliebollen, ouderen: e.ouderen, eerste_bestelling: e.firstOrderAt, vroegboeker: e.early ? 'Ja' : 'Nee',
+    toestemming: e.consent, zichtbaar: e.visible ? 'Ja' : 'Nee', domein: e.domain, logo_url: e.logoUrl, logo_status: e.logoStatus,
+    inkt: e.ink, logo_bron: e.logoSource, logo_toelichting: e.logoNote, logo_zekerheid: e.confidence === null ? '' : e.confidence,
+    bijgewerkt_door: e.updatedBy, bijgewerkt_op: e.updatedAt, logo_domein: e.logoDomain
+  };
+}
+
+/** One row at the bottom; timestamps and keys stay text. Call inside withLock_. */
+function appendWall_(entry) {
+  const sheet = sheet_('wallOfFame');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const row = sheet.getLastRow() + 1;
+  WALL_TEXT_COLUMNS.forEach(function (h) {
+    const col = headers.indexOf(h);
+    if (col !== -1) sheet.getRange(row, col + 1).setNumberFormat('@');
+  });
+  const obj = wallRow_(entry);
+  sheet.getRange(row, 1, 1, headers.length).setValues([headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; })]);
+}
+
+/**
+ * De muur bijwerken uit de zakelijke aanvragen. Zelfde als syncWall in wall.ts. Alleen bevestigde aanvragen tellen, en
+ * nooit een testbestelling.
+ * - Vinkje in het formulier: het bedrijf komt erop zodra een bevestigde aanvraag het vinkje heeft, en alleen de
+ *   aanvragen mét vinkje tellen mee. Is er geen meer (teruggezet of afgewezen), dan gaat de plek op nul en hangt het
+ *   bedrijf niet meer.
+ * - Akkoord per mail (door beheer toegevoegd): alle bevestigde aanvragen van dat bedrijf tellen mee; zonder aanvragen
+ *   (een bestelling uit de gewone orderlijst) houdt de plek zijn eigen aantallen.
+ * Wat beheer aanpaste (naam, zichtbaar, logo) blijft staan. Geeft terug: de sleutels die een logo zoeken (toSearch),
+ * de namen die er nu bij kwamen (added) en of er iets veranderde (changed). Call inside withLock_.
+ */
+function syncWall_() {
+  const info = businessInfo_();
+  const confirmed = readBusiness_().filter(function (b) { return b.status === 'bevestigd' && !wallIsTest_(b.company); });
+  const keyOf = function (b) { return wallKey_(b.company, seasonOf_(b.date)); };
+  const domainOf = function (b) { return domainFromEmail_(b.email); };
+  const entries = readWall_();
+  const known = {};
+  entries.forEach(function (e) { known[e.key] = e; });
+  const added = [];
+  confirmed.filter(function (b) { return b.wallOfFame; }).forEach(function (b) {
+    const key = keyOf(b);
+    if (known[key]) return;
+    known[key] = newWallEntry_(b.company, seasonOf_(b.date), 'formulier', domainOf(b), now_());
+    added.push(known[key]);
+  });
+
+  const toSearch = [];
+  const changed = {};
+  entries.concat(added).forEach(function (e) {
+    const before = JSON.stringify(wallRow_(e));
+    const mine = confirmed.filter(function (b) { return keyOf(b) === e.key && (e.consent === 'mail' || b.wallOfFame); })
+      .sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0; });
+    if (mine.length) {
+      const oliebollen = mine.reduce(function (s, b) { return s + b.withRaisins + b.withoutRaisins; }, 0);
+      Object.assign(e, wallCounts_(oliebollen, mine[0].createdAt, e.season, info), { orderIds: mine.map(function (b) { return b.id; }) });
+      if (!e.domain) e.domain = mine.map(domainOf).filter(String)[0] || '';
+    } else if (e.consent === 'formulier') {
+      // The consent came with a request that is no longer confirmed: off the wall (publicWall_ shows ouderen > 0 only).
+      Object.assign(e, { oliebollen: 0, ouderen: 0, orderIds: [] });
+    }
+    if (e.ouderen > 0 && e.tier !== 'brons' && e.logoStatus === 'geen' && !e.logoSource) e.logoStatus = 'zoeken';
+    if (e.ouderen > 0 && e.logoStatus === 'zoeken') toSearch.push(e.key);
+    if (JSON.stringify(wallRow_(e)) !== before) changed[e.key] = true;
+  });
+
+  // Existing rows: only the ones that changed. New rows at the bottom.
+  entries.forEach(function (e) {
+    if (!changed[e.key]) return;
+    const r = wallRow_(e);
+    findRow_('wallOfFame', e.key).set({
+      ordernummers: r.ordernummers, pakket: r.pakket, oliebollen: r.oliebollen, ouderen: r.ouderen, eerste_bestelling: r.eerste_bestelling,
+      vroegboeker: r.vroegboeker, domein: r.domein, logo_status: r.logo_status
+    });
+  });
+  added.forEach(appendWall_);
+  return {
+    toSearch: toSearch, added: added.map(function (e) { return e.name; }),
+    changed: added.length > 0 || Object.keys(changed).length > 0
+  };
+}
+
+/** Wat de logozoeker over één plek mag weten: bedrijfsnaam, plaats en domeinen. Geen namen, telefoonnummers of bedragen. */
+function wallLogoRequest_(e, business) {
+  const orders = business.filter(function (b) { return e.orderIds.indexOf(b.id) !== -1; });
+  const domains = [e.domain].concat(orders.map(function (b) { return domainFromEmail_(b.email); }))
+    .filter(function (d, i, all) { return d && all.indexOf(d) === i; });
+  return { key: e.key, season: e.season, company: e.company, name: e.name, tier: e.tier, city: (orders[0] && orders[0].city) || '', domains: domains };
+}
+
+/**
+ * Optioneel: vraag n8n meteen om logo's (alleen met WALL_N8N_WEBHOOK). Zonder webhook doet de dagelijkse taak het via
+ * wallTodo. n8n antwoordt later met wallOfFameLogo. Geeft true als n8n het verzoek aannam.
+ */
+function askWallLogos_(keys) {
+  const url = prop_('WALL_N8N_WEBHOOK');
+  if (!url || !keys || !keys.length) return false;
+  const wall = readWall_();
+  const business = readBusiness_();
+  const requests = keys.map(function (key) {
+    const e = wall.filter(function (w) { return w.key === key; })[0];
+    if (!e) return null;
+    return {
+      url: url, method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      // The n8n webhook checks this header, so nobody else can make it search (and spend on Claude).
+      headers: { 'X-Oma-Coby-Secret': prop_('WALL_CALLBACK_SECRET') || '' },
+      payload: JSON.stringify(wallLogoRequest_(e, business))
+    };
+  }).filter(Boolean);
+  if (!requests.length) return false;
+  try {
+    return UrlFetchApp.fetchAll(requests).every(function (r) { return r.getResponseCode() < 300; });
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
+ * Wat de website ziet: dit seizoen, zichtbaar, met ouderen; een logo alleen na goedkeuring (anders hangt het
+ * naambordje). Zelfde als publicWall in wall.ts. Nooit bedragen, oliebollen of contactgegevens.
+ */
+function publicWall_(entries, season) {
+  const order = { goud: 0, zilver: 1, brons: 2 };
+  const shown = entries.filter(function (e) { return e.season === season && e.visible && e.ouderen > 0; }).sort(function (a, b) {
+    return order[a.tier] - order[b.tier] || Number(b.early) - Number(a.early) ||
+      (a.firstOrderAt < b.firstOrderAt ? -1 : a.firstOrderAt > b.firstOrderAt ? 1 : 0) || a.name.localeCompare(b.name, 'nl');
+  });
+  return {
+    season: season,
+    entries: shown.map(function (e) {
+      const logo = e.tier !== 'brons' && e.logoStatus === 'goedgekeurd' && /^https:\/\//.test(e.logoUrl);
+      return {
+        key: e.key, name: e.name || wallDisplayName_(e.company), tier: e.tier, ouderen: e.ouderen, early: e.early,
+        logoUrl: logo ? e.logoUrl : '', ink: e.ink
+      };
+    })
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Beheer › Rooster: wie staat wanneer. Elke ingeplande dienst is één regel in het tabblad Rooster, met de

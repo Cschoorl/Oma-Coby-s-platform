@@ -27,6 +27,7 @@ import type {
 import { emptyMeta, emptyPacking } from "../types/dashboard";
 import type { Order } from "../types/order";
 import type { BusinessInfo, BusinessOrder, BusinessOrderInput, BusinessStatus, Partypot } from "../types/business";
+import type { PublicWall, WallEntry, WallEntryPatch } from "../types/wallOfFame";
 import { BAR_EVENTS, BUSINESS_DEFAULTS, PARTYPOT_GOAL, isoDayLabel } from "../config";
 import { areaFor, businessToOrder, businessTotals, chosenPackage, donationOnly, emptyBusinessInput, momentLabel, validateBusiness } from "../features/business/business";
 import { mapSheetRowsToOrders } from "./googleSheetAdapter";
@@ -34,6 +35,7 @@ import { repairCounts, repairVolunteer } from "../lib/volunteerDays";
 import { loadOrders } from "./ordersSource";
 import { applyOrderEdits, orderFieldValue, type OrderField, type OrderFieldChange } from "../lib/orderChanges";
 import { categoryOf } from "../lib/categories";
+import { countsFor, newWallEntry, publicWall, seasonOf, syncWall, wallKey } from "../features/wallOfFame/wall";
 
 /** Same check as the script: something@domain.tld. */
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -244,11 +246,32 @@ export interface Backend {
   /** Public: the Partypot so far, form and Shopify contributions together, and its goal (euros). */
   getPartypot(): Promise<Partypot>;
   setBusinessStatus(session: Session, id: string, status: BusinessStatus, reason: string): Promise<void>;
+  /** Public: the wall of fame of this season, without amounts or contact details. */
+  getWallOfFame(): Promise<PublicWall>;
+  /** Beheer: name on the wall, visible or not, approve or replace the logo. */
+  saveWallEntry(session: Session, key: string, patch: WallEntryPatch): Promise<void>;
+  /** Beheer: consent by mail for an order (also one from the regular order list). */
+  addWallEntry(session: Session, input: WallMailConsent): Promise<void>;
+  /** Beheer: put the logo search (the daily task, or n8n when it is set up) to work for this company again. */
+  searchWallLogo(session: Session, key: string): Promise<{ message: string }>;
+  /** Beheer: bring the wall up to date with the confirmed requests now, without waiting for a confirmation. */
+  refreshWall(session: Session): Promise<{ added: string[] }>;
   /** Beheer › Rooster: plan someone on a shift, or change a planned shift (day, task, times). */
   saveShift(session: Session, shift: RosterShiftInput): Promise<SavedVersion | void>;
   removeShift(session: Session, id: string): Promise<SavedVersion | void>;
   /** Beheer › Rooster: how many people a shift needs, for one or more days at once. */
   setNeeded(session: Session, entries: NeededInput[]): Promise<SavedVersion | void>;
+}
+
+/** Akkoord per mail: which company, and what counts for the wall. */
+export interface WallMailConsent {
+  company: string;
+  /** YYYY-MM-DD of the delivery, for the season. */
+  date: string;
+  oliebollen: number;
+  orderIds: string[];
+  firstOrderAt: string;
+  domain: string;
 }
 
 const ROSTER_TIME = /^\d{1,2}:\d{2}$/;
@@ -386,6 +409,7 @@ function createAppsScriptBackend(url: string): Backend {
         costs: (rest.costs ?? []).map(withCostDefaults),
         routes: Object.fromEntries(Object.entries(rest.routes ?? {}).map(([k, r]) => [k, { ...r, startTime: r.startTime ?? "", stopTimes: r.stopTimes ?? [] }])),
         business: rest.business ?? [],
+        wallOfFame: rest.wallOfFame ?? [],
         changes: rest.changes ?? [],
         popupSales: rest.popupSales ?? {},
         packNotes: rest.packNotes ?? {},
@@ -508,6 +532,26 @@ function createAppsScriptBackend(url: string): Backend {
     async setBusinessStatus(session, id, status, reason) {
       await call("setBusinessStatus", withSession(session, { id, status, reason }));
     },
+    async getWallOfFame() {
+      // An older script without the wall: the empty wall with the invitation, never an error on the website.
+      try {
+        return await call<PublicWall>("wallOfFame", {});
+      } catch {
+        return { season: seasonOf(nowStamp()), entries: [] };
+      }
+    },
+    async saveWallEntry(session, key, patch) {
+      await call("saveWallEntry", withSession(session, { key, patch }));
+    },
+    async addWallEntry(session, input) {
+      await call("addWallEntry", withSession(session, { ...input }));
+    },
+    async searchWallLogo(session, key) {
+      return call<{ message: string }>("searchWallLogo", withSession(session, { key }));
+    },
+    async refreshWall(session) {
+      return call<{ added: string[] }>("refreshWall", withSession(session, {}));
+    },
     async saveShift(session, shift) {
       // "name" in a request is who is logged in; the volunteer on the shift goes as "volunteer".
       const { name, ...rest } = shift;
@@ -567,6 +611,7 @@ interface DemoStore {
   costs: CostEntry[];
   delivery: Record<string, DeliveryState>;
   business: BusinessOrder[];
+  wallOfFame: WallEntry[];
   /** Edits of the example orders, per order and field. */
   orderEdits: Record<string, Partial<Record<OrderField, string>>>;
   changes: ChangeEntry[];
@@ -678,7 +723,7 @@ function demoRoster(): RosterShift[] {
 }
 
 function emptyStore(): DemoStore {
-  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, business: demoBusiness(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [], roster: demoRoster(), agenda: [] };
+  return { version: 1, meta: {}, packing: {}, baked: {}, routes: {}, volunteers: demoVolunteers(), costs: [], delivery: {}, ...demoBusinessAndWall(), orderEdits: {}, changes: [], popupSales: {}, packNotes: {}, bakeShares: [], bakeApprovals: [], createdOrders: [], roster: demoRoster(), agenda: [] };
 }
 
 function readStore(): DemoStore {
@@ -696,6 +741,12 @@ function writeStore(store: DemoStore) {
   } catch {
     // Private mode: changes only live until reload.
   }
+}
+
+/** The wall in the demo follows the demo requests, like the script does: confirmed and with the box ticked. */
+function demoBusinessAndWall(): Pick<DemoStore, "business" | "wallOfFame"> {
+  const business = demoBusiness();
+  return { business, wallOfFame: syncWall([], business, BUSINESS_DEFAULTS, "2026-10-25 17:02:00").entries };
 }
 
 /** Fictitious requests from the order form, so the Zakelijk page has something to show. */
@@ -849,6 +900,7 @@ function createDemoBackend(notice?: string): Backend {
         agenda: store.agenda ?? [],
         roster: store.roster ?? [],
         business: admin ? store.business : [],
+        wallOfFame: admin ? store.wallOfFame ?? [] : [],
         // Like the script: everyone sees what changed, contact details only beheer.
         changes: admin ? store.changes : store.changes.map((c) => (["address", "postalCode", "city", "contactPerson", "phone", "email", "locationName", "confirmation", "deliveryContactName", "deliveryContactPhone"].includes(c.field) ? { ...c, from: "", to: "" } : c)),
         popupSales: store.popupSales,
@@ -1313,6 +1365,7 @@ function createDemoBackend(notice?: string): Backend {
         for (const p of Object.values(s.packing)) Object.assign(p, { claimedBy: "", packedBy: "" });
         for (const d of Object.values(s.delivery)) d.deliveredBy = "";
         for (const b of s.business) Object.assign(b, { contact: "", phone: "", email: "", invoiceEmail: "", remark: "", handledBy: "" });
+        for (const w of s.wallOfFame ?? []) w.updatedBy = "";
       });
       return result;
     },
@@ -1360,7 +1413,61 @@ function createDemoBackend(notice?: string): Backend {
         const b = store.business.find((x) => x.id === id);
         if (!b) throw new Error("Aanvraag niet gevonden.");
         Object.assign(b, { status, reason: status === "afgewezen" ? reason.trim() : "", handledBy: status === "nieuw" ? "" : session.name, handledAt: status === "nieuw" ? "" : nowStamp() });
+        // Same as the script: a confirmation with the box ticked puts the company on the wall; the logo search follows.
+        demoSyncWall(store);
       });
+    },
+    async getWallOfFame() {
+      await delay(250);
+      return publicWall(readStore().wallOfFame ?? [], seasonOf(nowStamp()));
+    },
+    async saveWallEntry(session, key, patch) {
+      await delay(150);
+      mutate((store) => {
+        const w = (store.wallOfFame ?? []).find((x) => x.key === key);
+        if (!w) throw new Error("Deze plek staat niet (meer) op de muur.");
+        if (patch.name !== undefined && !patch.name.trim()) throw new Error("Vul de naam op de muur in.");
+        if (patch.logoUrl !== undefined && patch.logoUrl && !/^(https:\/\/|data:image\/)/.test(patch.logoUrl.trim())) throw new Error("Een logo-link begint met https://.");
+        Object.assign(w, patch, { updatedBy: session.name, updatedAt: nowStamp() });
+        if (patch.name !== undefined) w.name = patch.name.trim();
+        if (patch.logoUrl !== undefined) Object.assign(w, { logoUrl: patch.logoUrl.trim(), logoSource: "handmatig", logoDomain: "", logoNote: "", confidence: null });
+        if (patch.logoStatus === "geen") w.logoSource ||= "handmatig";
+      });
+    },
+    async addWallEntry(session, input) {
+      await delay(200);
+      mutate((store) => {
+        const season = seasonOf(input.date);
+        const key = wallKey(input.company, season);
+        store.wallOfFame ??= [];
+        if (store.wallOfFame.some((w) => w.key === key)) throw new Error(`${input.company} staat al op de muur van ${season}.`);
+        const entry: WallEntry = {
+          ...newWallEntry({ company: input.company, season, consent: "mail", domain: input.domain, now: nowStamp() }),
+          ...countsFor(input.oliebollen, input.firstOrderAt, season, BUSINESS_DEFAULTS),
+          orderIds: input.orderIds,
+          updatedBy: session.name
+        };
+        if (entry.tier !== "brons") entry.logoStatus = "zoeken";
+        store.wallOfFame.push(entry);
+      });
+    },
+    async searchWallLogo(_session, key) {
+      await delay(300);
+      mutate((store) => {
+        const w = (store.wallOfFame ?? []).find((x) => x.key === key);
+        if (!w) throw new Error("Deze plek staat niet (meer) op de muur.");
+        Object.assign(w, { logoStatus: "zoeken", logoSource: "" });
+      });
+      // Same answer as the script without a logo search connected.
+      return { message: "Staat klaar. De logozoeker pakt het bij de volgende ronde op; tot dan hangt het naambordje." };
+    },
+    async refreshWall() {
+      await delay(300);
+      let added: string[] = [];
+      mutate((store) => {
+        added = demoSyncWall(store);
+      });
+      return { added };
     },
     async saveShift(session, shift) {
       await delay(150);
@@ -1390,6 +1497,13 @@ function createDemoBackend(notice?: string): Backend {
       });
     }
   };
+}
+
+/** Same as syncWall_ in the script: the wall follows the confirmed requests. A logo stays "zoeken" until someone sets one. */
+function demoSyncWall(store: DemoStore): string[] {
+  const synced = syncWall(store.wallOfFame ?? [], store.business, BUSINESS_DEFAULTS, nowStamp());
+  store.wallOfFame = synced.entries;
+  return synced.added;
 }
 
 export const DEMO_STORAGE_KEY = DEMO_KEY;

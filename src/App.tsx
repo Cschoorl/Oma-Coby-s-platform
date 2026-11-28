@@ -15,6 +15,8 @@ import { SignupPage } from "./features/volunteers/SignupPage";
 import { VolunteersPage } from "./features/volunteers/VolunteersPage";
 import { BusinessAdminPage } from "./features/business/BusinessAdminPage";
 import { BusinessOrderPage, LangSwitch } from "./features/business/BusinessOrderPage";
+import { WallOfFamePage } from "./features/wallOfFame/WallOfFamePage";
+import { WallAdmin } from "./features/wallOfFame/WallAdmin";
 import { Notice, Skeleton, Toaster } from "./components/ui";
 import { Avatar, setAvatarRoster } from "./components/Avatar";
 import logoUrl from "./assets/logo-oliebollenbar.svg";
@@ -38,6 +40,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { path: "/orders", label: "Bestellingen", description: "Opmerkingen beoordelen en klantbevestigingen versturen.", roles: ["beheer"] },
   { path: "/zakelijk", label: "Zakelijk", description: "Aanvragen van het zakelijke bestelformulier nakijken, bevestigen of afwijzen.", roles: ["beheer"] },
+  { path: "/muur", label: "Wall of fame", description: "Wie er met toestemming op de muur hangt, en de logo's nakijken. Nooit bedragen.", roles: ["beheer"] },
   { path: "/tussenstand", label: "Tussenstand", description: "Hoe ver zijn we op weg naar het doel?", roles: ["beheer"] },
   { path: "/inpakken", label: "Inpakken", description: "Pak een order, vink MET en ZONDER af, dan TOTAAL, en rond af.", roles: ["beheer", "inpakker"] },
   { path: "/routes", label: "Routes", description: "Bezorgers indelen, routes en kilometers berekenen en via WhatsApp delen.", roles: ["beheer"] },
@@ -57,7 +60,7 @@ const NAV: NavItem[] = [
 ];
 
 /** Pages without login; a logged-in visitor can open them too. */
-const PUBLIC = ["/aanmelden", "/bestellen"];
+const PUBLIC = ["/aanmelden", "/bestellen", "/wall-of-fame"];
 
 /** On the zakelijk.… domain only the business order form is reachable; the dashboard stays on the other domains. */
 const ORDER_FORM_ONLY = window.location.hostname.startsWith("zakelijk.");
@@ -71,6 +74,7 @@ const menuGlyph: Record<string, string> = {
   "/inpakken": "▣",
   "/orders": "@",
   "/zakelijk": "Z",
+  "/muur": "★",
   "/routes": "→",
   "/bezorger": "✓",
   "/tussenstand": "%",
@@ -165,6 +169,11 @@ function App() {
   if (ORDER_FORM_ONLY) return simpleShell(<BusinessOrderPage />, "xl", <LangSwitch />);
   if (route.path === "/aanmelden") return simpleShell(<SignupPage />);
   if (route.path === "/bestellen") return simpleShell(<BusinessOrderPage />, "xl", <LangSwitch />);
+  if (route.path === "/wall-of-fame") {
+    // ?embed=1: only the wall, for an iframe on the website.
+    if (route.params.get("embed")) return <div className="min-h-screen bg-meel p-2"><WallOfFamePage embed /></div>;
+    return simpleShell(<WallOfFamePage />, true);
+  }
   if (!session) return simpleShell(<LoginPage onLogin={login} />);
 
   const { state, error, lastSync, saving, run } = dashboard;
@@ -184,6 +193,9 @@ function App() {
         break;
       case "/zakelijk":
         page = <BusinessAdminPage state={state} session={session} run={run} />;
+        break;
+      case "/muur":
+        page = <WallAdmin state={state} session={session} run={run} />;
         break;
       case "/routes":
         page = <RoutesPage state={state} session={session} run={run} isDemo={backend.kind === "demo"} />;

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "oma-coby/wall-of-fame/logo-request",
+  "title": "Logo gevraagd (Apps Script → n8n)",
+  "description": "Alleen wat nodig is om een logo te vinden. Geen contactpersonen, telefoonnummers, e-mailadressen of bedragen. Header X-Oma-Coby-Secret = WALL_CALLBACK_SECRET.",
+  "type": "object",
+  "required": ["key", "season", "company", "name", "tier", "city", "domains"],
+  "additionalProperties": false,
+  "properties": {
+    "key": { "type": "string", "pattern": "^\\d{4}:[a-z0-9-]+$", "description": "Plek op de muur: seizoen en bedrijfsnaam." },
+    "season": { "type": "integer" },
+    "company": { "type": "string", "description": "Bedrijfsnaam zoals in de bestelling." },
+    "name": { "type": "string", "description": "Naam op de muur (zonder B.V.)." },
+    "tier": { "enum": ["zilver", "goud"], "description": "Alleen Zilver en Goud krijgen een logo." },
+    "city": { "type": "string", "description": "Plaats van de bezorging; helpt naamgenoten uit elkaar te houden." },
+    "domains": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 5,
+      "description": "Uit de opgegeven website en het zakelijke e-mailadres; gratis mail (gmail, ziggo, …) is er al uit."
+    }
+  }
+}

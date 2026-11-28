@@ -1,0 +1,273 @@
+/*
+ * Wall of fame als foto in Oma Coby's café. Van achter naar voor: een okergele gepleisterde muur met vlekken van
+ * jaren koffie en sigaren, daglicht door het raam links, geschilderde letters, een salonwand van bruine lijsten,
+ * het krijtbord, de lambrisering, terrazzo, krukken en een tafeltje; voorin een gietijzeren zuil en een stenen
+ * pilaar, een vignet en wat korrel. Bewust een foto, geen scherm: naast de huisstijlkleuren ook tinten van hout,
+ * pleister, messing en marmer. Alle maten in --u, zodat de hele muur meeschaalt met de breedte.
+ */
+
+.wof-scene {
+  --u: 1px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  container-type: inline-size;
+  border-radius: 10px;
+  background: #a8772f;
+  color: #261f1f;
+  box-shadow: 0 30px 60px -20px rgba(38, 31, 31, 0.5), 0 2px 6px rgba(38, 31, 31, 0.25);
+}
+@container (max-width: 760px) { .wof-set { --u: 0.78px; } }
+@container (max-width: 520px) { .wof-set { --u: 0.62px; } }
+
+/* Het licht gaat aan: heel even onderbelicht, dan op de juiste stand. */
+.wof-set { position: relative; animation: wof-belichting 1.6s ease-out both; }
+@keyframes wof-belichting { from { filter: brightness(0.72) saturate(0.85); } to { filter: none; } }
+
+/* Pleister: oker, lichter waar het raamlicht valt, donkerder naar rechts en naar beneden. */
+.wof-muur {
+  position: absolute; inset: 0; z-index: -3;
+  background:
+    radial-gradient(ellipse 60% 45% at 16% 22%, rgba(255, 228, 165, 0.5), transparent 70%),
+    linear-gradient(90deg, rgba(255, 232, 175, 0.14), transparent 45%, rgba(70, 35, 8, 0.3) 100%),
+    linear-gradient(180deg, #b8742c 0%, #d39540 18%, #c7843a 55%, #8a4f1e 100%);
+}
+/* Reliëf van de pleisterlaag: ruis met strijklicht van linksboven. */
+.wof-muur::before {
+  content: ""; position: absolute; inset: 0; mix-blend-mode: overlay; opacity: 0.42;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='360'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.018' numOctaves='5' seed='4' stitchTiles='stitch'/%3E%3CfeDiffuseLighting lighting-color='%23fff' surfaceScale='3.2'%3E%3CfeDistantLight azimuth='225' elevation='46'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
+  background-size: 360px;
+}
+/* Vlekken en verkleuring: grote, zachte wolken bruin. */
+.wof-muur::after {
+  content: ""; position: absolute; inset: 0; mix-blend-mode: multiply; opacity: 0.6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='v'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0045' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .42  0 0 0 0 .26  0 0 0 0 .1  -2.4 0 0 0 1.42'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23v)'/%3E%3C/svg%3E");
+  background-size: 900px;
+}
+.wof-raamlicht {
+  position: absolute; z-index: -2; left: -6%; top: 1%; width: 48%; height: min(78%, 900px);
+  transform: skewY(-9deg) skewX(8deg); filter: blur(30px); opacity: 0.3; mix-blend-mode: soft-light; pointer-events: none;
+}
+.wof-plafond { position: absolute; z-index: -1; inset: 0 0 auto; height: 90px; background: linear-gradient(180deg, rgba(40, 20, 5, 0.55), transparent); pointer-events: none; }
+
+/* Letters met de hand op de muur geschilderd: de pleister kleurt erdoorheen. */
+.wof-kop { position: relative; display: grid; justify-items: center; gap: 4px; padding: clamp(28px, 6cqi, 60px) 20px calc(34 * var(--u)); text-align: center; }
+.wof-verf { margin: 0; mix-blend-mode: multiply; opacity: 0.94; }
+.wof-verf-klein { font-weight: 700; font-size: 12px; letter-spacing: 0.38em; text-transform: uppercase; color: #3a2414; }
+.wof-verf-titel {
+  font-family: "VTC SuperMarket", Impact, "Arial Narrow", sans-serif; font-weight: 400; text-transform: uppercase;
+  font-size: clamp(46px, 10cqi, 104px); line-height: 0.92; letter-spacing: 0.02em; color: #261f1f;
+  text-shadow: 0.045em 0.05em 0 #9a3219;
+}
+.wof-verf-sub { font-family: Vollkorn, Georgia, serif; font-style: italic; font-weight: 600; font-size: clamp(18px, 2.6cqi, 26px); color: #3a2414; }
+
+/* Een briefje met plakband: de vroegboekregel. */
+.wof-briefje {
+  position: relative; max-width: 270px; margin: 12px 0 0; padding: 14px 16px 12px; transform: rotate(-2.2deg);
+  background: linear-gradient(180deg, #fbf6e6, #f1e7cc); color: #261f1f; font-size: 13px; line-height: 1.4; text-align: left;
+  box-shadow: 4px 6px 8px rgba(60, 30, 6, 0.35), 0 1px 1px rgba(60, 30, 6, 0.3);
+}
+.wof-briefje::before {
+  content: ""; position: absolute; left: 50%; top: -9px; width: 76px; height: 20px; transform: translateX(-50%) rotate(3deg);
+  background: rgba(240, 228, 196, 0.72); box-shadow: 0 1px 1px rgba(60, 30, 6, 0.18);
+}
+@container (min-width: 900px) {
+  .wof-briefje { position: absolute; right: clamp(70px, 9cqi, 120px); top: 46px; transform: rotate(3deg); }
+}
+
+/* De salonwand: alles hangt rond een middenlijn, dicht op elkaar, net niet recht. */
+.wof-galerij {
+  position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: calc(22 * var(--u)) calc(24 * var(--u)); margin: 0; padding: 0 clamp(14px, 7.5cqi, 100px); list-style: none;
+}
+.wof-hang { position: relative; flex: none; }
+.wof-met-plaatje { padding-bottom: max(calc(34 * var(--u)), 30px); }
+.wof-stapel { display: flex; flex-direction: column; align-items: center; gap: calc(28 * var(--u)); }
+@container (max-width: 520px) { .wof-extra { display: none; } }
+
+.wof-frame {
+  position: relative; width: calc(var(--w) * var(--u)); height: calc(var(--h) * var(--u));
+  transform: rotate(var(--tilt, 0deg)); transform-origin: 50% -20px;
+  filter: drop-shadow(calc(9 * var(--u)) calc(13 * var(--u)) calc(8 * var(--u)) rgba(58, 30, 6, 0.5)) drop-shadow(1px 2px 1.5px rgba(30, 15, 4, 0.45));
+}
+@media (hover: hover) { .wof-hang:hover .wof-frame { animation: wof-schommel 1.6s ease-in-out; } }
+@keyframes wof-schommel {
+  0%, 100% { transform: rotate(var(--tilt, 0deg)); }
+  25% { transform: rotate(calc(var(--tilt, 0deg) + 1.4deg)); }
+  60% { transform: rotate(calc(var(--tilt, 0deg) - 0.9deg)); }
+  85% { transform: rotate(calc(var(--tilt, 0deg) + 0.3deg)); }
+}
+.wof-wood { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wof-binnen { position: absolute; overflow: hidden; background: #1d1510; }
+
+/* Passe-partout: gebroken wit karton; de lijst werpt een schaduw naar binnen. */
+.wof-mat {
+  position: absolute; overflow: hidden;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='.08'/%3E%3C/svg%3E"),
+    linear-gradient(160deg, #f6eedb, #e6d8b6);
+  box-shadow: inset calc(5 * var(--u)) calc(6 * var(--u)) calc(7 * var(--u)) rgba(30, 15, 5, 0.42), inset -1px -1px 2px rgba(30, 15, 5, 0.2);
+}
+.wof-opening {
+  position: absolute; display: grid; place-items: center; overflow: hidden; background: #fcf8ee;
+  box-shadow: 0 0 0 calc(2.5 * var(--u)) #fffdf6, 0 0 0 calc(3.3 * var(--u)) rgba(120, 95, 60, 0.35), inset calc(2 * var(--u)) calc(3 * var(--u)) calc(4 * var(--u)) rgba(40, 25, 10, 0.28);
+}
+.wof-opening-goud {
+  box-shadow: 0 0 0 calc(2.5 * var(--u)) #fffdf6, 0 0 0 calc(7 * var(--u)) #b8913a, 0 0 0 calc(8 * var(--u)) rgba(60, 40, 10, 0.55), inset calc(2 * var(--u)) calc(3 * var(--u)) calc(4 * var(--u)) rgba(40, 25, 10, 0.28);
+}
+.wof-logo { display: grid; place-items: center; width: 100%; height: 100%; padding: 9%; }
+/* Glas: een schuine weerkaatsing van het raam. */
+.wof-glas {
+  position: absolute; pointer-events: none; mix-blend-mode: screen;
+  background: linear-gradient(118deg, rgba(255, 250, 235, 0.26) 0%, rgba(255, 250, 235, 0.06) 24%, transparent 25%, transparent 58%, rgba(255, 250, 235, 0.08) 60%, transparent 68%);
+}
+.wof-link { display: block; border-radius: 4px; }
+.wof-link:focus-visible { outline: 3px solid #dcc05d; outline-offset: 6px; }
+.wof-plus { font-family: "VTC SuperMarket", Impact, sans-serif; text-transform: uppercase; font-size: calc(34 * var(--u)); line-height: 1; color: #d05438; }
+
+/* Messing plaatje, met twee schroefjes. */
+.wof-plaatje {
+  position: absolute; z-index: 2; left: 50%; top: 100%; transform: translate(-50%, -24%);
+  display: grid; justify-items: center; gap: 1px; width: max(84%, calc(150 * var(--u)), 126px); max-width: max(126px, calc(var(--w) * var(--u) + 24px));
+  padding: calc(5 * var(--u)) calc(14 * var(--u)); border-radius: 2px; text-align: center;
+  background: linear-gradient(180deg, #f1dc9a 0%, #d2ad55 40%, #a8822f 58%, #d8b964 100%); color: #3d2a08;
+  box-shadow: 0 2px 3px rgba(30, 15, 5, 0.55), inset 0 1px 0 rgba(255, 250, 220, 0.7), inset 0 -1px 0 rgba(60, 40, 5, 0.45);
+  text-shadow: 0 1px 0 rgba(255, 245, 210, 0.55);
+}
+.wof-plaatje::before, .wof-plaatje::after {
+  content: ""; position: absolute; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff6d6, #7d6122 75%);
+}
+.wof-plaatje::before { left: 5px; }
+.wof-plaatje::after { right: 5px; }
+.wof-plaatje b {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  font-family: Vollkorn, Georgia, serif; font-weight: 700; font-size: clamp(11px, calc(14 * var(--u)), 14px); line-height: 1.15; text-wrap: balance;
+}
+.wof-plaatje span { white-space: nowrap; font-size: clamp(8px, calc(10 * var(--u)), 10px); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+
+.wof-rozet { position: absolute; z-index: 3; right: calc(-12 * var(--u)); top: calc(-10 * var(--u)); width: calc(34 * var(--u)); height: calc(42 * var(--u)); transform: rotate(8deg); filter: drop-shadow(2px 3px 2px rgba(30, 15, 5, 0.5)); }
+
+/* Koperen schilderijlampje boven Goud, en het licht dat het op de lijst gooit. */
+.wof-lampje { position: absolute; z-index: 3; left: 50%; top: calc(-34 * var(--u)); width: 56%; height: calc(46 * var(--u)); transform: translateX(-50%); }
+.wof-lampje i { position: absolute; bottom: 0; width: calc(3 * var(--u)); height: calc(40 * var(--u)); background: linear-gradient(90deg, #6e5122, #e5c77a, #6e5122); transform-origin: bottom; }
+.wof-lampje i:first-child { left: 30%; transform: rotate(-14deg); }
+.wof-lampje i:nth-child(2) { right: 30%; transform: rotate(14deg); }
+.wof-lampje b { position: absolute; left: 0; right: 0; top: 0; height: calc(13 * var(--u)); border-radius: 999px; background: linear-gradient(180deg, #f6e2a4, #b88a35 45%, #6e5122 80%, #2a1d08); box-shadow: 0 2px 2px rgba(30, 15, 5, 0.5); }
+.wof-lamplicht {
+  position: absolute; z-index: 3; left: -18%; right: -18%; top: calc(-20 * var(--u)); height: 82%; pointer-events: none; mix-blend-mode: soft-light;
+  background: radial-gradient(ellipse 46% 64% at 50% 0%, rgba(255, 240, 200, 0.95), rgba(255, 230, 180, 0.25) 55%, transparent 78%);
+}
+
+/* Wat er verder hangt: affiches, prent, foto. */
+.wof-sepia { filter: grayscale(1) sepia(0.6) contrast(1.06) brightness(0.96); }
+.wof-affiche {
+  position: absolute; inset: 0; display: grid; align-content: space-between; justify-items: center; padding: calc(10 * var(--u)) calc(6 * var(--u)) calc(9 * var(--u)); text-align: center;
+  background:
+    linear-gradient(90deg, transparent 49.6%, rgba(90, 60, 20, 0.12) 50%, transparent 50.4%),
+    radial-gradient(ellipse at 45% 35%, #f5e9c8, #dcc58f 95%);
+  color: #261f1f;
+}
+.wof-affiche-kop { font-weight: 700; font-size: calc(10 * var(--u)); letter-spacing: 0.24em; text-transform: uppercase; }
+.wof-affiche-bol { width: 64%; filter: saturate(0.8) sepia(0.15); }
+.wof-affiche-groot { font-family: "VTC SuperMarket", Impact, sans-serif; text-transform: uppercase; font-size: calc(25 * var(--u)); line-height: 0.95; color: #b8432a; hyphens: manual; }
+.wof-affiche-klein { font-family: Vollkorn, Georgia, serif; font-style: italic; font-size: calc(11 * var(--u)); line-height: 1.2; }
+.wof-affiche-dans { grid-template-columns: 1fr auto; align-items: center; align-content: center; gap: calc(4 * var(--u)); padding: calc(8 * var(--u)); text-align: left; justify-items: start; background: radial-gradient(ellipse at 40% 40%, #7d9a4c, #4e6a28 95%); color: #f9f3d9; }
+.wof-affiche-dans .wof-affiche-groot { color: #f9f3d9; font-size: calc(22 * var(--u)); }
+.wof-foto { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; padding-top: 8%; background: radial-gradient(ellipse at 50% 30%, #d9d4c8, #6d665a 110%); filter: grayscale(1) sepia(0.35) contrast(1.15); }
+
+/* Krijtbord in een houten lijst. */
+.wof-bord {
+  position: relative; width: min(860px, calc(100% - 2 * clamp(14px, 7.5cqi, 100px))); margin: calc(44 * var(--u)) auto 0; padding: calc(16 * var(--u));
+  transform: rotate(-0.35deg);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.004 .16' numOctaves='4' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .09  0 0 0 0 .05  0 0 0 0 .02  1.8 0 0 0 -.62'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #6b4426, #4a2c17);
+  box-shadow: calc(10 * var(--u)) calc(14 * var(--u)) calc(14 * var(--u)) rgba(58, 30, 6, 0.5), inset 0 2px 0 rgba(255, 220, 170, 0.25), inset 0 -3px 0 rgba(0, 0, 0, 0.45), inset 3px 0 0 rgba(255, 220, 170, 0.12), inset -3px 0 0 rgba(0, 0, 0, 0.35);
+}
+.wof-lei {
+  position: relative; display: grid; gap: 10px; padding: clamp(18px, 3.6cqi, 34px) clamp(18px, 4cqi, 44px) clamp(20px, 3.6cqi, 32px);
+  background:
+    radial-gradient(ellipse 40% 30% at 22% 30%, rgba(240, 240, 230, 0.09), transparent 70%),
+    radial-gradient(ellipse 50% 26% at 70% 70%, rgba(240, 240, 230, 0.07), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='s'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='3' seed='6' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23s)' opacity='.09'/%3E%3C/svg%3E"),
+    #222824;
+  box-shadow: inset 4px 6px 10px rgba(0, 0, 0, 0.6), inset -1px -1px 2px rgba(255, 255, 255, 0.06);
+  color: #f1eee4;
+}
+.wof-krijt { margin: 0; filter: url(#wof-krijt); opacity: 0.92; text-shadow: 0 0 1px rgba(255, 255, 255, 0.4); }
+.wof-krijt-kop { padding-right: clamp(40px, 7cqi, 70px); font-family: "VTC SuperMarket", Impact, sans-serif; text-transform: uppercase; font-size: clamp(22px, 3.6cqi, 34px); line-height: 1; color: #f6f0dc; }
+.wof-krijt-tussen { margin-top: 10px; font-size: clamp(18px, 2.6cqi, 24px); color: #e9c97a; }
+.wof-krijt-tekst { max-width: 56ch; font-family: Vollkorn, Georgia, serif; font-size: clamp(15px, 2cqi, 18px); line-height: 1.45; }
+.wof-krijt-lijst { columns: 3 13rem; column-gap: 2rem; margin: 0; padding: 0; list-style: none; }
+.wof-krijt-lijst li { break-inside: avoid; padding: 3px 0; font-family: Vollkorn, Georgia, serif; font-style: italic; font-weight: 600; font-size: clamp(15px, 2cqi, 18px); line-height: 1.3; }
+.wof-krijt-lijst li span { font-style: normal; font-weight: 400; font-size: 0.82em; opacity: 0.8; font-variant-numeric: tabular-nums; }
+.wof-krijt-voet { font-size: 13px; opacity: 0.75; }
+.wof-krijt-bol { position: absolute; right: clamp(14px, 3cqi, 30px); top: clamp(12px, 2.4cqi, 24px); width: clamp(34px, 6cqi, 58px); opacity: 0.5; filter: grayscale(1) brightness(2.4) contrast(0.7) url(#wof-krijt); }
+
+/* Onder: lambrisering, plint, terrazzo, en de meubels ervoor. */
+.wof-onder { position: relative; height: calc(290 * var(--u)); margin-top: calc(56 * var(--u)); }
+.wof-lambris {
+  position: absolute; inset: 0 0 auto; height: calc(140 * var(--u));
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.16 .004' numOctaves='4' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .07  0 0 0 0 .04  0 0 0 0 .02  1.8 0 0 0 -.6'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(90deg, rgba(255, 220, 170, 0.08), transparent 40%, rgba(0, 0, 0, 0.25)),
+    #3b2414;
+  box-shadow: 0 -10px 16px -6px rgba(40, 20, 5, 0.45);
+}
+/* Lijst bovenop de lambrisering en de plint onderaan. */
+.wof-lambris::before { content: ""; position: absolute; inset: 0 0 auto; height: calc(16 * var(--u)); background: linear-gradient(180deg, #7a4f2c 0%, #a06c3d 18%, #4a2c17 45%, #2a170b 70%, #5e3a20 100%); }
+.wof-lambris::after { content: ""; position: absolute; inset: auto 0 0; height: calc(16 * var(--u)); background: linear-gradient(180deg, #5e3a20, #1d1008); }
+.wof-panelen { position: absolute; left: calc(14 * var(--u)); right: calc(14 * var(--u)); top: calc(30 * var(--u)); bottom: calc(28 * var(--u)); display: flex; gap: calc(16 * var(--u)); }
+.wof-panelen i {
+  flex: 1; min-width: 0; border-radius: 2px;
+  background: linear-gradient(135deg, rgba(255, 220, 170, 0.1), transparent 45%, rgba(0, 0, 0, 0.18));
+  box-shadow: inset 2px 2px 0 rgba(255, 220, 170, 0.14), inset -2px -2px 0 rgba(0, 0, 0, 0.45), 0 0 0 calc(5 * var(--u)) rgba(0, 0, 0, 0.12), 1px 1px 0 calc(5 * var(--u)) rgba(255, 220, 170, 0.05);
+}
+.wof-panelen i:nth-child(n + 7) { display: none; }
+@container (min-width: 700px) { .wof-panelen i:nth-child(n + 7) { display: block; } }
+.wof-vloer { position: absolute; left: 0; right: 0; top: calc(140 * var(--u)); bottom: 0; z-index: 0; overflow: hidden; background: #b8ab92; }
+.wof-vloer > i {
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Crect width='120' height='120' fill='%23d6c9ae'/%3E%3Cg fill-opacity='.85'%3E%3Cellipse cx='12' cy='18' rx='3' ry='2' fill='%23b8432a'/%3E%3Cellipse cx='44' cy='9' rx='2' ry='1.4' fill='%23261f1f'/%3E%3Cellipse cx='78' cy='22' rx='3.4' ry='2.2' fill='%2369873c'/%3E%3Cellipse cx='104' cy='12' rx='2.2' ry='1.6' fill='%235c4238'/%3E%3Cellipse cx='28' cy='44' rx='2.6' ry='1.7' fill='%23dcc05d'/%3E%3Cellipse cx='62' cy='50' rx='3' ry='2' fill='%23261f1f'/%3E%3Cellipse cx='92' cy='46' rx='2' ry='1.5' fill='%23b8432a'/%3E%3Cellipse cx='8' cy='70' rx='2.4' ry='1.6' fill='%235c4238'/%3E%3Cellipse cx='40' cy='78' rx='3.2' ry='2.1' fill='%2369873c'/%3E%3Cellipse cx='72' cy='84' rx='2.2' ry='1.5' fill='%23dcc05d'/%3E%3Cellipse cx='108' cy='74' rx='3' ry='2' fill='%23261f1f'/%3E%3Cellipse cx='20' cy='104' rx='2.2' ry='1.5' fill='%23261f1f'/%3E%3Cellipse cx='54' cy='110' rx='2.8' ry='1.9' fill='%23b8432a'/%3E%3Cellipse cx='88' cy='106' rx='2.4' ry='1.6' fill='%235c4238'/%3E%3Ccircle cx='34' cy='26' r='1' fill='%23261f1f'/%3E%3Ccircle cx='58' cy='30' r='1.1' fill='%235c4238'/%3E%3Ccircle cx='86' cy='62' r='1' fill='%23261f1f'/%3E%3Ccircle cx='16' cy='88' r='1.2' fill='%23b8432a'/%3E%3Ccircle cx='100' cy='96' r='1' fill='%2369873c'/%3E%3Ccircle cx='70' cy='4' r='1' fill='%23dcc05d'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 44px;
+}
+.wof-vloer::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 40% 90% at 14% 30%, rgba(255, 238, 200, 0.32), transparent 70%),
+    linear-gradient(180deg, rgba(30, 15, 4, 0.6), rgba(30, 15, 4, 0.12) 40%, rgba(30, 15, 4, 0.25));
+}
+.wof-kruk { position: absolute; z-index: 2; bottom: calc(6 * var(--u)); height: calc(200 * var(--u)); width: auto; }
+.wof-kruk-1 { left: 7%; }
+.wof-kruk-2 { right: 2%; }
+.wof-tafel { position: absolute; z-index: 1; right: 13%; bottom: calc(2 * var(--u)); height: calc(226 * var(--u)); width: auto; }
+@container (max-width: 520px) { .wof-kruk-2 { display: none; } .wof-tafel { right: 4%; } }
+
+/* Voorgrond, iets onscherp: wat de fotograaf net niet uit beeld kreeg. */
+.wof-zuil {
+  position: absolute; z-index: 6; left: 0; top: 0; bottom: 0; width: clamp(0px, 4.6cqi, 58px); pointer-events: none; filter: blur(1.4px);
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 8px),
+    linear-gradient(90deg, #0d0a08 0%, #2b2622 22%, #5d554c 34%, #1c1814 50%, #39322c 66%, #0d0a08 100%);
+  box-shadow: 14px 0 30px rgba(20, 10, 3, 0.45);
+}
+.wof-pilaar {
+  position: absolute; z-index: 6; right: 0; top: 0; bottom: 0; width: clamp(0px, 5.4cqi, 70px); pointer-events: none; filter: blur(1.2px);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.08' numOctaves='4' seed='13' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23k)' opacity='.35'/%3E%3C/svg%3E"),
+    linear-gradient(90deg, #8a7c64 0%, #c9bb9c 22%, #b3a385 55%, #6a5c45 100%);
+  background-blend-mode: multiply, normal;
+  box-shadow: -14px 0 30px rgba(20, 10, 3, 0.45);
+}
+@container (max-width: 520px) { .wof-zuil, .wof-pilaar { display: none; } }
+.wof-vignet { position: absolute; z-index: 7; inset: 0; pointer-events: none; background: radial-gradient(ellipse 85% 78% at 42% 42%, transparent 55%, rgba(40, 18, 4, 0.5) 100%); }
+.wof-korrel {
+  position: absolute; z-index: 8; inset: 0; pointer-events: none; opacity: 0.16; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' numOctaves='2' seed='8' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+
+/* Logo's als inkt (zie InkFilters). */
+.oc-inkt-donker { filter: url(#oc-inkt-donker); }
+.oc-inkt-licht { filter: url(#oc-inkt-licht); }
+.oc-inkt-kleur { filter: saturate(0.85) sepia(0.12) contrast(1.02); }

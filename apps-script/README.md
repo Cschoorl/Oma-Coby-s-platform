@@ -12,9 +12,11 @@ Het script:
 - leest de bestellingen uit het tabblad **Totaal_lijst bestellingen** (zakelijk, particulier, barter en pop-up); het script schrijft daar alleen bij **Bewerken** en bij een **nieuwe bestelling of pop-upvoorraad** uit het beheer;
 - bewaart alles van het dashboard in eigen tabbladen (maakt ze aan als ze ontbreken):
   `Dashboard_Orders`, `Inpakken`, `Gebakken`, `Routes`, `Kosten`, `Historie`, `Instellingen`, `Inpaklog`,
-  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wijzigingslog`, `Pop-up verkoop` en `Rooster` (de planning: wie staat wanneer, zie hieronder);
+  `Bezorgstatus`, `Agenda`, `Locaties` (opgezochte adressen voor het automatisch indelen), `Zakelijke aanvragen`, `Zakelijke dagen`, `Wall of fame`, `Wijzigingslog`, `Pop-up verkoop` en `Rooster` (de planning: wie staat wanneer, zie hieronder);
 - ontvangt zakelijke aanvragen van het bestelformulier (`#/bestellen`), stuurt de klant een kopie en info@ een melding,
   en telt bevestigde aanvragen mee als order (zie `docs/zakelijk-bestellen.md`);
+- zet bij bevestigen bedrijven met toestemming op de wall of fame (tabblad Wall of fame) en geeft de logozoeker
+  door welke logo's gezocht moeten worden (zie `docs/wall-of-fame.md`);
 - leest en schrijft vrijwilligers in het antwoordenblad van het Google Formulier (`Formulierreacties 1`),
   zodat formulier en aanmeldpagina in één lijst terechtkomen;
 - zet claims van inpakkers vast met een slot (`LockService`), zodat twee mensen nooit dezelfde order pakken;
@@ -50,6 +52,8 @@ Het script:
    | `CODE_BEZORGER` | code voor bezorgers |
    | `ANTHROPIC_API_KEY` | API-sleutel van console.anthropic.com (alleen nodig voor het uitlezen van bonnen) |
    | `SHOPIFY_SHOP` | `oma-cobys-olliebollenbar.myshopify.com` (voor de stand van de Partypot) |
+   | `WALL_CALLBACK_SECRET` | lang willekeurig geheim voor de logozoeker van de wall of fame (de dagelijkse taak, of n8n): daarmee haalt hij de zoeklijst op en meldt hij een gevonden logo terug. Leeg = geen logozoeker; beheer zet logo's dan zelf |
+   | `WALL_N8N_WEBHOOK` | optioneel: productie-URL van de n8n-webhook uit `automation/wall-of-fame`, als logo's meteen na het bevestigen gezocht moeten worden |
    | `SHOPIFY_TOKEN` | Admin API-token: Shopify-beheer → Instellingen → Apps → Apps ontwikkelen → eigen app met alleen `read_orders` |
    | `VOLUNTEERS_SPREADSHEET_ID` | Alleen nodig als de formulierantwoorden in een **ander** bestand staan. Het ID is het lange stuk in de URL tussen `/d/` en `/edit`. Zet het hier en niet in de code: de repo is openbaar. |
 

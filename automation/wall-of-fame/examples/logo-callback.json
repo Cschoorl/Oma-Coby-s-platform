@@ -1,0 +1,12 @@
+{
+  "action": "wallOfFameLogo",
+  "secret": "<WALL_CALLBACK_SECRET>",
+  "key": "2026:studio-noorderlicht",
+  "found": true,
+  "logoUrl": "https://cdn.brandfetch.io/idXXXXXXXX/theme/dark/logo.svg",
+  "ink": "donker",
+  "source": "brandfetch",
+  "logoDomain": "noorderlicht.studio",
+  "confidence": 0.86,
+  "note": "Woordmerk van noorderlicht.studio, het domein uit de bestelling; de ster komt ook terug op hun site."
+}

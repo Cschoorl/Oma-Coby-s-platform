@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "choice": { "type": "integer", "description": "Nummer van het kandidaat-logo dat echt van dit bedrijf is; 0 als geen enkel plaatje zeker van dit bedrijf is." },
+    "confidence": { "type": "number", "description": "Hoe zeker, van 0 tot 1." },
+    "ink": { "type": "string", "enum": ["donker", "licht", "kleur"], "description": "donker: donker logo op licht of doorzichtig; licht: wit of licht logo; kleur: alleen als het zonder kleur niet herkenbaar is." },
+    "note": { "type": "string", "description": "Eén zin in het Nederlands voor de beheerder: waarom dit logo, of waarom geen." }
+  },
+  "required": ["choice", "confidence", "ink", "note"],
+  "additionalProperties": false
+}

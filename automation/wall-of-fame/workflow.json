@@ -1,0 +1,509 @@
+{
+  "name": "Oma Coby · Wall of fame · logo zoeken",
+  "nodes": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "Logo gevraagd",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "00000000-0000-4000-8000-000000000002",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "oma-coby-wall-of-fame",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Oma Coby wall of fame"
+        }
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "name": "Instellingen",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "name": "scriptUrl",
+              "value": "={{ $env.OMA_COBY_SCRIPT_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000005",
+              "name": "callbackSecret",
+              "value": "={{ $env.OMA_COBY_WALL_SECRET }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000006",
+              "name": "brandfetchClientId",
+              "value": "={{ $env.BRANDFETCH_CLIENT_ID }}",
+              "type": "string"
+            },
+            {
+              "id": "00000000-0000-4000-8000-000000000007",
+              "name": "logoDevToken",
+              "value": "={{ $env.LOGO_DEV_TOKEN }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000008",
+      "name": "Domeinen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Code-node \"Domeinen\": wat het Apps Script meestuurde. Zonder domein zoeken we eerst op de bedrijfsnaam.\nconst body = $('Logo gevraagd').first().json.body ?? {};\nif (!/^\\d{4}:[a-z0-9-]+$/.test(String(body.key ?? \"\"))) throw new Error(\"Geen geldige sleutel ontvangen.\");\nconst domains = (Array.isArray(body.domains) ? body.domains : [])\n  .map((d) => String(d).trim().toLowerCase())\n  .filter((d) => /^[a-z0-9-]+(\\.[a-z0-9-]+)+$/.test(d))\n  .slice(0, 3);\nreturn [\n  {\n    json: {\n      key: String(body.key),\n      company: String(body.company ?? \"\"),\n      name: String(body.name ?? body.company ?? \"\"),\n      city: String(body.city ?? \"\"),\n      tier: String(body.tier ?? \"\"),\n      domains,\n      needSearch: domains.length === 0\n    }\n  }\n];\n"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000009",
+      "name": "Zoeken nodig?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000010",
+              "leftValue": "={{ $json.needSearch }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "name": "Brandfetch zoeken",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        180
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "=https://api.brandfetch.io/v2/search/{{ encodeURIComponent($json.company) }}?c={{ $('Instellingen').first().json.brandfetchClientId }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000012",
+      "name": "Zoekresultaat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        180
+      ],
+      "parameters": {
+        "jsCode": "// Code-node \"Zoekresultaat\": Brandfetch Search gaf merken bij de naam. Hou er drie over; Claude kiest straks.\nconst req = $('Domeinen').first().json;\nconst norm = (s) =>\n  String(s ?? \"\")\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[̀-ͯ]/g, \"\")\n    .replace(/\\b(b\\.?\\s?v\\.?|n\\.?\\s?v\\.?|holding)\\b/g, \"\")\n    .replace(/[^a-z0-9]/g, \"\");\nconst want = norm(req.company);\nconst hits = $input\n  .all()\n  .map((i) => i.json)\n  .filter((r) => r && typeof r.domain === \"string\" && r.domain);\n// Zelfde naam eerst, dan merken die hun gegevens bij Brandfetch zelf beheren, dan een .nl-domein.\nconst score = (r) => (norm(r.name) === want ? 4 : norm(r.name).includes(want) || want.includes(norm(r.name)) ? 2 : 0) + (r.claimed ? 1 : 0) + (r.domain.endsWith(\".nl\") ? 1 : 0);\nhits.sort((a, b) => score(b) - score(a));\nreturn [{ json: { ...req, domains: [...new Set(hits.map((h) => h.domain))].slice(0, 3) } }];\n"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000013",
+      "name": "Per domein",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Code-node \"Per domein\": één item per domein voor Brandfetch. Geen domein: één leeg item, dan meldt de\n// workflow netjes \"niets gevonden\" terug in plaats van stil te stoppen.\nconst req = $input.first().json;\nconst domains = req.domains.length ? req.domains : [\"\"];\nreturn domains.map((domain) => ({ json: { ...req, domain } }));\n"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000014",
+      "name": "Brandfetch merk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "=https://api.brandfetch.io/v2/brands/{{ $json.domain || 'onbekend.invalid' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Brandfetch"
+        }
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000015",
+      "name": "Kandidaten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Code-node \"Kandidaten\": de logo's van Brandfetch (of Logo.dev als terugval) en de vraag aan Claude.\nconst cfg = $('Instellingen').first().json;\nconst asked = $('Per domein').all().map((i) => i.json);\nconst req = asked[0];\nconst RANK = { logo: 0, symbol: 1, icon: 2 };\n// Claude kan geen SVG zien; die gaat wel naar de muur (scherp op elke maat).\nconst VIEWABLE = [\"png\", \"jpeg\", \"webp\"];\n\nconst candidates = [];\n$input.all().forEach((item, i) => {\n  const brand = item.json ?? {};\n  const domain = brand.domain ?? asked[i]?.domain ?? \"\";\n  for (const logo of brand.logos ?? []) {\n    const formats = logo.formats ?? [];\n    const view = formats.find((f) => VIEWABLE.includes(f.format) && /^https:\\/\\//.test(f.src ?? \"\"));\n    if (!view) continue;\n    const svg = formats.find((f) => f.format === \"svg\" && /^https:\\/\\//.test(f.src ?? \"\"));\n    candidates.push({ source: \"brandfetch\", domain, brand: brand.name ?? \"\", type: logo.type ?? \"logo\", theme: logo.theme ?? \"\", viewUrl: view.src, wallUrl: (svg ?? view).src });\n  }\n});\ncandidates.sort((a, b) => (RANK[a.type] ?? 3) - (RANK[b.type] ?? 3));\n\nif (!candidates.length && cfg.logoDevToken) {\n  for (const { domain } of asked.filter((a) => a.domain)) {\n    const url = `https://img.logo.dev/${domain}?token=${cfg.logoDevToken}&size=300&format=png&retina=true`;\n    candidates.push({ source: \"logo.dev\", domain, brand: \"\", type: \"icon\", theme: \"\", viewUrl: url, wallUrl: url });\n  }\n}\n\nconst shown = candidates.slice(0, 4);\nconst intro = [\n  \"Je helpt Oma Coby's Oliebollen met de wall of fame: een muur vol lijsten met de logo's van bedrijven die oliebollen bestelden voor dansmiddagen voor ouderen.\",\n  `Bedrijf: ${req.company} (op de muur: ${req.name}). Plaats: ${req.city || \"onbekend\"}. Domeinen uit de bestelling of de zoektocht: ${asked.map((a) => a.domain).filter(Boolean).join(\", \") || \"geen\"}.`,\n  `Hieronder ${shown.length} kandidaat-logo's. Kies het logo dat echt van dit bedrijf is. Let op naamgenoten in andere landen of branches, verouderde logo's en plaatjes die geen logo zijn (foto's, standaardicoontjes, lege favicons). Een woordmerk met de naam heeft de voorkeur boven alleen een symbool. Kies 0 als geen enkel plaatje zeker van dit bedrijf is: liever geen logo dan een verkeerd logo.`,\n  \"Het logo wordt op de muur als donkere inkt op gebroken wit gedrukt. ink = donker voor een donker logo op een lichte of doorzichtige achtergrond, licht voor een wit of licht logo, kleur alleen als het zonder zijn kleuren niet meer herkenbaar is.\"\n].join(\"\\n\\n\");\nconst content = [{ type: \"text\", text: intro }];\nshown.forEach((c, n) => {\n  content.push({ type: \"text\", text: `Kandidaat ${n + 1}: ${c.source}, domein ${c.domain}${c.brand ? `, merknaam \"${c.brand}\"` : \"\"}, soort ${c.type}${c.theme ? `, thema ${c.theme}` : \"\"}.` });\n  content.push({ type: \"image\", source: { type: \"url\", url: c.viewUrl } });\n});\n\nconst claudeBody = {\n  model: \"claude-opus-5-5\",\n  max_tokens: 1500,\n  fallbacks: \"default\",\n  output_config: { effort: \"low\", format: { type: \"json_schema\", schema: { \"type\": \"object\", \"properties\": { \"choice\": { \"type\": \"integer\", \"description\": \"Nummer van het kandidaat-logo dat echt van dit bedrijf is; 0 als geen enkel plaatje zeker van dit bedrijf is.\" }, \"confidence\": { \"type\": \"number\", \"description\": \"Hoe zeker, van 0 tot 1.\" }, \"ink\": { \"type\": \"string\", \"enum\": [\"donker\", \"licht\", \"kleur\"], \"description\": \"donker: donker logo op licht of doorzichtig; licht: wit of licht logo; kleur: alleen als het zonder kleur niet herkenbaar is.\" }, \"note\": { \"type\": \"string\", \"description\": \"Eén zin in het Nederlands voor de beheerder: waarom dit logo, of waarom geen.\" } }, \"required\": [\"choice\", \"confidence\", \"ink\", \"note\"], \"additionalProperties\": false } } },\n  messages: [{ role: \"user\", content }]\n};\nreturn [{ json: { ...req, domains: asked.map((a) => a.domain).filter(Boolean), candidates: shown, claudeBody: shown.length ? claudeBody : null } }];\n"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000016",
+      "name": "Logo's gevonden?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "00000000-0000-4000-8000-000000000017",
+              "leftValue": "={{ !!$json.claudeBody }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000018",
+      "name": "Claude kiest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        180
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "anthropic-beta",
+              "value": "server-side-fallback-2026-07-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.claudeBody) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 90000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Anthropic"
+        }
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000019",
+      "name": "Keuze",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        180
+      ],
+      "parameters": {
+        "jsCode": "// Code-node \"Keuze\": wat Claude koos, als bericht voor het Apps Script (actie wallOfFameLogo).\nconst cfg = $('Instellingen').first().json;\nconst req = $('Kandidaten').first().json;\nconst res = $input.first().json ?? {};\nlet answer = null;\ntry {\n  const text = res.stop_reason === \"refusal\" ? \"\" : (res.content ?? []).find((b) => b.type === \"text\")?.text;\n  answer = text ? JSON.parse(text) : null;\n} catch {\n  answer = null;\n}\nconst pick = answer && Number.isInteger(answer.choice) && answer.choice >= 1 ? req.candidates[answer.choice - 1] ?? null : null;\nconst confidence = answer && typeof answer.confidence === \"number\" ? Math.max(0, Math.min(1, answer.confidence)) : null;\nconst failure = res.error?.message ? `Claude gaf een fout: ${res.error.message}` : \"Geen bruikbaar antwoord van Claude.\";\nreturn [\n  {\n    json: {\n      action: \"wallOfFameLogo\",\n      secret: cfg.callbackSecret,\n      key: req.key,\n      found: Boolean(pick),\n      logoUrl: pick ? pick.wallUrl : \"\",\n      ink: [\"donker\", \"licht\", \"kleur\"].includes(answer?.ink) ? answer.ink : \"donker\",\n      source: pick ? pick.source : \"n8n\",\n      // Waar het logo vandaan komt. Is dat niet het domein van de besteller, dan krijgt beheer een waarschuwing.\n      logoDomain: pick ? pick.domain : \"\",\n      confidence: pick ? confidence : null,\n      note: String(answer?.note ?? failure).slice(0, 400)\n    }\n  }\n];\n"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000020",
+      "name": "Niets gevonden",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        420
+      ],
+      "parameters": {
+        "jsCode": "// Code-node \"Niets gevonden\": geen enkel logo bij Brandfetch of Logo.dev. Het naambordje blijft hangen.\nconst cfg = $('Instellingen').first().json;\nconst req = $input.first().json;\nreturn [\n  {\n    json: {\n      action: \"wallOfFameLogo\",\n      secret: cfg.callbackSecret,\n      key: req.key,\n      found: false,\n      logoUrl: \"\",\n      ink: \"donker\",\n      source: \"n8n\",\n      logoDomain: \"\",\n      confidence: null,\n      note: `Geen logo gevonden bij Brandfetch of Logo.dev voor ${req.name}${req.domains.length ? ` (${req.domains.join(\", \")})` : \"\"}; het naambordje blijft hangen.`\n    }\n  }\n];\n"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000021",
+      "name": "Terugmelden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Instellingen').first().json.scriptUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Logo gevraagd": {
+      "main": [
+        [
+          {
+            "node": "Instellingen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instellingen": {
+      "main": [
+        [
+          {
+            "node": "Domeinen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Domeinen": {
+      "main": [
+        [
+          {
+            "node": "Zoeken nodig?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zoeken nodig?": {
+      "main": [
+        [
+          {
+            "node": "Brandfetch zoeken",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Per domein",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brandfetch zoeken": {
+      "main": [
+        [
+          {
+            "node": "Zoekresultaat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zoekresultaat": {
+      "main": [
+        [
+          {
+            "node": "Per domein",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Per domein": {
+      "main": [
+        [
+          {
+            "node": "Brandfetch merk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brandfetch merk": {
+      "main": [
+        [
+          {
+            "node": "Kandidaten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kandidaten": {
+      "main": [
+        [
+          {
+            "node": "Logo's gevonden?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Logo's gevonden?": {
+      "main": [
+        [
+          {
+            "node": "Claude kiest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Niets gevonden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude kiest": {
+      "main": [
+        [
+          {
+            "node": "Keuze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keuze": {
+      "main": [
+        [
+          {
+            "node": "Terugmelden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Niets gevonden": {
+      "main": [
+        [
+          {
+            "node": "Terugmelden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
